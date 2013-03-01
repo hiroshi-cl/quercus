@@ -1122,7 +1122,7 @@ public class QuercusClass extends NullValue {
     if(issetField(name) && _fieldMap.get(name).isPublic())
     {
         // php/09c3
-        Value v_current = this.get(name); // TODO: move to ObjectExtValue if possible
+        Value v_current = qThis.get(name);
         if(v_current != NullValue.NULL && v_current != UnsetValue.UNSET)
             return BooleanValue.TRUE;
     }

@@ -637,6 +637,11 @@ public class ObjectExtValue extends ObjectValue
     entry.toValue().remove(index);
   }
 
+  @Override
+  public Value get(Value key) {
+    return getThisField(Env.getCurrent(), (StringValue) StringValue.create(key));
+  }
+  
   /**
    * Gets a new value.
    */
