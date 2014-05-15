@@ -513,8 +513,9 @@ public class XmlConfigContext {
       }
 
       // ioc/23m2
-      if ("new".equals(localName))
+      if ("new".equals(localName)) {
         return null;
+      }
 
       throw error(L.l("'{0}' is an unknown property of '{1}'.",
                       qName.getName(), type.getTypeName()),
@@ -1235,6 +1236,10 @@ public class XmlConfigContext {
              && e.getMessage() != null
              && filename != null) {
       String sourceLines = getSourceLines(systemId, line);
+      
+      if (! systemId.startsWith("file:")) {
+        filename = systemId;
+      }
 
       return new LineConfigException(filename, line,
                                      e.getMessage() + sourceLines,

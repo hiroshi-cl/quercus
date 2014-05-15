@@ -55,6 +55,15 @@ abstract public class QServerSocket {
     return false;
   }
   
+  public void setTcpCork(boolean isCork)
+  {
+  }
+  
+  public boolean isTcpCork()
+  {
+    return false;
+  }
+  
   public boolean isJni()
   {
     return false;
@@ -104,5 +113,10 @@ abstract public class QServerSocket {
   
   abstract public void close()
     throws IOException;
+  
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + getLocalAddress() + ":" + getLocalPort() + "]";
+  }
 }
 

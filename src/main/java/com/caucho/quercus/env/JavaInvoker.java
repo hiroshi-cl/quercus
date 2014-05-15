@@ -37,6 +37,8 @@ import com.caucho.quercus.marshal.Marshal;
 import com.caucho.quercus.marshal.MarshalFactory;
 import com.caucho.quercus.module.ModuleContext;
 import com.caucho.quercus.parser.QuercusParser;
+import com.caucho.quercus.program.ClassDef;
+import com.caucho.quercus.program.JavaClassDef;
 import com.caucho.util.L10N;
 
 import java.lang.annotation.Annotation;
@@ -54,8 +56,10 @@ abstract public class JavaInvoker
   private static final Value []NULL_VALUES = new Value[0];
 
   private final ModuleContext _moduleContext;
+  private final JavaClassDef _classDef;
+
   private final String _name;
-  private final Method _method;
+  protected final Method _method;
   private final Class<?> [] _param;
   private final Class<?> _retType;
   private final Annotation [][] _paramAnn;
@@ -82,6 +86,8 @@ abstract public class JavaInvoker
    * Creates the statically introspected function.
    */
   public JavaInvoker(ModuleContext moduleContext,
+                     JavaClassDef classDef,
+                     Method method,
                      String name,
                      Class<?> []param,
                      Annotation [][]paramAnn,
@@ -94,7 +100,9 @@ abstract public class JavaInvoker
     _paramAnn = paramAnn;
     _methodAnn = methodAnn;
     _retType = retType;
-    _method = null;
+
+    _classDef = classDef;
+    _method = method;
 
     // init();
   }
@@ -103,16 +111,13 @@ abstract public class JavaInvoker
    * Creates the statically introspected function.
    */
   public JavaInvoker(ModuleContext moduleContext,
+                     JavaClassDef classDef,
                      Method method)
   {
-    Name nameAnn = method.getAnnotation(Name.class);
-    
-    if (nameAnn != null)
-      _name = nameAnn.value();
-    else
-      _name = method.getName();
-    
+    _name = getFunctionName(method);
+
     _moduleContext = moduleContext;
+    _classDef = classDef;
     _method = method;
     _param = method.getParameterTypes();
     _paramAnn = null;
@@ -120,6 +125,16 @@ abstract public class JavaInvoker
     _retType = method.getReturnType();
 
     // init();
+  }
+
+  public static String getFunctionName(Method method)
+  {
+    Name nameAnn = method.getAnnotation(Name.class);
+
+    if (nameAnn != null)
+      return nameAnn.value();
+    else
+      return method.getName();
   }
 
   public void init()
@@ -131,9 +146,15 @@ abstract public class JavaInvoker
       if (_isInit)
         return;
 
+      if (_method != null) {
+        // php/069a
+        // Java 6 fixes the need to do this for methods of inner classes
+        _method.setAccessible(true);
+      }
+
       MarshalFactory marshalFactory = _moduleContext.getMarshalFactory();
       ExprFactory exprFactory = _moduleContext.getExprFactory();
-      
+
       Annotation [][]paramAnn = getParamAnnImpl();
       Annotation []methodAnn = getMethodAnn();
 
@@ -196,20 +217,22 @@ abstract public class JavaInvoker
         _minArgumentLength = _maxArgumentLength;
 
         for (int i = 0; i < argLength - envOffset; i++) {
+          boolean isOptional = false;
           boolean isReference = false;
           boolean isPassThru = false;
 
           boolean isNotNull = false;
-          
+
           boolean isExpectString = false;
           boolean isExpectNumeric = false;
           boolean isExpectBoolean = false;
 
           Class<?> argType = _param[i + envOffset];
-          
+
           for (Annotation ann : paramAnn[i + envOffset]) {
             if (Optional.class.isAssignableFrom(ann.annotationType())) {
               _minArgumentLength--;
+              isOptional = true;
 
               Optional opt = (Optional) ann;
 
@@ -228,14 +251,14 @@ abstract public class JavaInvoker
                 throw new QuercusException(
                   L.l("reference must be Value or Var for {0}", _name));
               }
-              
+
               isReference = true;
             } else if (PassThru.class.isAssignableFrom(ann.annotationType())) {
               if (! Value.class.equals(argType)) {
                 throw new QuercusException(
                   L.l("pass thru must be Value for {0}", _name));
               }
-              
+
               isPassThru = true;
             } else if (NotNull.class.isAssignableFrom(ann.annotationType())) {
               isNotNull = true;
@@ -245,9 +268,9 @@ abstract public class JavaInvoker
                   "Expect type must be Value for {0}",
                   _name));
               }
-              
+
               Expect.Type type = ((Expect) ann).type();
-              
+
               if (type == Expect.Type.STRING) {
                 isExpectString = true;
               }
@@ -276,17 +299,30 @@ abstract public class JavaInvoker
             _marshalArgs[i] = marshalFactory.createExpectBoolean();
           }
           else {
-            _marshalArgs[i] = marshalFactory.create(argType, isNotNull);
+            _marshalArgs[i] = marshalFactory.create(argType,
+                                                    isNotNull,
+                                                    false,
+                                                    isOptional);
           }
         }
 
         _unmarshalReturn = marshalFactory.create(_retType,
                                                  false,
-                                                 returnNullAsFalse);
+                                                 returnNullAsFalse,
+                                                 false);
       } finally {
         _isInit = true;
       }
     }
+  }
+
+  /**
+   * Returns the implementing class.
+   */
+  @Override
+  public ClassDef getDeclaringClass()
+  {
+    return _classDef;
   }
 
   /**
@@ -311,6 +347,17 @@ abstract public class JavaInvoker
       init();
 
     return _maxArgumentLength;
+  }
+
+  @Override
+  public Class<?> getJavaDeclaringClass()
+  {
+    if (_method != null) {
+      return _method.getDeclaringClass();
+    }
+    else {
+      return null;
+    }
   }
 
   /**
@@ -448,10 +495,10 @@ abstract public class JavaInvoker
   {
     if (! _isInit)
       init();
-    
+
     return getParamAnnImpl();
   }
-  
+
   private Annotation [][]getParamAnnImpl()
   {
     if (_paramAnn != null)
@@ -625,13 +672,62 @@ abstract public class JavaInvoker
   }
 
   @Override
+  public Value callMethodRef(Env env,
+                             QuercusClass qClass,
+                             Value qThis,
+                             Value []args)
+  {
+    // php/3cl3
+    return callMethod(env, qClass, qThis, args);
+  }
+
+  @Override
   public Value callMethod(Env env,
                           QuercusClass qClass,
                           Value qThis,
                           Value []args)
   {
-    if (! _isInit)
+    Object result = callJavaMethod(env, qClass, qThis, args);
+
+    // php/0k45
+    if (qThis != null && isConstructor()) {
+      String parentName = qThis.getQuercusClass().getParentName();
+
+      if (parentName != null) {
+        ClassDef classDef = getDeclaringClass();
+
+        if (classDef != null && qThis.isA(env, classDef.getName())) {
+          qThis.setJavaObject(result);
+        }
+      }
+    }
+
+    Value value = _unmarshalReturn.unmarshal(env, result);
+
+    return value;
+  }
+
+  @Override
+  public Value callNew(Env env,
+                       QuercusClass qClass,
+                       Value qThis,
+                       Value []args)
+  {
+    Object result = callJavaMethod(env, qClass, qThis, args);
+
+    qThis.setJavaObject(result);
+
+    return qThis;
+  }
+
+  private Object callJavaMethod(Env env,
+                                QuercusClass qClass,
+                                Value qThis,
+                                Value[] args)
+  {
+    if (! _isInit) {
       init();
+    }
 
     int len = _param.length;
 
@@ -651,7 +747,7 @@ abstract public class JavaInvoker
     else if (! isStatic() && ! isConstructor()) {
       obj = qThis != null ? qThis.toJavaObject() : null;
     }
-    
+
     String warnMessage = null;
     for (int i = 0; i < _marshalArgs.length; i++) {
       if (i < args.length && args[i] != null)
@@ -717,9 +813,7 @@ abstract public class JavaInvoker
 
     Object result = invoke(obj, javaArgs);
 
-    Value value = _unmarshalReturn.unmarshal(env, result);
-
-    return value;
+    return result;
   }
 
   abstract public Object invoke(Object obj, Object []args);

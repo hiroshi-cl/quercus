@@ -29,8 +29,11 @@
 
 package com.caucho.quercus.env;
 
+import com.caucho.quercus.expr.LiteralNullExpr;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.quercus.lib.ArrayModule;
+import com.caucho.quercus.program.Arg;
+import com.caucho.quercus.program.ClassField;
 import com.caucho.vfs.WriteStream;
 
 import java.io.IOException;
@@ -43,24 +46,28 @@ import java.util.TreeSet;
 /**
  * Represents a Quercus object value.
  */
-abstract public class ObjectValue extends Value {
+abstract public class ObjectValue extends Callback {
   transient protected QuercusClass _quercusClass;
 
   protected String _className;
-
   protected String _incompleteObjectName;
 
-  protected ObjectValue()
+  private final int _objectId;
+
+  protected ObjectValue(Env env)
   {
+    _objectId = env.generateObjectId();
   }
 
-  protected ObjectValue(QuercusClass quercusClass)
+  protected ObjectValue(Env env, QuercusClass quercusClass)
   {
+    this(env);
+
     _quercusClass = quercusClass;
     _className = quercusClass.getName();
   }
 
-  protected void setQuercusClass(QuercusClass cl)
+  public void setQuercusClass(QuercusClass cl)
   {
     _quercusClass = cl;
     _className = cl.getName();
@@ -72,12 +79,23 @@ abstract public class ObjectValue extends Value {
     return _quercusClass;
   }
 
+  @Override
+  public QuercusClass findQuercusClass(Env env)
+  {
+    return _quercusClass;
+  }
+
+  public AbstractFunction getMethod(StringValue name)
+  {
+    return getQuercusClass().getMethod(name);
+  }
+
   public boolean isIncompleteObject()
   {
     return _incompleteObjectName != null;
   }
 
-  /*
+  /**
    * Returns the name of the uninitialized object.
    */
   public String getIncompleteObjectName()
@@ -85,7 +103,7 @@ abstract public class ObjectValue extends Value {
     return _incompleteObjectName;
   }
 
-  /*
+  /**
    * Sets the name of uninitialized object.
    */
   public void setIncompleteObjectName(String name)
@@ -93,7 +111,7 @@ abstract public class ObjectValue extends Value {
     _incompleteObjectName = name;
   }
 
-  /*
+  /**
    * Initializes the incomplete class.
    */
   public void initObject(Env env, QuercusClass cls)
@@ -102,12 +120,27 @@ abstract public class ObjectValue extends Value {
     _incompleteObjectName = null;
   }
 
+  public final void cleanup(Env env)
+  {
+    QuercusClass qClass = getQuercusClass();
+    AbstractFunction fun = qClass.getDestructor();
+
+    if (fun != null) {
+      fun.callMethod(env, qClass, this);
+    }
+  }
+
   /**
    * Returns the value's class name.
    */
   public String getClassName()
   {
     return _className;
+  }
+
+  public void setClassName(String className)
+  {
+    _className = className;
   }
 
   /**
@@ -142,21 +175,128 @@ abstract public class ObjectValue extends Value {
   }
 
   /**
-   * The object is callable if it has an __invoke method
-   */
-  @Override
-  public boolean isCallable(Env env)
-  {
-    return _quercusClass.getInvoke() != null;
-  }
-  
-  /**
    * Returns the type.
    */
   @Override
   public String getType()
   {
     return "object";
+  }
+
+  /**
+   * Returns the unique object hash.
+   */
+  @Override
+  public StringValue getObjectHash(Env env)
+  {
+    StringValue sb = env.createStringBuilder();
+
+    sb.append(getClassName());
+    sb.append('-');
+    sb.append(_objectId);
+    sb.append('-');
+    sb.append(System.identityHashCode(this));
+
+    return sb;
+  }
+
+  /**
+   * The object is callable if it has an __invoke method
+   */
+  @Override
+  public boolean isCallable(Env env, boolean isCheckSyntaxOnly, Value nameRef)
+  {
+    // php/127c, isCheckSyntaxOnly is not used
+
+    if (_quercusClass.getInvoke() == null) {
+      if (nameRef != null) {
+        nameRef.set(NullValue.NULL);
+      }
+
+      return false;
+    }
+
+    if (nameRef != null) {
+      StringValue sb = env.createStringBuilder();
+      sb.append(_quercusClass.getName());
+      sb.append("::");
+      sb.append("__invoke");
+
+      nameRef.set(sb);
+    }
+
+    return true;
+  }
+
+  @Override
+  public Callable toCallable(Env env, boolean isOptional)
+  {
+    if (_quercusClass.getInvoke() != null) {
+      return this;
+    }
+    else {
+      return super.toCallable(env, isOptional);
+    }
+  }
+
+  @Override
+  public boolean isValid(Env env)
+  {
+    return _quercusClass.getInvoke() != null;
+  }
+
+  @Override
+  public String getCallbackName()
+  {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public String getDeclFileName(Env env)
+  {
+    return null;
+  }
+
+  @Override
+  public int getDeclStartLine(Env env)
+  {
+    return -1;
+  }
+
+  @Override
+  public int getDeclEndLine(Env env)
+  {
+    return -1;
+  }
+
+  @Override
+  public String getDeclComment(Env env)
+  {
+    return null;
+  }
+
+  @Override
+  public boolean isReturnsReference(Env env)
+  {
+    return false;
+  }
+
+  @Override
+  public Arg []getArgs(Env env)
+  {
+    AbstractFunction fun = _quercusClass.getInvoke();
+
+    if (fun == null) {
+      return null;
+    }
+
+    return fun.getArgs(env);
+  }
+
+  @Override
+  public boolean isInternal(Env env)
+  {
+    return false;
   }
 
   /**
@@ -172,9 +312,9 @@ abstract public class ObjectValue extends Value {
    * Returns true for an implementation of a class
    */
   @Override
-  public boolean isA(String name)
+  public boolean isA(Env env, String name)
   {
-    return _quercusClass.isA(name);
+    return _quercusClass.isA(env, name);
   }
 
   /**
@@ -195,6 +335,22 @@ abstract public class ObjectValue extends Value {
     return toLong();
   }
 
+  /**
+   * Converts to a Java Enum.
+   */
+  @Override
+  public Enum toJavaEnum(Env env, Class cls)
+  {
+    Object obj = toJavaObject();
+
+    if (cls.isAssignableFrom(obj.getClass())) {
+      return (Enum) obj;
+    }
+    else {
+      return super.toJavaEnum(env, cls);
+    }
+  }
+
   //
   // array delegate methods
   //
@@ -204,22 +360,61 @@ abstract public class ObjectValue extends Value {
   {
     return this;
   }
+
+  /**
+   * Append to a string builder.
+   */
+  @Override
+  public StringValue appendTo(UnicodeBuilderValue sb)
+  {
+    return sb.append(toString(Env.getInstance()));
+  }
+
+  /**
+   * Append to a binary builder.
+   */
+  @Override
+  public StringValue appendTo(StringBuilderValue sb)
+  {
+    return sb.append(toString(Env.getInstance()));
+  }
+
+  /**
+   * Append to a binary builder.
+   */
+  @Override
+  public StringValue appendTo(BinaryBuilderValue sb)
+  {
+    return sb.appendBytes(toString(Env.getInstance()));
+  }
+
+  /**
+   * Append to a binary builder.
+   */
+  @Override
+  public StringValue appendTo(LargeStringBuilderValue sb)
+  {
+    return sb.append(toString(Env.getInstance()));
+  }
+
   /**
    * Returns the array value with the given key.
    */
   @Override
   public Value get(Value key)
   {
+    Env env = Env.getInstance();
+
     ArrayDelegate delegate = _quercusClass.getArrayDelegate();
 
-    if (delegate != null)
-      return delegate.get(this, key);
+    if (delegate != null) {
+      return delegate.get(env, this, key);
+    }
     else {
       // php/3d94
 
       // return getField(Env.getInstance(), key.toStringValue());
-      return Env.getInstance().error(L.l("Can't use object '{0}' as array",
-                                         getName()));
+      return env.error(L.l("Can't use object '{0}' as array", getName()));
     }
   }
 
@@ -229,17 +424,19 @@ abstract public class ObjectValue extends Value {
   @Override
   public Value put(Value key, Value value)
   {
+    Env env = Env.getInstance();
+
     ArrayDelegate delegate = _quercusClass.getArrayDelegate();
 
     // php/0d94
 
-    if (delegate != null)
-      return delegate.put(this, key, value);
+    if (delegate != null) {
+      return delegate.put(env, this, key, value);
+    }
     else {
       // php/0d94
 
-      return Env.getInstance().error(L.l("Can't use object '{0}' as array",
-                                         getName()));
+      return env.error(L.l("Can't use object '{0}' as array", getName()));
       // return super.put(key, value);
     }
   }
@@ -250,17 +447,18 @@ abstract public class ObjectValue extends Value {
   @Override
   public Value put(Value value)
   {
+    Env env = Env.getInstance();
+
     ArrayDelegate delegate = _quercusClass.getArrayDelegate();
 
     // php/0d94
 
     if (delegate != null)
-      return delegate.put(this, value);
+      return delegate.put(env, this, value);
     else {
       // php/0d97
 
-      return Env.getInstance().error(L.l("Can't use object '{0}' as array",
-                                         getName()));
+      return env.error(L.l("Can't use object '{0}' as array", getName()));
       // return super.put(key, value);
     }
   }
@@ -285,10 +483,30 @@ abstract public class ObjectValue extends Value {
   {
     ArrayDelegate delegate = _quercusClass.getArrayDelegate();
 
-    if (delegate != null)
-      return delegate.isset(this, key);
-    else
-      return getField(Env.getInstance(), key.toStringValue()).isset();
+    if (delegate != null) {
+      Env env = Env.getInstance();
+
+      return delegate.isset(env, this, key);
+    }
+    else {
+      return false;
+    }
+  }
+
+  /**
+   * Return true if empty.
+   */
+  @Override
+  public boolean isEmpty(Env env, Value key)
+  {
+    ArrayDelegate delegate = _quercusClass.getArrayDelegate();
+
+    if (delegate != null) {
+      return delegate.isEmpty(env, this, key);
+    }
+    else {
+      return true;
+    }
   }
 
   /**
@@ -299,8 +517,11 @@ abstract public class ObjectValue extends Value {
   {
     ArrayDelegate delegate = _quercusClass.getArrayDelegate();
 
-    if (delegate != null)
-      return delegate.unset(this, key);
+    if (delegate != null) {
+      Env env = Env.getInstance();
+
+      return delegate.unset(env, this, key);
+    }
     else
       return super.remove(key);
   }
@@ -367,7 +588,7 @@ abstract public class ObjectValue extends Value {
     //return getField(null, key.toString());
 
     if (delegate != null)
-      return delegate.count(this);
+      return delegate.count(env, this);
     else
       return super.getSize();
   }
@@ -426,11 +647,21 @@ abstract public class ObjectValue extends Value {
    * Initializes a new field, does not call __set if it is defined.
    */
   @Override
-  public void initField(StringValue key,
-                        Value value,
-                        FieldVisibility visibility)
+  public void initField(Env env,
+                        StringValue name,
+                        StringValue canonicalName,
+                        Value value)
   {
-    putThisField(Env.getInstance(), key, value);
+    putThisField(env, canonicalName, value);
+  }
+
+  @Override
+  public void initIncompleteField(Env env,
+                                  StringValue name,
+                                  Value value,
+                                  FieldVisibility visibility)
+  {
+    initField(env, name, value);
   }
 
   /**
@@ -445,17 +676,50 @@ abstract public class ObjectValue extends Value {
   }
 
   /**
+   * Returns the static field.
+   */
+  @Override
+  public Value getStaticFieldValue(Env env, StringValue name)
+  {
+    return getQuercusClass().getStaticFieldValue(env, name);
+  }
+
+  /**
+  * Returns the static field reference.
+  */
+  @Override
+  public Var getStaticFieldVar(Env env, StringValue name)
+  {
+    return getQuercusClass().getStaticFieldVar(env, name);
+  }
+
+  /**
+   * Sets the static field.
+   */
+  @Override
+  public Value setStaticFieldRef(Env env, StringValue name, Value value)
+  {
+    return getQuercusClass().setStaticFieldRef(env, name, value);
+  }
+
+  /**
    * Returns true for equality
    */
   @Override
   public boolean eq(Value rValue)
   {
-    rValue = rValue.toValue();
+    if (rValue.isObject()) {
+      rValue = rValue.toValue();
 
-    if (rValue instanceof ObjectValue)
       return cmpObject((ObjectValue) rValue) == 0;
-    else
-      return super.eq(rValue);
+    }
+    else if (rValue.isArray()) {
+      return false;
+    }
+    else {
+      // php/03q0
+      return rValue.eq(this.toStringValue());
+    }
   }
 
   /**
@@ -511,7 +775,16 @@ abstract public class ObjectValue extends Value {
       return 0;
     }
   }
-  
+
+  /**
+   * Finds the method name.
+   */
+  @Override
+  public final AbstractFunction findFunction(StringValue methodName)
+  {
+    return _quercusClass.findFunction(methodName);
+  }
+
   /**
    * Call for callable.
    */
@@ -519,11 +792,13 @@ abstract public class ObjectValue extends Value {
   public Value call(Env env, Value []args)
   {
     AbstractFunction fun = _quercusClass.getInvoke();
-    
+
     if (fun != null)
       return fun.callMethod(env, _quercusClass, this, args);
-    else
-      return super.call(env, args);
+    else {
+      return env.warning(L.l("{0} is not a valid function",
+                             this));
+    }
   }
 
   public void varDumpObject(Env env,
@@ -594,27 +869,50 @@ abstract public class ObjectValue extends Value {
    * Encodes the value in JSON.
    */
   @Override
-  public void jsonEncode(Env env, StringValue sb)
+  public void jsonEncode(Env env, JsonEncodeContext context, StringValue sb)
   {
-    sb.append('{');
+    if (isA(env, "JsonSerializable")) {
+      AbstractFunction fun = getMethod(env.createString("jsonSerialize"));
 
-    int length = 0;
+      if (fun == null) {
+        throw new IllegalStateException(L.l("must implement jsonSerialize()"));
+      }
 
-    Iterator<Map.Entry<Value,Value>> iter = getIterator(env);
+      Value value = fun.callMethod(env, getQuercusClass(), this);
 
-    while (iter.hasNext()) {
-      Map.Entry<Value,Value> entry = iter.next();
+      value.jsonEncode(env, context, sb);
 
-      if (length > 0)
-        sb.append(',');
-
-      entry.getKey().toStringValue().jsonEncode(env, sb);
-      sb.append(':');
-      entry.getValue().jsonEncode(env, sb);
-      length++;
+      return;
     }
+    else {
+      sb.append('{');
 
-    sb.append('}');
+      int length = 0;
+
+      Iterator<Map.Entry<Value,Value>> iter = getIterator(env);
+
+      while (iter.hasNext()) {
+        Map.Entry<Value,Value> entry = iter.next();
+
+        StringValue key = entry.getKey().toStringValue(env);
+        Value value = entry.getValue();
+
+        if (! ClassField.isPublic(key)) {
+          continue;
+        }
+
+        if (length > 0) {
+          sb.append(',');
+        }
+
+        key.jsonEncode(env, context, sb);
+        sb.append(':');
+        value.jsonEncode(env, context, sb);
+        length++;
+      }
+
+      sb.append('}');
+    }
   }
 }
 

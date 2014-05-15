@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,18 +29,21 @@
 
 package com.caucho.quercus.lib;
 
-import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.annotation.Reference;
-import com.caucho.quercus.env.*;
+import com.caucho.quercus.env.ArrayValue;
+import com.caucho.quercus.env.ArrayValueImpl;
+import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.NullValue;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.Value;
 import com.caucho.quercus.module.AbstractQuercusModule;
-import com.caucho.util.Alarm;
+import com.caucho.quercus.servlet.api.QuercusCookie;
+import com.caucho.quercus.servlet.api.QuercusCookieImpl;
+import com.caucho.quercus.servlet.api.QuercusHttpServletResponse;
 import com.caucho.util.L10N;
 import com.caucho.util.QDate;
 
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
 import java.util.ArrayList;
 
 /**
@@ -70,7 +73,7 @@ public class HttpModule extends AbstractQuercusModule {
                              @Optional("true") boolean replace,
                              @Optional long httpResponseCode)
   {
-    HttpServletResponse res = env.getResponse();
+    QuercusHttpServletResponse res = env.getResponse();
 
     if (res == null) {
       env.error(L.l("header requires an http context"));
@@ -114,7 +117,7 @@ public class HttpModule extends AbstractQuercusModule {
         // replaces the previous one
         //res.sendRedirect(value);
         //return NullValue.NULL;
-        
+
         res.setStatus(302, "Found");
       }
 
@@ -196,9 +199,10 @@ public class HttpModule extends AbstractQuercusModule {
                                      @Optional @Reference Value file,
                                      @Optional @Reference Value line)
   {
-    HttpServletResponse res = env.getResponse();
+    QuercusHttpServletResponse res = env.getResponse();
 
-    return res.isCommitted();
+    // php/1b0n
+    return res != null && res.isCommitted();
   }
 
   /**
@@ -213,6 +217,12 @@ public class HttpModule extends AbstractQuercusModule {
                                   @Optional boolean secure,
                                   @Optional boolean httpOnly)
   {
+    QuercusHttpServletResponse response = env.getResponse();
+
+    if (response == null) {
+      return false;
+    }
+
     long now = env.getCurrentTime();
 
     if (value == null || value.equals(""))
@@ -252,29 +262,41 @@ public class HttpModule extends AbstractQuercusModule {
       }
     }
 
-    Cookie cookie = new Cookie(name, sb.toString());
+    QuercusCookie cookie = new QuercusCookieImpl(name, sb.toString());
 
     int maxAge = 0;
 
     if (expire > 0) {
       maxAge = (int) (expire - now / 1000);
-      
+
       if (maxAge > 0)
         cookie.setMaxAge(maxAge);
       else
         cookie.setMaxAge(0); //php/1b0i
     }
 
-    if (path != null && ! path.equals(""))
+    if (path != null && ! path.equals("")) {
       cookie.setPath(path);
+    }
 
-    if (domain != null && ! domain.equals(""))
+    if (domain != null && ! domain.equals("")) {
       cookie.setDomain(domain);
+    }
 
-    if (secure)
+    if (secure) {
       cookie.setSecure(true);
+    }
 
-    env.getResponse().addCookie(cookie);
+    if (httpOnly) {
+      try {
+        cookie.setHttpOnly(true);
+      }
+      catch (Throwable e) {
+        env.warning(L.l("HttpOnly requires Servlet 3.0"), e);
+      }
+    }
+
+    response.addCookie(cookie);
 
     // add to headers list
 
@@ -291,7 +313,7 @@ public class HttpModule extends AbstractQuercusModule {
     }
     else {
       QDate date = env.getGmtDate();
-      
+
       date.setGMTTime(now + 1000L * (long) maxAge);
       cookieHeader.append("; expires=");
       cookieHeader.append(date.format("%a, %d-%b-%Y %H:%M:%S GMT"));
@@ -307,8 +329,13 @@ public class HttpModule extends AbstractQuercusModule {
       cookieHeader.append(domain);
     }
 
-    if (secure)
+    if (secure) {
       cookieHeader.append("; secure");
+    }
+
+    if (httpOnly) {
+      cookieHeader.append("; HttpOnly");
+    }
 
     getHeaders(env).add(cookieHeader.toString());
 

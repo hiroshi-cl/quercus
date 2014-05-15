@@ -29,16 +29,17 @@
 
 package com.caucho.quercus;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.logging.*;
-
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.page.QuercusPage;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.StdoutStream;
 import com.caucho.vfs.StringPath;
 import com.caucho.vfs.WriteStream;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class Quercus
   extends QuercusContext
@@ -47,13 +48,11 @@ public class Quercus
     = Logger.getLogger(Quercus.class.getName());
 
   private String _fileName;
-  private String []_args;
+  private String []_argv;
 
   public Quercus()
   {
     super();
-
-    init();
   }
 
   //
@@ -65,11 +64,17 @@ public class Quercus
   {
     Quercus quercus = new Quercus();
 
+    startMain(args, quercus);
+  }
+
+  public static void startMain(String []args, Quercus quercus)
+    throws IOException
+  {
     if (! quercus.parseArgs(args)) {
-      printUsage();
+      quercus.printUsage();
       return;
     }
-    
+
     quercus.init();
     quercus.start();
 
@@ -81,17 +86,13 @@ public class Quercus
     }
   }
 
-  public static void printUsage()
+  public void printUsage()
   {
-    System.out
-      .println("usage: com.caucho.quercus.Quercus [flags] <file> [php-args]");
+    System.out.println("usage: " + getClass().getName() + " [flags] <file> [php-args]");
     System.out.println(" -f            : Explicitly set the script filename.");
     System.out.println(" -d name=value : Sets a php ini value.");
   }
 
-  /**
-   * Returns the SAPI (Server API) name.
-   */
   @Override
   public String getSapiName()
   {
@@ -115,17 +116,19 @@ public class Quercus
     int i = 0;
     for (; i < args.length; i++) {
       if ("-d".equals(args[i])) {
-        int eqIndex = args[i + 1].indexOf('=');
+        String arg = args[i + 1];
+        int eqIndex = arg.indexOf('=');
 
-        String name = "";
-        String value = "";
+        String name;
+        String value;
 
         if (eqIndex >= 0) {
-          name = args[i + 1].substring(0, eqIndex);
-          value = args[i + 1].substring(eqIndex + 1);
+          name = arg.substring(0, eqIndex);
+          value = arg.substring(eqIndex + 1);
         }
         else {
-          name = args[i + 1];
+          name = arg;
+          value = "";
         }
 
         i++;
@@ -143,7 +146,8 @@ public class Quercus
       else if ("--".equals(args[i])) {
         break;
       }
-      else if ("-h".equals(args[i])) {
+      else if ("-h".equals(args[i])
+               || "--help".equals(args[i])) {
         return false;
       }
       else if (args[i].startsWith("-")) {
@@ -151,7 +155,7 @@ public class Quercus
         return false;
       }
       else {
-        phpArgList.add(args[i]);
+        break;
       }
     }
 
@@ -159,12 +163,16 @@ public class Quercus
       phpArgList.add(args[i]);
     }
 
-    _args = phpArgList.toArray(new String[phpArgList.size()]);
+    _argv = phpArgList.toArray(new String[phpArgList.size()]);
 
-    if (_fileName == null && _args.length > 0)
-      _fileName = _args[0];
+    if (_fileName == null && _argv.length > 0)
+      _fileName = _argv[0];
 
     return true;
+  }
+
+  protected String[] getArgv() {
+    return _argv;
   }
 
   public void execute()
@@ -195,9 +203,6 @@ public class Quercus
 
     Env env = createEnv(page, os, null, null);
     env.start();
-
-    if (_args.length > 0)
-      env.setArgs(_args);
 
     try {
       env.execute();

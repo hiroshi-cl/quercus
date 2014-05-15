@@ -46,7 +46,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.util.Alarm;
+import com.caucho.util.CurrentTime;
 
 /**
  * Lifecycle class.
@@ -318,24 +318,28 @@ public final class Lifecycle {
   {
     LifecycleState state = getState();
 
-    if (state.isActive())
+    if (state.isActive()) {
       return true;
-    else if (state.isAfterActive())
+    }
+    else if (state.isAfterActive()) {
       return false;
+    }
     
     // server/1d2j
-    long waitEnd = Alarm.getCurrentTimeActual() + timeout;
+    long waitEnd = CurrentTime.getCurrentTimeActual() + timeout;
 
     synchronized (this) {
       while ((state = _state.get()).isBeforeActive()
-             && Alarm.getCurrentTimeActual() < waitEnd) {
-        if (state.isActive())
+             && CurrentTime.getCurrentTimeActual() < waitEnd) {
+        if (state.isActive()) {
           return true;
-        else if (state.isAfterActive())
+        }
+        else if (state.isAfterActive()) {
           return false;
+        }
 
         try {
-          long delta = waitEnd - Alarm.getCurrentTimeActual();
+          long delta = waitEnd - CurrentTime.getCurrentTimeActual();
           
           if (delta > 0) {
             wait(delta);
@@ -461,7 +465,7 @@ public final class Lifecycle {
    public boolean toPostInit()
    {
      if (_state.compareAndSet(STOPPED, INIT)) {
-       _lastChangeTime = Alarm.getCurrentTime();
+       _lastChangeTime = CurrentTime.getCurrentTime();
 
        notifyListeners(STOPPED, INIT);
 
@@ -487,7 +491,7 @@ public final class Lifecycle {
         return false;
     } while (! _state.compareAndSet(state, STARTING));
 
-    _lastChangeTime = Alarm.getCurrentTime();
+    _lastChangeTime = CurrentTime.getCurrentTime();
 
     if (_log != null && _log.isLoggable(_level) && _log.isLoggable(Level.FINE))
       _log.fine(_name + " starting");
@@ -513,16 +517,12 @@ public final class Lifecycle {
         return false;
     } while (! _state.compareAndSet(state, ACTIVE));
 
-    _lastChangeTime = Alarm.getCurrentTime();
+    _lastChangeTime = CurrentTime.getCurrentTime();
 
     if (_log != null && _log.isLoggable(_level))
       _log.log(_level, _name + " active");
 
     notifyListeners(state, ACTIVE);
-
-    synchronized (this) {
-      notifyAll();
-    }
 
     return true;
   }
@@ -549,11 +549,12 @@ public final class Lifecycle {
     do {
       state = _state.get();
       
-      if (state.isAfterDestroying())
+      if (state.isAfterDestroying()) {
         return false;
+      }
     } while (! _state.compareAndSet(state, FAILED));
 
-    _lastChangeTime = Alarm.getCurrentTime();
+    _lastChangeTime = CurrentTime.getCurrentTime();
 
     if (_log != null && _log.isLoggable(_level))
       _log.log(_level, _name + " fail");
@@ -577,14 +578,16 @@ public final class Lifecycle {
     do {
       state = _state.get();
       
-      if (state.isAfterStopping() || state.isStarting())
+      if (state.isAfterStopping() || state.isStarting()) {
         return false;
+      }
     } while (! _state.compareAndSet(state, STOPPING));
 
-    _lastChangeTime = Alarm.getCurrentTime();
+    _lastChangeTime = CurrentTime.getCurrentTime();
 
-    if (_log != null && _log.isLoggable(_level))
+    if (_log != null && _log.isLoggable(_level)) {
       _log.log(_level, _name + " stopping");
+    }
 
     notifyListeners(state, STOPPING);
 
@@ -647,7 +650,7 @@ public final class Lifecycle {
         return false;
     } while (! _state.compareAndSet(state, newState));
 
-    _lastChangeTime = Alarm.getCurrentTime();
+    _lastChangeTime = CurrentTime.getCurrentTime();
 
     if (_log != null && _log.isLoggable(_lowLevel)) {
       _log.log(_lowLevel, _name + " " + newState);
@@ -667,7 +670,7 @@ public final class Lifecycle {
   {
     LifecycleState state = _state.getAndSet(newState);
 
-    _lastChangeTime = Alarm.getCurrentTime();
+    _lastChangeTime = CurrentTime.getCurrentTime();
 
     if (_log != null && _log.isLoggable(_lowLevel))
       _log.log(_lowLevel, _name + " " + newState);
@@ -748,19 +751,33 @@ public final class Lifecycle {
       return;
     }
     
+    ArrayList<LifecycleListener> listeners = null;
+    
     synchronized (this) {
+      notifyAll();
+
       if (_listeners != null) {
         for (int i = 0; i < _listeners.size(); i++) {
           LifecycleListener listener = _listeners.get(i).get();
 
           if (listener != null) {
-            listener.lifecycleEvent(oldState, newState);
+            if (listeners == null) {
+              listeners = new ArrayList<LifecycleListener>();
+            }
+            
+            listeners.add(listener);
           }
           else {
             _listeners.remove(i);
             i--;
           }
         }
+      }
+    }
+
+    if (listeners != null) {
+      for (LifecycleListener listener : listeners) {
+        listener.lifecycleEvent(oldState, newState);
       }
     }
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,11 +32,10 @@ package com.caucho.quercus.lib;
 import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.module.AbstractQuercusModule;
+import com.caucho.quercus.servlet.api.QuercusHttpServletRequest;
+import com.caucho.quercus.servlet.api.QuercusHttpServletResponse;
+import com.caucho.quercus.servlet.api.QuercusServletContext;
 import com.caucho.quercus.annotation.Name;
-
-import javax.servlet.ServletContext;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 
 /**
  * Quercus functions to get information about the Quercus environment.
@@ -51,7 +50,7 @@ public class QuercusModule extends AbstractQuercusModule
   {
     return env.getQuercus();
   }
-  
+
   /**
    * Returns the Env object.
    */
@@ -60,7 +59,7 @@ public class QuercusModule extends AbstractQuercusModule
   {
     return env;
   }
-  
+
   /**
    * Returns the version of Quercus.
    */
@@ -69,7 +68,7 @@ public class QuercusModule extends AbstractQuercusModule
   {
     return env.getQuercus().getVersion();
   }
-  
+
   /**
    * Returns true if this is the Professional version.
    */
@@ -78,7 +77,7 @@ public class QuercusModule extends AbstractQuercusModule
   {
     return env.getQuercus().isPro();
   }
-  
+
   /**
    * Returns true if pages will be compiled.
    */
@@ -87,7 +86,7 @@ public class QuercusModule extends AbstractQuercusModule
   {
     return env.getQuercus().isCompile();
   }
-  
+
   /**
    * Returns true if Quercus is running under Resin.
    */
@@ -96,7 +95,7 @@ public class QuercusModule extends AbstractQuercusModule
   {
     return env.getQuercus().isResin();
   }
-  
+
   /**
    * Returns true if a JDBC database has been explicitly set.
    */
@@ -105,7 +104,7 @@ public class QuercusModule extends AbstractQuercusModule
   {
     return env.getQuercus().getDatabase() != null;
   }
-  
+
   /**
    * Returns true if there is an HttpRequest associated with this Env.
    */
@@ -114,54 +113,75 @@ public class QuercusModule extends AbstractQuercusModule
   {
     return env.getRequest() != null;
   }
-  
+
   /**
    * Returns the HttpServletRequest associated with this Env.
    */
   @Deprecated
   @Name("quercus_get_request")
-  public static HttpServletRequest get_request(Env env)
+  public static Object get_request(Env env)
   {
-    return env.getRequest();
+    return get_servlet_request(env);
   }
-  
+
   /**
    * Returns the HttpServletRequest associated with this Env.
    */
   @Name("quercus_servlet_request")
-  public static HttpServletRequest get_servlet_request(Env env)
+  public static Object get_servlet_request(Env env)
   {
-    return env.getRequest();
+    QuercusHttpServletRequest request = env.getRequest();
+
+    return request.toRequest(Object.class);
   }
-  
+
   /**
    * Returns the HttpServletResponse associated with this Env.
    */
   @Deprecated
   @Name("quercus_get_response")
-  public static HttpServletResponse get_response(Env env)
+  public static Object get_response(Env env)
   {
-    return env.getResponse();
+    return get_servlet_response(env);
   }
-  
+
   /**
    * Returns the HttpServletResponse associated with this Env.
    */
   @Name("quercus_servlet_response")
-  public static HttpServletResponse get_servlet_response(Env env)
+  public static Object get_servlet_response(Env env)
   {
-    return env.getResponse();
+    QuercusHttpServletResponse response = env.getResponse();
+
+    return response.toResponse(Object.class);
   }
-  
+
   /**
    * Returns the ServletContext.
    */
   @Name("quercus_get_servlet_context")
-  public static ServletContext get_servlet_context(Env env)
+  public static Object get_servlet_context(Env env)
   {
-    return env.getServletContext();
+    QuercusServletContext ctx = env.getServletContext();
+
+    if (ctx == null) {
+      return null;
+    }
+
+    return ctx.toServletContext(Object.class);
   }
-  
+
+  /**
+   * Dumps the stack.
+   */
+  @Name("quercus_dump_stack")
+  public static boolean dump_stack(Env env)
+  {
+    Thread.dumpStack();
+
+    return true;
+  }
+
   /**
    * Special quercus-only import statements.
    */

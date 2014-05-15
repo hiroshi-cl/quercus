@@ -29,9 +29,11 @@
 
 package com.caucho.quercus.program;
 
-import com.caucho.quercus.env.MethodIntern;
+import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.Value;
 import com.caucho.quercus.expr.Expr;
+import com.caucho.quercus.expr.ParamRequiredExpr;
 
 /**
  * Represents a formal argument.
@@ -43,19 +45,27 @@ public class Arg {
   private final boolean _isReference;
   private final String _expectedClass;
 
-
-  public Arg(String name,
+  public Arg(StringValue name,
              Expr defaultExpr,
              boolean isReference,
              String expectedClass)
   {
-    _name = MethodIntern.intern(name);
+    _name = name;
     _default = defaultExpr;
     _isReference = isReference;
     _expectedClass = expectedClass;
 
-    if (_default == null)
+    if (_default == null) {
       throw new IllegalStateException();
+    }
+  }
+
+  /**
+   * Evaluates the default expr.
+   */
+  public Value eval(Env env)
+  {
+    return _default.eval(env);
   }
 
   /**
@@ -83,13 +93,21 @@ public class Arg {
   }
 
   /**
+   * Returns true if the argument is required.
+   */
+  public boolean isRequired()
+  {
+    return _default == ParamRequiredExpr.REQUIRED;
+  }
+
+  /**
    * Returns the expected classname
    */
   public String getExpectedClass()
   {
     return _expectedClass;
   }
-  
+
   public String toString()
   {
     return "Arg[" + _name + "]";

@@ -29,8 +29,8 @@
 
 package com.caucho.vfs;
 
-import com.caucho.util.Alarm;
 import com.caucho.util.CharBuffer;
+import com.caucho.util.CurrentTime;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -78,7 +78,7 @@ public final class ReadStream extends InputStream
   private Reader _readEncoding;
   private String _readEncodingName;
   private CharBuffer _cb;
-  
+
   private boolean _disableClose;
   private boolean _isDisableCloseSource;
   private boolean _reuseBuffer;
@@ -198,17 +198,25 @@ public final class ReadStream extends InputStream
     return _readOffset;
   }
 
-  public int getLength()
-  {
-    return _readLength;
-  }
-
   public void setOffset(int offset)
   {
     if (offset < 0)
       throw new IllegalStateException("illegal offset=" + offset);
 
     _readOffset = offset;
+  }
+
+  public int getLength()
+  {
+    return _readLength;
+  }
+
+  public void setLength(int length)
+  {
+    if (length< 0 || _readBuffer.length < length)
+      throw new IllegalStateException("illegal length=" + length);
+
+    _readLength = length;
   }
 
   /**
@@ -226,7 +234,7 @@ public final class ReadStream extends InputStream
   {
     if (! _isEnableReadTime)
       throw new UnsupportedOperationException("last read-time is disabled");
-    
+
     return _readTime;
   }
 
@@ -237,7 +245,7 @@ public final class ReadStream extends InputStream
   {
     _readTime = 0;
   }
-  
+
   /**
    * Enables setting the read time on every reads.
    */
@@ -350,6 +358,7 @@ public final class ReadStream extends InputStream
   /**
    * Returns the next byte or -1 if at the end of file.
    */
+  @Override
   public final int read() throws IOException
   {
     if (_readLength <= _readOffset) {
@@ -464,9 +473,9 @@ public final class ReadStream extends InputStream
 
         if (len > 0) {
           _position += len;
-          
+
           if (_isEnableReadTime)
-            _readTime = Alarm.getCurrentTime();
+            _readTime = CurrentTime.getCurrentTime();
         }
 
         return len;
@@ -479,9 +488,7 @@ public final class ReadStream extends InputStream
       readLength = _readLength;
     }
 
-    int sublen = readLength - readOffset;
-    if (length < sublen)
-      sublen = length;
+    int sublen = Math.min(length, readLength - readOffset);
 
     System.arraycopy(_readBuffer, readOffset, buf, offset, sublen);
 
@@ -508,8 +515,9 @@ public final class ReadStream extends InputStream
     while (length > 0) {
       int sublen = read(buf, offset, length);
 
-      if (sublen < 0)
+      if (sublen < 0) {
         return readLength == 0 ? -1 : readLength;
+      }
 
       offset += sublen;
       readLength += sublen;
@@ -590,19 +598,18 @@ public final class ReadStream extends InputStream
     int readOffset = _readOffset;
     int readLength = _readLength;
 
-    int sublen = readLength - readOffset;
+    int sublen = Math.min(length, readLength - readOffset);
 
-    if (sublen <= 0) {
+    if (readLength <= readOffset) {
       if (! readBuffer()) {
         return -1;
       }
+
       readLength = _readLength;
       readOffset = _readOffset;
-      sublen = readLength - readOffset;
-    }
 
-    if (length < sublen)
-      sublen = length;
+      sublen = Math.min(length, readLength - readOffset);
+    }
 
     for (int i = sublen - 1; i >= 0; i--)
       buf[offset + i] = (char) (readBuffer[readOffset + i] & 0xff);
@@ -697,13 +704,13 @@ public final class ReadStream extends InputStream
   public String readLine() throws IOException
   {
     CharBuffer cb = _cb;
-    
+
     if (cb == null) {
       cb = _cb = new CharBuffer();
     }
 
     String result;
-    
+
     if (readLine(cb, true)) {
       result = cb.toString();
       cb.clear();
@@ -714,7 +721,7 @@ public final class ReadStream extends InputStream
       result = cb.toString();
       cb.clear();
     }
-    
+
     return result;
   }
 
@@ -776,9 +783,7 @@ public final class ReadStream extends InputStream
     while (true) {
       int readOffset = _readOffset;
 
-      int sublen = _readLength - readOffset;
-      if (capacity - offset < sublen)
-        sublen = capacity - offset;
+      int sublen = Math.min(capacity - offset, _readLength - readOffset);
 
       for (; sublen > 0; sublen--) {
         int ch = readBuffer[readOffset++] & 0xff;
@@ -856,9 +861,7 @@ public final class ReadStream extends InputStream
     while (true) {
       int readOffset = _readOffset;
 
-      int sublen = _readLength - readOffset;
-      if (sublen < length)
-        sublen = length;
+      int sublen = Math.min(length, _readLength - readOffset);
 
       for (; sublen > 0; sublen--) {
         int ch = readBuffer[readOffset++] & 0xff;
@@ -1031,9 +1034,7 @@ public final class ReadStream extends InputStream
           return;
       }
 
-      int sublen = _readLength - _readOffset;
-      if (len < sublen)
-        sublen = len;
+      int sublen = Math.min(len, _readLength - _readOffset);
 
       os.write(_readBuffer, _readOffset, sublen);
       _readOffset += sublen;
@@ -1049,8 +1050,10 @@ public final class ReadStream extends InputStream
   public void writeToWriter(Writer out) throws IOException
   {
     int ch;
-    while ((ch = readChar()) >= 0)
+
+    while ((ch = readChar()) >= 0) {
       out.write((char) ch);
+    }
   }
 
   /**
@@ -1090,9 +1093,9 @@ public final class ReadStream extends InputStream
     if (readLength > 0) {
       _readLength = readLength;
       _position += readLength;
-      
+
       if (_isEnableReadTime)
-        _readTime = Alarm.getCurrentTime();
+        _readTime = CurrentTime.getCurrentTime();
 
       return true;
     }
@@ -1112,8 +1115,9 @@ public final class ReadStream extends InputStream
   public int fillWithTimeout(long timeout)
     throws IOException
   {
-    if (_readOffset < _readLength)
+    if (_readOffset < _readLength) {
       return _readLength - _readOffset;
+    }
 
     if (_readBuffer == null) {
       _readOffset = 0;
@@ -1138,10 +1142,10 @@ public final class ReadStream extends InputStream
     if (readLength > 0) {
       _readLength = readLength;
       _position += readLength;
-      
+
       if (_isEnableReadTime)
-        _readTime = Alarm.getCurrentTime();
-      
+        _readTime = CurrentTime.getCurrentTime();
+
       return readLength;
     }
     else if (readLength == READ_TIMEOUT) {
@@ -1196,9 +1200,9 @@ public final class ReadStream extends InputStream
     if (readLength >= 0) {
       _readLength += readLength;
       _position += readLength;
-      
+
       if (_isEnableReadTime)
-        _readTime = Alarm.getCurrentTime();
+        _readTime = CurrentTime.getCurrentTime();
       return true;
     }
     else if (readLength == READ_TIMEOUT) {
@@ -1239,9 +1243,9 @@ public final class ReadStream extends InputStream
     if (readLength > 0) {
       _readLength = readLength;
       _position += readLength;
-      
+
       if (_isEnableReadTime)
-        _readTime = Alarm.getCurrentTime();
+        _readTime = CurrentTime.getCurrentTime();
       return true;
     }
     else {

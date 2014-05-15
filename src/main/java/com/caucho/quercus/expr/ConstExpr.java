@@ -31,8 +31,9 @@ package com.caucho.quercus.expr;
 
 import com.caucho.quercus.Location;
 import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.StringBuilderValue;
-import com.caucho.quercus.env.UnicodeValueImpl;
+import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.parser.QuercusParser;
 
@@ -60,30 +61,65 @@ public class ConstExpr extends Expr {
   {
     return _var;
   }
-  
+
   //
   // expression creation
   //
-   
+
   /**
    * Creates a class field Foo::bar
    */
   @Override
-  public Expr createClassConst(QuercusParser parser, String name)
+  public Expr createClassConst(QuercusParser parser, StringValue name)
   {
     ExprFactory factory = parser.getExprFactory();
-    
+
     String className = _var;
     String specialClassName = getSpecialClassName();
 
     if ("self".equals(specialClassName)) {
       className = parser.getSelfClassName();
-      
+
       return factory.createClassConst(className, name);
     }
     else if ("parent".equals(specialClassName)) {
       className = parser.getParentClassName();
-      
+
+      if (className != null) {
+        return factory.createClassConst(className, name);
+      }
+      else {
+        // trait's parent is not known at parse time
+        return factory.createTraitParentClassConst(parser.getClassName(), name);
+      }
+    }
+    else if ("static".equals(specialClassName)) {
+      return factory.createClassVirtualConst(name);
+    }
+    else {
+      return factory.createClassConst(className, name);
+    }
+  }
+
+  /**
+   * Creates a class field Foo::$bar
+   */
+  @Override
+  public Expr createClassConst(QuercusParser parser, Expr name)
+  {
+    ExprFactory factory = parser.getExprFactory();
+
+    String className = _var;
+    String specialClassName = getSpecialClassName();
+
+    if ("self".equals(specialClassName)) {
+      className = parser.getSelfClassName();
+
+      return factory.createClassConst(className, name);
+    }
+    else if ("parent".equals(specialClassName)) {
+      className = parser.getParentClassName();
+
       return factory.createClassConst(className, name);
     }
     else if ("static".equals(specialClassName)) {
@@ -93,26 +129,31 @@ public class ConstExpr extends Expr {
       return factory.createClassConst(className, name);
     }
   }
-  
+
   /**
    * Creates a class field Foo::$bar
    */
   @Override
-  public Expr createClassField(QuercusParser parser, String name)
+  public Expr createClassField(QuercusParser parser, StringValue name)
   {
     ExprFactory factory = parser.getExprFactory();
-    
+
     String className = _var;
     String specialClassName = getSpecialClassName();
 
     if ("self".equals(specialClassName)) {
-      className = parser.getSelfClassName();
-      
-      return factory.createClassField(className, name);
+      if ("this".equals(name.toString())) {
+        return factory.createThis(parser.getClassDef());
+      }
+      else {
+        className = parser.getSelfClassName();
+
+        return factory.createClassField(className, name);
+      }
     }
     else if ("parent".equals(specialClassName)) {
       className = parser.getParentClassName();
-      
+
       return factory.createClassField(className, name);
     }
     else if ("static".equals(specialClassName)) {
@@ -122,7 +163,7 @@ public class ConstExpr extends Expr {
       return factory.createClassField(className, name);
     }
   }
-  
+
   /**
    * Creates a class field Foo::${bar}
    */
@@ -130,18 +171,18 @@ public class ConstExpr extends Expr {
   public Expr createClassField(QuercusParser parser, Expr name)
   {
     ExprFactory factory = parser.getExprFactory();
-    
+
     String className = _var;
     String specialClassName = getSpecialClassName();
 
     if ("self".equals(specialClassName)) {
       className = parser.getSelfClassName();
-      
+
       return factory.createClassField(className, name);
     }
     else if ("parent".equals(specialClassName)) {
       className = parser.getParentClassName();
-      
+
       return factory.createClassField(className, name);
     }
     else if ("static".equals(specialClassName)) {
@@ -151,13 +192,13 @@ public class ConstExpr extends Expr {
       return factory.createClassField(className, name);
     }
   }
-  
+
   private String getSpecialClassName()
   {
     String className = _var;
-    
+
     int ns = className.lastIndexOf('\\');
-    
+
     if (ns >= 0) {
       return className.substring(ns + 1);
     }
@@ -184,6 +225,14 @@ public class ConstExpr extends Expr {
   public Value eval(Env env)
   {
     return env.getConstant(_var);
+  }
+
+  @Override
+  public QuercusClass evalQuercusClass(Env env)
+  {
+    String className = evalString(env);
+
+    return env.getClass(className);
   }
 
   public String toString()

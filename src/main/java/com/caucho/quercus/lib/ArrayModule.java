@@ -86,7 +86,7 @@ public class ArrayModule
 
   public static final int SORT_DESC = 3;
   public static final int SORT_ASC = 4;
-  
+
   public static final int EXTR_OVERWRITE = 0;
   public static final int EXTR_SKIP = 1;
   public static final int EXTR_PREFIX_SAME = 2;
@@ -95,7 +95,7 @@ public class ArrayModule
   public static final int EXTR_IF_EXISTS = 6;
   public static final int EXTR_PREFIX_IF_EXISTS = 5;
   public static final int EXTR_REFS = 256;
-  
+
   public static final int COUNT_NORMAL = 0;
   public static final int COUNT_RECURSIVE = 1;
 
@@ -158,7 +158,7 @@ public class ArrayModule
    */
   public static Value array_change_key_case(Env env,
                                             ArrayValue array,
-                                            @Optional("CASE_LOWER") int toCase) 
+                                            @Optional("CASE_LOWER") int toCase)
   {
     if (array == null)
       return BooleanValue.FALSE;
@@ -259,6 +259,28 @@ public class ArrayModule
 
     return array;
   }
+
+  public Value array_copy_recursive(Value value)
+  {
+    value = value.toValue();
+
+    if (! value.isArray()) {
+      return value;
+    }
+
+    ArrayValue array = (ArrayValue) value;
+    ArrayValue copy = new ArrayValueImpl();
+
+    for (Map.Entry<Value, Value> entry : array.entrySet()) {
+      Value entryValue = entry.getValue();
+      Value entryKey = entry.getKey();
+
+      copy.put(entryKey, array_copy_recursive(entryValue));
+    }
+
+    return copy;
+  }
+
 
   /**
    * Counts the values
@@ -408,8 +430,8 @@ public class ArrayModule
       return NullValue.NULL;
     }
 
-    AbstractFunction func =
-      env.findFunction(arrays[arrays.length - 1].toString().intern());
+    StringValue funName = arrays[arrays.length - 1].toStringValue(env);
+    AbstractFunction func = env.findFunction(funName);
 
     if (func == null) {
       env.warning("Invalid comparison function");
@@ -470,8 +492,8 @@ public class ArrayModule
       return NullValue.NULL;
     }
 
-    AbstractFunction func =
-      env.findFunction(arrays[arrays.length - 1].toString().intern());
+    StringValue funName = arrays[arrays.length - 1].toStringValue(env);
+    AbstractFunction func = env.findFunction(funName);
 
     if (func == null) {
       env.warning("Invalid comparison function");
@@ -562,11 +584,11 @@ public class ArrayModule
   /*
    * Returns an array whose keys are the values of the keyArray passed in,
    * and whose values are all the value passed in.
-   * 
+   *
    * @param keyArray whose values are used to populate the keys of the new
    * array
    * @param value used as the value of the keys
-   * 
+   *
    * @return newly filled array
    */
   public static ArrayValue array_fill_keys(Env env,
@@ -574,13 +596,13 @@ public class ArrayModule
                                            Value value)
   {
     ArrayValue array = new ArrayValueImpl();
-    
+
     Iterator<Value> iter = keyArray.getValueIterator(env);
-    
+
     while (iter.hasNext()) {
       array.put(iter.next(), value.copy());
     }
-    
+
     return array;
   }
 
@@ -609,7 +631,7 @@ public class ArrayModule
 
     return array;
   }
-  
+
   /**
    * Returns an array that filters out any values that do not hold true when
    * used in the callback function.
@@ -628,8 +650,8 @@ public class ArrayModule
     ArrayValue filteredArray = new ArrayValueImpl();
 
     if (! callbackName.isDefault()) {
-      Callable callback = callbackName.toCallable(env);
-      
+      Callable callback = callbackName.toCallable(env, false);
+
       if (callback == null || ! callback.isValid(env)) {
         return NullValue.NULL;
       }
@@ -639,19 +661,19 @@ public class ArrayModule
 
         while (iter.hasNext()) {
           Map.Entry<Value,Value> entry = iter.next();
-          
+
           Value key = entry.getKey();
           Value value;
-          
+
           if (entry instanceof ArrayValue.Entry)
             value = ((ArrayValue.Entry) entry).getRawValue();
           else
             value = entry.getValue();
- 
-          // php/1740          
-          boolean isMatch 
+
+          // php/1740
+          boolean isMatch
             = callback.callArray(env, array, key, value).toBoolean();
-          
+
           if (isMatch)
             filteredArray.put(key, value);
         }
@@ -835,8 +857,8 @@ public class ArrayModule
       return NullValue.NULL;
     }
 
-    AbstractFunction func =
-      env.findFunction(arrays[arrays.length - 1].toString().intern());
+    StringValue funName = arrays[arrays.length - 1].toStringValue(env);
+    AbstractFunction func = env.findFunction(funName);
 
     if (func == null) {
       env.warning("Invalid comparison function");
@@ -902,8 +924,8 @@ public class ArrayModule
       return NullValue.NULL;
     }
 
-    AbstractFunction func =
-      env.findFunction(arrays[arrays.length - 1].toString().intern());
+    StringValue funName = arrays[arrays.length - 1].toStringValue(env);
+    AbstractFunction func = env.findFunction(funName);
 
     if (func == null) {
       env.warning("Invalid comparison function");
@@ -1010,29 +1032,30 @@ public class ArrayModule
                                          @ReadOnly Value searchArray)
   {
 
-    
+
     if (! searchArray.isset() || ! key.isset()) {
       return false;
     }
 
-    if (! (searchArray.isArray() || searchArray.isObject())) {
-      env.warning(
-          L.l("'" + searchArray.toString()
-              + "' is an unexpected argument, expected "
-              + "ArrayValue or ObjectValue"));
-      return false;
-    }
-
     if (! (key.isString() || key.isLongConvertible())) {
-      env.warning(
-          L.l(
-              "The first argument (a '{0}') should be "
-                  + "either a string or an integer",
+      env.warning(L.l("The first argument (a '{0}') should be "
+                      + "either a string or an integer",
                       key.getType()));
       return false;
     }
 
-    return searchArray.keyExists(key);
+    if (searchArray.isArray()) {
+      return searchArray.keyExists(key);
+    }
+    else if (searchArray.isObject()) {
+      return searchArray.isFieldExists(env, key.toStringValue(env));
+    }
+    else {
+      env.warning(L.l("'" + searchArray.toString()
+                      + "' is an unexpected argument, expected "
+                      + "ArrayValue or ObjectValue"));
+      return false;
+    }
   }
 
   /**
@@ -1052,13 +1075,13 @@ public class ArrayModule
 
     if (searchValue.isDefault())
       return array.getKeys();
-    
+
     ArrayValue newArray = new ArrayValueImpl(array.getSize());
 
     int i = 0;
-    
+
     Iterator<Map.Entry<Value,Value>> iter = array.getIterator(env);
-    
+
     while (iter.hasNext()) {
       Map.Entry<Value,Value> entry = iter.next();
       Value entryKey = entry.getKey();
@@ -1084,7 +1107,7 @@ public class ArrayModule
     // XXX: drupal
     if (arg == null)
       return NullValue.NULL;
-    
+
     // quercus/1730
     Iterator<Map.Entry<Value, Value>> argIter = arg.entrySet().iterator();
 
@@ -1127,15 +1150,18 @@ public class ArrayModule
    */
   public static Value array_merge_recursive(Env env, Value []args)
   {
-    // quercus/173a
+    // php/173a
 
     ArrayValue result = new ArrayValueImpl();
 
     for (Value arg : args) {
-      if (! (arg.toValue() instanceof ArrayValue))
-        continue;
+      Value value = arg.toValue();
 
-      arrayMergeRecursiveImpl(env, result, (ArrayValue) arg.toValue());
+      if (! (value instanceof ArrayValue)) {
+        continue;
+      }
+
+      arrayMergeRecursiveImpl(env, result, (ArrayValue) value);
     }
 
     return result;
@@ -1154,71 +1180,96 @@ public class ArrayModule
     ArrayValue result = new ArrayValueImpl();
 
     for (Value arg : args) {
-      if (arg.isNull())
+      if (arg.isNull()) {
         return NullValue.NULL;
+      }
 
       Value argValue = arg.toValue();
-      
-      if (! argValue.isArray())
+
+      if (! argValue.isArray()) {
         continue;
+      }
 
       ArrayValue array = argValue.toArrayValue(env);
-      
+
       Iterator<Map.Entry<Value,Value>> iter = array.getIterator(env);
-      
+
       while (iter.hasNext()) {
         Map.Entry<Value,Value> entry = iter.next();
-        
+
         Value key = entry.getKey();
         Value value;
-        
+
         if (entry instanceof ArrayValue.Entry) {
           // php/173z, php/1747
           value = ((ArrayValue.Entry) entry).getRawValue();
         }
-        else
+        else {
           value = entry.getValue();
-        
-        if (! (value instanceof Var))
+        }
+
+        if (! (value instanceof Var)) {
           value = value.copy();
+        }
 
         // php/1745
-        if (key.isNumberConvertible())
+        if (key.isNumberConvertible()) {
           result.put(value);
-        else
+        }
+        else {
           result.append(key, value);
+        }
       }
     }
 
     return result;
   }
 
+  /*
+  private static void arrayMergeRecursiveImpl(Env env,
+                                              ArrayValue result,
+                                              Value value)
+  {
+    if (value.isArray()) {
+      ArrayValueImpl array = new ArrayValueImpl();
+
+      arrayMergeRecursiveImpl(env, array, value.toArrayValue(env));
+    }
+  }
+  */
+
   private static void arrayMergeRecursiveImpl(Env env,
                                               ArrayValue result,
                                               ArrayValue array)
   {
     Iterator<Map.Entry<Value,Value>> iter = array.getIterator(env);
-    
+
     while (iter.hasNext()) {
       Map.Entry<Value,Value> entry = iter.next();
-      
+
       Value key = entry.getKey();
       Value value;
-      
+
       if (entry instanceof ArrayValue.Entry) {
         // php/1744, php/1746
         value = ((ArrayValue.Entry) entry).getRawValue();
       }
-      else
-        value = entry.getValue();
-      
-      if (! (value instanceof Var))
-        value = value.copy();
-
-      if (key.isNumberConvertible())
-        result.put(value);
       else {
-        Value oldValue = result.get(key).toValue();
+        value = entry.getValue();
+      }
+
+      // php/1746
+      if (! (value instanceof Var)) {
+        // php/174b
+        value = value.copy();
+      }
+
+      if (key.isNumberConvertible()) {
+        // php/1744
+        result.put(value);
+      }
+      else {
+        Value oldValue = result.getDirty(key).toValue();
 
         if (oldValue != null && oldValue.isset()) {
           if (oldValue.isArray() && value.isArray()) {
@@ -1230,10 +1281,15 @@ public class ArrayModule
             oldValue.put(value);
           }
           else if (value.isArray()) {
-            value.put(oldValue);
+            ArrayValueImpl newArray = new ArrayValueImpl();
+
+            newArray.put(oldValue);
+            newArray.putAll(value.toArrayValue(env));
+
+            result.put(key, newArray);
           }
           else {
-            ArrayValue newArray = new ArrayValueImpl();
+            ArrayValueImpl newArray = new ArrayValueImpl();
 
             newArray.put(oldValue);
             newArray.put(value);
@@ -1241,8 +1297,9 @@ public class ArrayModule
             result.put(key, newArray);
           }
         }
-        else
+        else {
           result.put(key, value);
+        }
       }
     }
   }
@@ -1256,17 +1313,17 @@ public class ArrayModule
   public static boolean array_multisort(Env env, Value[] arrays)
   {
     boolean isNewKeys = true;
-    
+
     if (arrays.length == 0 || ! arrays[0].isArray()) {
       env.warning("the first argument must be an array");
-      
+
       return false;
     }
-    
+
     Value primary = arrays[0];
-    
+
     Iterator<Value> keyIter = primary.getKeyIterator(env);
-    
+
     while (keyIter.hasNext()) {
       if (! (keyIter.next() instanceof LongValue)) {
         isNewKeys = false;
@@ -1275,11 +1332,12 @@ public class ArrayModule
     }
 
     Value []rows = primary.getKeyArray(env);
-    
+
     int maxsize = 0;
     for (int i = 0; i < arrays.length; i++)
-      if (arrays[i] instanceof ArrayValue)
+      if (arrays[i].isArray()) {
         maxsize = Math.max(maxsize, arrays[i].getSize());
+      }
 
     // create the identity permutation [1..n]
     LongValue []p = new LongValue[maxsize];
@@ -1292,7 +1350,7 @@ public class ArrayModule
     // apply the permuation
     for (int i = 0; i < arrays.length; i++) {
       if (arrays[i].isArray()) {
-        permute(env, (ArrayValue)arrays[i], p, isNewKeys);
+        permute(env, arrays[i].toArrayValue(env), p, isNewKeys);
       }
     }
 
@@ -1313,7 +1371,7 @@ public class ArrayModule
     Value[] values = array.getValueArray(env);
 
     array.clear();
-    
+
     if (isNewKeys) {
       for (int i = 0; i < permutation.length; i++) {
         int p = permutation[i].toInt();
@@ -1325,7 +1383,7 @@ public class ArrayModule
     else {
       for (int i = 0; i < permutation.length; i++) {
         int p = permutation[i].toInt();
-        
+
         Value key = keys[p];
         Value value = values[p];
         array.put(key, value.toValue().copy());
@@ -1536,7 +1594,7 @@ public class ArrayModule
 
     return result;
   }
-  
+
   /**
    * Replace elements in the first array with values from successive ones
    */
@@ -1544,26 +1602,26 @@ public class ArrayModule
                                               Value []args)
   {
     ArrayValue result = new ArrayValueImpl();
-    
+
     for (int i = 0;i < args.length; i++) {
       replaceRecursive(env, result, args[i]);
     }
-    
+
     return result;
   }
-  
+
   private static void replaceRecursive(Env env,
                                        Value result,
                                        Value newValue)
   {
     Iterator<Map.Entry<Value,Value>>iter =  newValue.toArray().getIterator(env);
-  
+
     while (iter.hasNext()) {
       Map.Entry<Value,Value> entry = iter.next();
-      
+
       Value key = entry.getKey();
       Value value = entry.getValue();
-      
+
       if (value.isArray()) {
         replaceRecursive(env, result.getArray(key), value);
       }
@@ -1580,17 +1638,17 @@ public class ArrayModule
                                     Value []args)
   {
     ArrayValue result = new ArrayValueImpl();
-    
+
     for (int i = 0;i < args.length; i++) {
       Iterator<Map.Entry<Value,Value>>iter =  args[i].toArray().getIterator(env);
-      
+
       while (iter.hasNext()) {
         Map.Entry<Value,Value> entry = iter.next();
-        
+
         result.put(entry.getKey(), entry.getValue());
       }
     }
-    
+
     return result;
   }
 
@@ -1602,18 +1660,21 @@ public class ArrayModule
    * @return the array in reverse
    */
   public static Value array_reverse(Env env,
-                                    ArrayValue inputArray,
+                                    @ReadOnly ArrayValue inputArray,
                                     @Optional("false") boolean keyed)
   {
-    if (inputArray == null)
+    if (inputArray == null) {
       return NullValue.NULL;
-
-    Map.Entry<Value, Value>[] entryArray
-      = new Map.Entry[inputArray.getSize()];
-
-    inputArray.entrySet().toArray(entryArray);
+    }
 
     ArrayValue newArray = new ArrayValueImpl();
+
+    if (inputArray.getSize() == 0) {
+      return newArray;
+    }
+
+    Map.Entry<Value, Value>[] entryArray = new Map.Entry[inputArray.getSize()];
+    inputArray.entrySet().toArray(entryArray);
 
     int newIndex = 0;
 
@@ -1650,7 +1711,7 @@ public class ArrayModule
   {
     // php/171i
     // php/172y
-    
+
     if (array == null)
       return BooleanValue.FALSE;
 
@@ -1688,14 +1749,14 @@ public class ArrayModule
       env.warning(L.l("cannot shift a non-array"));
       return NullValue.NULL;
     }
-    
+
     ArrayValue array = value.toArrayValue(env);
 
     if (array.getSize() < 1)
       return NullValue.NULL;
 
     Iterator<Value> iter = array.getKeyIterator(env);
-    
+
     Value firstValue = array.remove(iter.next());
 
     array.keyReset(0, NOT_STRICT);
@@ -1774,7 +1835,7 @@ public class ArrayModule
 
     if (array == null)
       return NullValue.NULL;
-    
+
     int size = array.getSize();
 
     int startIndex = offset;
@@ -1794,7 +1855,7 @@ public class ArrayModule
     }
 
     return spliceImpl(env, arrayVar, array, startIndex, endIndex,
-                      (ArrayValue) replace.toArray());
+                      replace.toArray());
   }
 
   public static Value spliceImpl(Env env,
@@ -1814,14 +1875,14 @@ public class ArrayModule
     for (Map.Entry<Value,Value> entry : array.entrySet()) {
       Value key = entry.getKey();
       Value value = entry.getValue();
-      
+
       if (start == index && replace != null) {
         Iterator<Value> replaceIter = replace.getValueIterator(env);
         while (replaceIter.hasNext()) {
           newArray.put(replaceIter.next());
         }
       }
-      
+
       if (start <= index && index < end) {
         if (key.isString())
           result.put(key, value);
@@ -1897,8 +1958,8 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 1];
 
-    Callable cmp = callbackValue.toCallable(env);
-    
+    Callable cmp = callbackValue.toCallable(env, false);
+
     if (! cmp.isValid(env))
       return NullValue.NULL;
 
@@ -1981,14 +2042,14 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 2];
 
-    Callable cmpValue = callbackValue.toCallable(env);
+    Callable cmpValue = callbackValue.toCallable(env, false);
 
     if (! cmpValue.isValid(env))
       return NullValue.NULL;
 
     Value callbackKey = arrays[arrays.length - 1];
 
-    Callable cmpKey = callbackKey.toCallable(env);
+    Callable cmpKey = callbackKey.toCallable(env, false);
 
     if (! cmpKey.isValid(env))
       return NullValue.NULL;
@@ -2072,8 +2133,8 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 1];
 
-    Callable cmp = callbackValue.toCallable(env);
-    
+    Callable cmp = callbackValue.toCallable(env, false);
+
     if (! cmp.isValid(env))
       return NullValue.NULL;
 
@@ -2148,8 +2209,8 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 1];
 
-    Callable cmp = callbackValue.toCallable(env);
-    
+    Callable cmp = callbackValue.toCallable(env, false);
+
     if (! cmp.isValid(env))
       return NullValue.NULL;
 
@@ -2230,15 +2291,15 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 2];
 
-    Callable cmpValue = callbackValue.toCallable(env);
-    
+    Callable cmpValue = callbackValue.toCallable(env, false);
+
     if (! cmpValue.isValid(env))
       return NullValue.NULL;
 
     Value callbackKey = arrays[arrays.length - 1];
 
-    Callable cmpKey = callbackKey.toCallable(env);
-    
+    Callable cmpKey = callbackKey.toCallable(env, false);
+
     if (! cmpKey.isValid(env))
       return NullValue.NULL;
 
@@ -2319,8 +2380,8 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 1];
 
-    Callable cmp = callbackValue.toCallable(env);
-    
+    Callable cmp = callbackValue.toCallable(env, false);
+
     if (! cmp.isValid(env))
       return NullValue.NULL;
 
@@ -2418,7 +2479,7 @@ public class ArrayModule
                                     Value []values)
   {
     ArrayValue array = value.toArrayValue(env);
-    
+
     if (array == null)
       return BooleanValue.FALSE;
 
@@ -2466,7 +2527,7 @@ public class ArrayModule
           L.l("'{0}' is an unknown function.", callback.getCallbackName()));
       return false;
     }
-    
+
     ArrayValue array = arrayVar.toArrayValue(env);
 
     if (array == null)
@@ -2477,10 +2538,10 @@ public class ArrayModule
 
       while (iter.hasNext()) {
         Map.Entry<Value,Value> entry = iter.next();
-        
+
         Value key = entry.getKey();
         Value value;
-        
+
         // php/1742
         if (entry instanceof ArrayValue.Entry)
           value = ((ArrayValue.Entry) entry).getRawValue();
@@ -2529,7 +2590,7 @@ public class ArrayModule
                     callback.getCallbackName()));
       return false;
     }
-    
+
     ArrayValue array = arrayVar.toArrayValue(env);
 
     if (array == null)
@@ -2540,29 +2601,29 @@ public class ArrayModule
 
       while (iter.hasNext()) {
         Map.Entry<Value,Value> entry = iter.next();
-        
+
         Value key = entry.getKey();
         Value value;
-        
+
         // php/1741
         if (entry instanceof ArrayValue.Entry)
           value = ((ArrayValue.Entry) entry).getRawValue();
         else
           value = entry.getValue();
-        
+
         callback.callArray(env, array, key, value, key, userData);
       }
-      
+
       return true;
     }
     catch (Exception e) {
       log.log(Level.WARNING, e.toString(), e);
       env.warning("An error occured while invoking the callback", e);
-      
+
       return false;
     }
   }
-  
+
   // array - implemented internally
 
   /**
@@ -2578,7 +2639,7 @@ public class ArrayModule
                                @Optional long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
-    
+
     if (array == null)
       return false;
 
@@ -2616,7 +2677,7 @@ public class ArrayModule
                               @Optional long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
-    
+
     if (array == null)
       return false;
 
@@ -2679,7 +2740,7 @@ public class ArrayModule
   public static long count(Env env,
                            @ReadOnly Value value,
                            @Optional int countMethod)
-  {     
+  {
     boolean isRecursive = countMethod == COUNT_RECURSIVE;
 
     if (! isRecursive)
@@ -2703,7 +2764,7 @@ public class ArrayModule
   {
     if (value instanceof Var) {
       value = value.toValue();
-      
+
       if (value.isArray())
         return value.toArrayValue(env).each();
       else {
@@ -2907,12 +2968,12 @@ public class ArrayModule
       return false;
 
     Value result;
-    
+
     if (strict)
       result = stack.containsStrict(needle);
     else
       result = stack.contains(needle);
-    
+
     return ! result.isNull();
   }
 
@@ -2947,7 +3008,7 @@ public class ArrayModule
                                @Optional long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
-    
+
     if (array == null)
       return false;
 
@@ -2985,7 +3046,7 @@ public class ArrayModule
                               @Optional long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
-    
+
     if (array == null)
       return false;
 
@@ -3009,7 +3070,7 @@ public class ArrayModule
 
     return true;
   }
-  
+
   // list is internal expression
 
   /**
@@ -3023,7 +3084,7 @@ public class ArrayModule
   public static Value natcasesort(Env env, @Reference Value arrayVar)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
-    
+
     if (array == null)
       return NullValue.NULL;
 
@@ -3045,7 +3106,7 @@ public class ArrayModule
   public static Value natsort(Env env, @Reference Value arrayVar)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
-    
+
     if (array == null)
       return NullValue.NULL;
 
@@ -3110,36 +3171,33 @@ public class ArrayModule
    * @return the new array
    */
   public static Value range(Env env,
-                            @ReadOnly Value start,
-                            @ReadOnly Value end,
+                            @ReadOnly Value startV,
+                            @ReadOnly Value endV,
                             @Optional("1") long step)
   {
-    if (step < 1)
-      step = 1;
-
-    if (!start.getType().equals(end.getType())) {
-      start = LongValue.create(start.toLong());
-      end = LongValue.create(end.toLong());
+    if (step < 1) {
+      step *= -1;
     }
-    else if (Character.isDigit(start.toChar())) {
-      start = LongValue.create(start.toLong());
-      end = LongValue.create(end.toLong());
+
+    long start;
+    long end;
+
+    boolean isAppendChars = false;
+
+    if (startV.isLongConvertible() && endV.isLongConvertible()) {
+      start = startV.toLong();
+      end = endV.toLong();
     }
     else {
-      start = rangeIncrement(start, 0);
-      end = rangeIncrement(end, 0);
+      start = startV.toChar();
+      end = endV.toChar();
+
+      isAppendChars = true;
     }
 
-    if (start.eq(end)) {
+    if (start == end) {
     }
-    else if (start instanceof StringValue
-             && (Math.abs(end.toChar() - start.toChar()) < step)) {
-      env.warning("steps exceeds the specified range");
-
-      return BooleanValue.FALSE;
-    }
-    else if (start instanceof LongValue
-        && (Math.abs(end.toLong() - start.toLong()) < step)) {
+    else if (Math.abs(end - start) < step) {
       env.warning("steps exceeds the specified range");
 
       return BooleanValue.FALSE;
@@ -3147,7 +3205,7 @@ public class ArrayModule
 
     boolean increment = true;
 
-    if (! end.geq(start)) {
+    if (end < start) {
       step *= -1;
       increment = false;
     }
@@ -3155,21 +3213,17 @@ public class ArrayModule
     ArrayValue array = new ArrayValueImpl();
 
     do {
-      array.put(start);
+      if (isAppendChars) {
+        array.put(env.createString((char) start));
+      }
+      else {
+        array.put(start);
+      }
 
-      start = rangeIncrement(start, step);
-    } while ((increment && start.leq(end))
-        || (!increment && start.geq(end)));
+      start += step;
+    } while (increment && start <= end || ! increment && start >= end);
 
     return array;
-  }
-
-  private static Value rangeIncrement(Value value, long step)
-  {
-    if (value.isString())
-      return StringValue.create((char) (value.toChar() + step));
-
-    return LongValue.create(value.toLong() + step);
   }
 
   /**
@@ -3193,7 +3247,7 @@ public class ArrayModule
                               @Optional long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
-    
+
     if (array == null)
       return false;
 
@@ -3225,7 +3279,7 @@ public class ArrayModule
   {
     return array.shuffle();
   }
-  
+
 
   /**
    * Returns the size of the array.
@@ -3250,7 +3304,7 @@ public class ArrayModule
                              @Optional long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
-    
+
     if (array == null)
       return false;
 
@@ -3291,10 +3345,10 @@ public class ArrayModule
                                @Optional long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
-    
+
     if (array == null)
       return false;
-    
+
     if (func == null)
       return false;
 
@@ -3325,7 +3379,7 @@ public class ArrayModule
                                @Optional long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
-    
+
     if (array == null)
       return false;
 
@@ -3359,7 +3413,7 @@ public class ArrayModule
                               @Optional long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
-    
+
     if (array == null)
       return false;
 

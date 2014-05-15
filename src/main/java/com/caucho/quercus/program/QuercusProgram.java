@@ -46,7 +46,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
-
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 import java.util.logging.Level;
@@ -70,11 +69,11 @@ public class QuercusProgram {
 
   private boolean _isCompilable = true;
 
-  private Exception _compileException;
+  private Throwable _compileException;
 
-  private HashMap<String,Function> _functionMap;
-  private HashMap<String,Function> _functionMapLowerCase
-    = new HashMap<String,Function>();
+  private HashMap<StringValue,Function> _functionMap;
+  private HashMap<StringValue,Function> _functionMapLowerCase
+    = new HashMap<StringValue,Function>();
 
   private ArrayList<Function> _functionList;
 
@@ -101,8 +100,9 @@ public class QuercusProgram {
    * @param sourceFile the path to the source file
    * @param statement the top-level statement
    */
-  public QuercusProgram(QuercusContext quercus, Path sourceFile,
-                        HashMap<String,Function> functionMap,
+  public QuercusProgram(QuercusContext quercus,
+                        Path sourceFile,
+                        HashMap<StringValue,Function> functionMap,
                         ArrayList<Function> functionList,
                         HashMap<String,InterpretedClassDef> classMap,
                         ArrayList<InterpretedClassDef> classList,
@@ -110,7 +110,7 @@ public class QuercusProgram {
                         Statement statement)
   {
     _quercus = quercus;
-    
+
     _depend = new BasicDependencyContainer();
     _depend.setCheckInterval(quercus.getDependencyCheckInterval());
 
@@ -125,7 +125,7 @@ public class QuercusProgram {
     _functionMap = functionMap;
     _functionList = functionList;
 
-    for (Map.Entry<String,Function> entry : functionMap.entrySet()) {
+    for (Map.Entry<StringValue,Function> entry : functionMap.entrySet()) {
       _functionMapLowerCase.put(entry.getKey().toLowerCase(Locale.ENGLISH),
                                 entry.getValue());
     }
@@ -153,7 +153,7 @@ public class QuercusProgram {
     _compiledPage = page;
 
     _depend = new BasicDependencyContainer();
-    
+
     _topDepend = new BasicDependencyContainer();
     _topDepend.setCheckInterval(quercus.getDependencyCheckInterval());
     _topDepend.add(new PageDependency());
@@ -185,7 +185,7 @@ public class QuercusProgram {
     return _statement;
   }
 
-  /*
+  /**
    * Start compiling
    */
   public boolean startCompiling()
@@ -193,8 +193,8 @@ public class QuercusProgram {
     return _isCompiling.compareAndSet(false, true);
   }
 
-  /*
-   * Set to true if this page is being compiled.
+  /**
+   * Notifies waiting listeners that compilation has finished.
    */
   public void finishCompiling()
   {
@@ -205,7 +205,7 @@ public class QuercusProgram {
     }
   }
 
-  /*
+  /**
    * Set to true if this page is being compiled.
    */
   public void waitForCompile()
@@ -221,7 +221,7 @@ public class QuercusProgram {
     }
   }
 
-  /*
+  /**
    * Returns true if this page is being compiled.
    */
   public boolean isCompiling()
@@ -229,7 +229,7 @@ public class QuercusProgram {
     return _isCompiling.get();
   }
 
-  /*
+  /**
    * Set to false if page cannot be compiled.
    */
   public void setCompilable(boolean isCompilable)
@@ -237,7 +237,7 @@ public class QuercusProgram {
     _isCompilable = isCompilable;
   }
 
-  /*
+  /**
    * Returns true if the page can be compiled or it is unknown.
    */
   public boolean isCompilable()
@@ -245,8 +245,11 @@ public class QuercusProgram {
     return _isCompilable;
   }
 
-  public void setCompileException(Exception e)
+  public void setCompileException(Throwable e)
   {
+    _compileException = e;
+
+    /*
     if (e == null) {
       _compileException = null;
       return;
@@ -260,9 +263,10 @@ public class QuercusProgram {
     }
 
     _compileException = new QuercusException(msg);
+    */
   }
 
-  public Exception getCompileException()
+  public Throwable getCompileException()
   {
     return _compileException;
   }
@@ -328,7 +332,7 @@ public class QuercusProgram {
   /**
    * Finds a function.
    */
-  public AbstractFunction findFunction(String name)
+  public AbstractFunction findFunction(StringValue name)
   {
     AbstractFunction fun = _functionMap.get(name);
 
@@ -467,7 +471,7 @@ public class QuercusProgram {
    */
   public void importDefinitions(Env env)
   {
-    for (Map.Entry<String,Function> entry : _functionMap.entrySet()) {
+    for (Map.Entry<StringValue,Function> entry : _functionMap.entrySet()) {
       Function fun = entry.getValue();
 
       if (fun.isGlobal())

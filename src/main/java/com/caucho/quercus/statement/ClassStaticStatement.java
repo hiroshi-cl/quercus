@@ -44,46 +44,40 @@ import com.caucho.quercus.expr.VarExpr;
 public class ClassStaticStatement
   extends Statement
 {
-  protected final String _className;
   protected final VarExpr _var;
   protected final Expr _initValue;
   protected StringValue _staticName;
-  
+
   /**
    * Creates the echo statement.
    */
   public ClassStaticStatement(Location location,
-                              String className,
+                              StringValue staticName,
                               VarExpr var,
                               Expr initValue)
   {
     super(location);
 
-    _className = className;
+    _staticName = staticName;
     _var = var;
     _initValue = initValue;
   }
-  
+
   public Value execute(Env env)
   {
     try {
-      // XXX: this isn't reliable, needs to be Quercus-based
-      if (_staticName == null)
-        _staticName = env.createStaticName();
-
-      // String className = _className;
       StringValue staticName = _staticName;
 
       Value qThis = env.getThis();
-      
+
       QuercusClass qClass = qThis.getQuercusClass();
       String className = qClass.getName();
-      
+
       // Var var = qClass.getStaticFieldVar(env, env.createString(staticName));
       // Var var = qClass.getStaticFieldVar(env, staticName);
-      Var var = env.getStaticVar(env.createString(className 
+      Var var = env.getStaticVar(env.createString(className
                                                   + "::" + staticName));
-      
+
       env.setVar(_var.getName(), var);
 
       if (! var.isset() && _initValue != null)

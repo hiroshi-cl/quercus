@@ -40,6 +40,7 @@ import com.caucho.loader.Loader;
 import com.caucho.make.Make;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.CharBuffer;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.vfs.*;
 
@@ -82,7 +83,8 @@ public class JavaCompilerUtil {
   protected ArrayList<String> _args;
 
   private int _maxBatch = 64;
-  protected long _maxCompileTime = 120 * 1000L;
+  private long _startTimeout = 10 * 1000L;
+  private long _maxCompileTime = 120 * 1000L;
 
   private JavaCompilerUtil()
   {
@@ -124,6 +126,8 @@ public class JavaCompilerUtil {
     javaCompiler.setArgs(config.getArgs());
     javaCompiler.setEncoding(config.getEncoding());
     javaCompiler.setMaxBatch(config.getMaxBatch());
+    javaCompiler.setStartTimeout(config.getStartTimeout());
+    javaCompiler.setMaxCompileTime(config.getMaxCompileTime());
 
     return javaCompiler;
   }
@@ -310,8 +314,9 @@ public class JavaCompilerUtil {
   {
     String classPath = null;//_classPath;
 
-    if (classPath != null)
+    if (classPath != null) {
       return classPath;
+    }
 
     if (classPath == null && _loader instanceof DynamicClassLoader) {
       classPath = ((DynamicClassLoader) _loader).getClassPath();
@@ -351,7 +356,14 @@ public class JavaCompilerUtil {
     if (parent != null)
       buildClassPath(sb, parent);
 
-    if (loader instanceof URLClassLoader) {
+    if (loader instanceof DynamicClassLoader) {
+      DynamicClassLoader dynLoader = (DynamicClassLoader) loader;
+      
+      sb.append(dynLoader.getClassPath());
+      
+      return;
+    }
+    else if (loader instanceof URLClassLoader) {
       for (URL url : ((URLClassLoader) loader).getURLs()) {
         if (sb.length() > 0)
           sb.append(CauchoSystem.getPathSeparatorChar());
@@ -420,6 +432,22 @@ public class JavaCompilerUtil {
   public String getEncoding()
   {
     return _charEncoding;
+  }
+
+  /**
+   * Returns the thread spawn time for an external compilation.
+   */
+  public long getStartTimeout()
+  {
+    return _startTimeout;
+  }
+
+  /**
+   * Sets the thread spawn time for an external compilation.
+   */
+  public void setStartTimeout(long startTimeout)
+  {
+    _startTimeout = startTimeout;
   }
 
   /**
@@ -551,8 +579,9 @@ public class JavaCompilerUtil {
   {
     if (_compileParent) {
       try {
-        if (_loader instanceof Make)
+        if (_loader instanceof Make) {
           ((Make) _loader).make();
+        }
       } catch (RuntimeException e) {
         throw e;
       } catch (ClassNotFoundException e) {
@@ -681,9 +710,9 @@ public class JavaCompilerUtil {
     compiler.setLineMap(lineMap);
 
     // the compiler may not be well-behaved enough to use the ThreadPool
-    ThreadPool.getCurrent().schedule(compiler);
-
-    compiler.waitForComplete(_maxCompileTime);
+    ThreadPool.getCurrent().start(compiler, _startTimeout);
+    
+    compiler.waitForComplete(getMaxCompileTime());
 
     if (! compiler.isDone()) {
       log.warning("compilation timed out");

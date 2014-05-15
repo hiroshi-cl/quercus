@@ -90,7 +90,7 @@ public class PersistenceContextGenerator extends WebBeanGenerator
    * Returns the expected type
    */
   @Override
-  public Class getType()
+  public Class<?> getType()
   {
     return EntityManager.class;
   }
@@ -98,6 +98,7 @@ public class PersistenceContextGenerator extends WebBeanGenerator
   /**
    * Creates the value.
    */
+  @Override
   public Object create()
   {
     if (_manager != null)
@@ -106,16 +107,11 @@ public class PersistenceContextGenerator extends WebBeanGenerator
     try {
       if (PersistenceContextType.EXTENDED.equals(_type)) {
         _manager = create(EntityManager.class,
-                      new AnnotationLiteral<JpaPersistenceContext>() {
-                        public String value() { return _unitName; }
-                        public boolean extended() { return true; }
-                      });
+                      new JpaPersistenceContextLiteral(_unitName, true));
       }
       else {
         _manager = create(EntityManager.class,
-                      new AnnotationLiteral<JpaPersistenceContext>() {
-                        public String value() { return _unitName; }
-                      });
+                      new JpaPersistenceContextLiteral(_unitName));
       }
     } catch (Exception e) {
       throw ConfigException.create(_location, e);

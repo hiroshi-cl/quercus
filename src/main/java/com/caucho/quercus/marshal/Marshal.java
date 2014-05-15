@@ -192,6 +192,11 @@ abstract public class Marshal {
 
   public Object marshal(Env env, Value value, Class argClass)
   {
+    return marshalImpl(env, value.toValue(), argClass);
+  }
+
+  protected Object marshalImpl(Env env, Value value, Class<?> argClass)
+  {
     return value;
   }
 
@@ -202,10 +207,11 @@ abstract public class Marshal {
 
   public final int getMarshalingCost(Value value)
   {
-    Class expectedClass = getExpectedClass();
+    Class<?> expectedClass = getExpectedClass();
 
-    if (expectedClass.equals(value.getClass()))
+    if (expectedClass.equals(value.getClass())) {
       return ZERO;
+    }
 
     return getMarshalingCostImpl(value);
   }
@@ -223,6 +229,23 @@ abstract public class Marshal {
   public Class getExpectedClass()
   {
     throw new UnsupportedOperationException(getClass().toString());
+  }
+
+  protected void unexpectedType(Env env,
+                                Value value,
+                                Class<?> actual,
+                                Class<?> expected)
+  {
+    env.warning(L.l("'{0}' of type '{1}' is an unexpected argument, expected {2}",
+                    value,
+                    actual.getSimpleName(),
+                    expected.getSimpleName()));
+  }
+
+  protected void unexpectedNull(Env env, Class<?> expected)
+  {
+    env.warning(L.l("null is an unexpected argument, expected {0}",
+                    expected.getSimpleName()));
   }
 }
 

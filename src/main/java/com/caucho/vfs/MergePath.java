@@ -67,27 +67,44 @@ import java.util.Map;
 public class MergePath extends FilesystemPath {
   private ArrayList<Path> _pathList;
 
-  private Path _bestPath;
-
   /**
    * Creates a new merge path.
    */
   public MergePath()
   {
-    super(null, "/", "/");
+    this(null, "/", null, "/");
+  }
 
-    _root = this;
-    _pathList = new ArrayList<Path>();
+  public MergePath(String userPath, String path, Path ... paths)
+  {
+    this(null, userPath, null, path);
+
+    if (paths != null) {
+      for (Path p : paths) {
+        addMergePath(p);
+      }
+    }
+  }
+
+  public MergePath(Path ... paths)
+  {
+    this(paths[0].getUserPath(), paths[0].getFullPath(), paths);
   }
 
   /**
    * @param path canonical path
    */
-  private MergePath(MergePath root,
-                    String userPath, Map<String,Object> attributes,
-                    String path)
+  protected MergePath(MergePath root,
+                      String userPath, Map<String,Object> attributes,
+                      String path)
   {
     super(root, userPath, path);
+
+    if (root == null) {
+      _root = this;
+
+      _pathList = new ArrayList<Path>();
+    }
   }
 
   /**
@@ -109,7 +126,7 @@ public class MergePath extends FilesystemPath {
     if (length <= offset || filePath.charAt(offset) != '(')
       return super.schemeWalk(userPath, attributes, filePath, offset);
 
-    MergePath mergePath = new MergePath();
+    MergePath mergePath = createMergePath();
     mergePath.setUserPath(userPath);
 
     int head = ++offset;
@@ -164,6 +181,11 @@ public class MergePath extends FilesystemPath {
     }
 
     return new NotFoundPath(getSchemeMap(), filePath);
+  }
+
+  protected MergePath createMergePath()
+  {
+    return new MergePath();
   }
 
   /**
@@ -311,8 +333,8 @@ public class MergePath extends FilesystemPath {
    * until opening.
    */
   public Path fsWalk(String userPath,
-                        Map<String,Object> attributes,
-                        String path)
+                     Map<String,Object> attributes,
+                     String path)
   {
     ArrayList<Path> pathList = getMergePaths();
 
@@ -352,35 +374,45 @@ public class MergePath extends FilesystemPath {
   /**
    * Returns the full path name of the best path.
    */
+  /*
+  @Override
   public String getFullPath()
   {
     Path path = getBestPath();
 
     return path.getFullPath();
   }
+  */
 
   /**
    * Returns the full native path name of the best path.
    */
+  /*
+  @Override
   public String getNativePath()
   {
     Path path = getBestPath();
 
     return path.getNativePath();
   }
+  */
 
   /**
    * Returns the URL of the best path.
    */
+  /*
+  @Override
   public String getURL()
   {
     Path path = getBestPath();
 
-    if (! path.exists())
+    if (! path.exists()) {
       path = getWritePath();
+    }
 
     return path.getURL();
   }
+  */
 
   /**
    * Returns the relative path into the merge path.
@@ -399,6 +431,24 @@ public class MergePath extends FilesystemPath {
   public boolean exists()
   {
     return getBestPath().exists();
+  }
+
+  /**
+   * Returns equivalent of struct stat.st_mode if appropriate.
+   */
+  @Override
+  public int getMode()
+  {
+    return getBestPath().getMode();
+  }
+
+  /**
+   * Tests if the path is marked as executable
+   */
+  @Override
+  public boolean isExecutable()
+  {
+    return getBestPath().isExecutable();
   }
 
   /**
@@ -446,7 +496,9 @@ public class MergePath extends FilesystemPath {
    */
   public boolean canWrite()
   {
-    return getBestPath().canWrite();
+    // overriding by shadowing
+    // return getBestPath().canWrite();
+    return getBestPath().canRead();
   }
 
   /**
@@ -529,7 +581,8 @@ public class MergePath extends FilesystemPath {
 
       if (path.isDirectory()) {
         String[]subList = path.list();
-        for (int j = 0; j < subList.length; j++) {
+
+        for (int j = 0; subList != null && j < subList.length; j++) {
           if (! list.contains(subList[j]))
             list.add(subList[j]);
         }
@@ -542,6 +595,7 @@ public class MergePath extends FilesystemPath {
   /**
    * XXX: Probably should mkdir in the first path
    */
+  @Override
   public boolean mkdir()
     throws IOException
   {
@@ -551,6 +605,7 @@ public class MergePath extends FilesystemPath {
   /**
    * XXX: Probably should mkdir in the first path
    */
+  @Override
   public boolean mkdirs()
     throws IOException
   {
@@ -578,6 +633,7 @@ public class MergePath extends FilesystemPath {
   /**
    * Opens the best path for reading.
    */
+  @Override
   public StreamImpl openReadImpl() throws IOException
   {
     StreamImpl stream = getBestPath().openReadImpl();
@@ -589,10 +645,12 @@ public class MergePath extends FilesystemPath {
    * Opens the best path for writing.  XXX: If the best path doesn't
    * exist, this should probably create the file in the first path.
    */
+  @Override
   public StreamImpl openWriteImpl() throws IOException
   {
     StreamImpl stream = getWritePath().openWriteImpl();
     stream.setPath(this);
+
     return stream;
   }
 
@@ -600,6 +658,7 @@ public class MergePath extends FilesystemPath {
    * Opens the best path for reading and writing.  XXX: If the best path
    * doesn't exist, this should probably create the file in the first path.
    */
+  @Override
   public StreamImpl openReadWriteImpl() throws IOException
   {
     StreamImpl stream = getWritePath().openReadWriteImpl();
@@ -611,6 +670,7 @@ public class MergePath extends FilesystemPath {
    * Opens the best path for appending.  XXX: If the best path
    * doesn't exist, this should probably create the file in the first path.
    */
+  @Override
   public StreamImpl openAppendImpl() throws IOException
   {
     StreamImpl stream = getWritePath().openAppendImpl();
@@ -619,21 +679,27 @@ public class MergePath extends FilesystemPath {
   }
 
   /**
+   * Opens the best path for random access.
+   */
+  @Override
+  public RandomAccessStream openFileRandomAccess() throws IOException
+  {
+    RandomAccessStream stream = getWritePath().openFileRandomAccess();
+    // stream.setPath(this);
+    return stream;
+  }
+
+  /**
    * Returns the first matching path.
    */
   public Path getWritePath()
   {
-    String pathname = _pathname;
-    // XXX:??
-    if (pathname.startsWith("/"))
-      pathname = "." + pathname;
-
-    ArrayList<Path> pathList = ((MergePath) _root)._pathList;
+    ArrayList<Path> pathList = getPathList();
 
     if (pathList.size() == 0)
-      return new NotFoundPath(getSchemeMap(), pathname);
+      return new NotFoundPath(getSchemeMap(), _pathname);
     else {
-      return pathList.get(0).lookup(pathname);
+      return pathList.get(0);
     }
   }
 
@@ -666,58 +732,74 @@ public class MergePath extends FilesystemPath {
    */
   public Path getBestPath()
   {
+    /*
     if (_bestPath != null)
       return _bestPath;
+      */
 
-    String pathname = _pathname;
-    // XXX:??
-    if (pathname.startsWith("/"))
-      pathname = "." + pathname;
-
-    ArrayList<Path> pathList = ((MergePath) _root)._pathList;
+    ArrayList<Path> pathList = getPathList();
     for (int i = 0; i < pathList.size(); i++) {
       Path path = pathList.get(i);
 
-      Path realPath = path.lookup(pathname);
-
-      realPath.setUserPath(_userPath);
-
-      if (realPath.exists()) {
-        _bestPath = realPath;
-        return realPath;
+      if (path.exists()) {
+        return path;
       }
     }
-
-    /*
-    pathname = _pathname;
-    for (int i = 0; i < pathList.size(); i++) {
-      Path path = pathList.get(i);
-
-      Path realPath = path.lookup(pathname);
-
-      realPath.setUserPath(_userPath);
-
-      if (realPath.exists()) {
-        _bestPath = realPath;
-        return realPath;
-      }
-    }
-    */
 
     if (pathList.size() > 0) {
-      Path path = pathList.get(0);
-
-      if (pathname.startsWith("/"))
-        pathname = "." + pathname;
-
-      Path realPath = path.lookup(pathname);
-
-      realPath.setUserPath(_userPath);
-
-      return realPath;
+      return pathList.get(0);
     }
 
     return new NotFoundPath(getSchemeMap(), _userPath);
+  }
+
+  protected ArrayList<Path> getPathList()
+  {
+    if (_pathList == null) {
+      String pathname = _pathname;
+    //  XXX:??
+      if (pathname.startsWith("/"))
+        pathname = "." + pathname;
+
+      ArrayList<Path> pathList = new ArrayList<Path>();
+
+      ArrayList<Path> rootPathList = ((MergePath) _root)._pathList;
+      for (int i = 0; i < rootPathList.size(); i++) {
+        Path rootPath = rootPathList.get(i);
+
+        Path realPath = rootPath.lookup(pathname);
+        realPath.setUserPath(_userPath);
+
+        pathList.add(realPath);
+      }
+
+      _pathList = pathList;
+    }
+
+    return _pathList;
+  }
+
+  @Override
+  public Path copy()
+  {
+    MergePath root = (MergePath) _root;
+
+    if (root == this) {
+      root = null;
+    }
+    else {
+      root = (MergePath) root.copy();
+    }
+
+    MergePath copy = new MergePath(root, _userPath, null, _pathname);
+
+    ArrayList<Path> pathList = getPathList();
+
+    for (Path path : pathList) {
+      copy.addMergePath(path.copy());
+    }
+
+    return copy;
   }
 
   /**

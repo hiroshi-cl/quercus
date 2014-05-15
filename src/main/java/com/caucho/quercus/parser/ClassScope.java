@@ -35,7 +35,6 @@ import com.caucho.quercus.expr.Expr;
 import com.caucho.quercus.program.Function;
 import com.caucho.quercus.program.InterpretedClassDef;
 import com.caucho.quercus.Location;
-import com.caucho.util.L10N;
 
 import java.util.ArrayList;
 
@@ -44,15 +43,13 @@ import java.util.ArrayList;
  */
 public class ClassScope extends Scope
 {
-  private final static L10N L = new L10N(ClassScope.class);
-  
   private final InterpretedClassDef _cl;
 
   public ClassScope(InterpretedClassDef cl)
   {
     _cl = cl;
   }
-  
+
   /**
    * Returns true if scope is within a class.
    */
@@ -60,59 +57,59 @@ public class ClassScope extends Scope
   {
     return true;
   }
-  
+
   /**
    * Returns true for an abstract scope, e.g. an abstract class or an
    * interface.
    */
   public boolean isAbstract()
   {
-    return _cl.isAbstract() || _cl.isInterface();
+    return _cl.isAbstract() || _cl.isInterface() || _cl.isTrait();
   }
-  
+
   /**
    * Adds a function.
    */
   @Override
-  public void addFunction(String name,
+  public void addFunction(StringValue name,
                           Function function,
                           boolean isTop)
   {
     _cl.addFunction(name, function);
   }
-  
-  /*
-   *  Adds a function defined in a conditional block.
+
+  /**
+   * Adds a function defined in a conditional block.
    */
   @Override
-  public void addConditionalFunction(String name, Function function)
+  public void addConditionalFunction(StringValue name, Function function)
   {
     //addFunction(name, function);
   }
-  
+
   /**
    * Adds a value
    */
-  public void addVar(StringValue name,
-                     Expr value,
-                     FieldVisibility visibility,
-                     String comment)
+  public void addClassField(StringValue name,
+                            Expr value,
+                            FieldVisibility visibility,
+                            String comment)
   {
-    _cl.addValue(name, value, visibility, comment);
+    _cl.addClassField(name, value, visibility, comment);
   }
-  
+
   /**
    * Adds a static value
    */
-  public void addStaticVar(StringValue name, Expr value, String comment)
+  public void addStaticClassField(StringValue name, Expr value, String comment)
   {
     _cl.addStaticValue(name, value, comment);
   }
-  
+
   /**
    * Adds a constant value
    */
-  public void addConstant(String name, Expr value)
+  public void addConstant(StringValue name, Expr value)
   {
     _cl.addConstant(name, value);
   }
@@ -129,7 +126,7 @@ public class ClassScope extends Scope
   {
     throw new UnsupportedOperationException();
   }
-  
+
   /*
    *  Adds a conditional class.
    */

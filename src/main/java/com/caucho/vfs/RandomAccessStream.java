@@ -32,6 +32,7 @@ package com.caucho.vfs;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -46,6 +47,7 @@ abstract public class RandomAccessStream
     = Logger.getLogger(RandomAccessStream.class.getName());
   
   private final AtomicLong _useCount = new AtomicLong(1);
+  private final AtomicBoolean _isClosed = new AtomicBoolean();
   
   /**
    * Returns the length.
@@ -86,6 +88,17 @@ abstract public class RandomAccessStream
     throws IOException;
 
   /**
+   * Writes data to the file.
+   */
+  public boolean writeToStream(SendfileOutputStream os, 
+                               long offset, long length,
+                               long []blockAddresses, long blockLength)
+    throws IOException
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /**
    * Seeks to the given position in the file.
    */
   abstract public boolean seek(long position);
@@ -120,6 +133,20 @@ abstract public class RandomAccessStream
   abstract public long getFilePointer()
     throws IOException;
   
+  public boolean isMmap()
+  {
+    return false;
+  }
+  
+  public long getMmapAddress() throws IOException
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  public void fsync() throws IOException
+  {
+  }
+  
   public final boolean isOpen()
   {
     return _useCount.get() > 0;
@@ -147,9 +174,9 @@ abstract public class RandomAccessStream
   
   public final void free()
   {
-    long value = _useCount.getAndDecrement();
+    long value = _useCount.decrementAndGet();
 
-    if (value == 1) {
+    if (value == 0) {
       try {
         closeImpl();
       } catch (IOException e) {
@@ -163,13 +190,15 @@ abstract public class RandomAccessStream
    */
   public final void close()
   {
-    free();
+    if (! _isClosed.getAndSet(true)) {
+      free();
+    }
   }
   
   /**
    * Closes the stream.
    */
-  public void closeImpl() throws IOException
+  protected void closeImpl() throws IOException
   {
   }
 

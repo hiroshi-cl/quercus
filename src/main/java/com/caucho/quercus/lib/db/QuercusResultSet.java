@@ -29,22 +29,14 @@
 
 package com.caucho.quercus.lib.db;
 
-import com.caucho.util.*;
-import com.caucho.vfs.*;
-
-import com.caucho.quercus.env.StringValue;
-
-import java.io.*;
-import java.net.*;
-import java.sql.*;
-import java.util.*;
-import java.util.logging.*;
-import javax.sql.*;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 
 /**
  * Extra ResultSet metadata for a Quercus Mysql connection.
  */
-public interface QuercusResultSet extends ResultSet {
+public interface QuercusResultSet extends ResultSet
+{
   public int getStringLength(int column)
     throws SQLException;
 

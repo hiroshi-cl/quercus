@@ -148,13 +148,14 @@ abstract public class JarListLoader extends Loader implements Dependency {
                   + " path=" + jar.getNativePath() + ")");
       return;
     }
-    
+
     JarPath jarPath = JarPath.create(jar);
     JarEntry jarEntry = new JarEntry(jarPath);
 
     if (getClassLoader() != null) {
-      if (! getClassLoader().addURL(jarPath))
+      if (! getClassLoader().addURL(jarPath)) {
         return;
+      }
     }
 
     // skip duplicates
@@ -163,7 +164,8 @@ abstract public class JarListLoader extends Loader implements Dependency {
     
     _jarList.add(jarEntry);
 
-    _dependencyList.add(new Depend(jarPath));
+    // _dependencyList.add(new Depend(jarPath));
+    _dependencyList.add(new Depend(jar));
 
     if (_pathMap == null && isJarCacheEnabled())
       _pathMap = new JarMap();

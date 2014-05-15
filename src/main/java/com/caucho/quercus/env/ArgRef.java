@@ -62,9 +62,9 @@ public class ArgRef extends Value
    * Returns true for an implementation of a class
    */
   @Override
-  public boolean isA(String name)
+  public boolean isA(Env env, String name)
   {
-    return _var.isA(name);
+    return _var.isA(env, name);
   }
 
   /**
@@ -111,12 +111,12 @@ public class ArgRef extends Value
   }
 
   @Override
-  public ArrayValue toArrayValue(Env env) 
+  public ArrayValue toArrayValue(Env env)
   {
     // php/3co1
     return _var.toArrayValue(env);
   }
-  
+
   /**
    * Converts to a boolean.
    */
@@ -370,7 +370,7 @@ public class ArgRef extends Value
   }
 
   @Override
-  public Value toArray()
+  public ArrayValue toArray()
   {
     return _var.toArray();
   }

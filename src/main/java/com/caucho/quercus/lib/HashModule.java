@@ -29,7 +29,6 @@
 
 package com.caucho.quercus.lib;
 
-import com.caucho.config.ConfigException;
 import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.module.*;
@@ -41,6 +40,7 @@ import java.security.*;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.zip.Adler32;
 
 import javax.crypto.*;
 import javax.crypto.spec.*;
@@ -62,6 +62,9 @@ public class HashModule extends AbstractQuercusModule {
   private static HashMap<String,String> _algorithmMap
     = new HashMap<String,String>();
 
+  private static HashMap<String,String> _hmacAlgorithmMap
+    = new HashMap<String,String>();
+
   public HashModule()
   {
   }
@@ -81,9 +84,16 @@ public class HashModule extends AbstractQuercusModule {
   {
     try {
       algorithm = getAlgorithm(algorithm);
-      
-      MessageDigest digest = MessageDigest.getInstance(algorithm);
-      
+
+      MessageDigest digest;
+
+      if ("ADLER32".equals(algorithm)) {
+        digest = new Adler32MessageDigest();
+      }
+      else {
+        digest = MessageDigest.getInstance(algorithm);
+      }
+
       int len = string.length();
 
       for (int i = 0; i < len; i++) {
@@ -117,7 +127,7 @@ public class HashModule extends AbstractQuercusModule {
       if (! values.contains(name))
         array.put(env.createString(name));
     }
-    
+
     return array;
   }
 
@@ -142,13 +152,13 @@ public class HashModule extends AbstractQuercusModule {
   {
     try {
       algorithm = getAlgorithm(algorithm);
-      
+
       MessageDigest digest = MessageDigest.getInstance(algorithm);
 
       TempBuffer tempBuffer = TempBuffer.allocate();
       byte []buffer = tempBuffer.getBuffer();
       ReadStream is = path.openRead();
-      
+
       try {
         int len;
 
@@ -161,7 +171,7 @@ public class HashModule extends AbstractQuercusModule {
         return hashToValue(env, bytes, isBinary);
       } finally {
         TempBuffer.free(tempBuffer);
-        
+
         is.close();
       }
     } catch (NoSuchAlgorithmException e) {
@@ -197,10 +207,8 @@ public class HashModule extends AbstractQuercusModule {
                          StringValue key,
                          @Optional boolean isBinary)
   {
-    algorithm = getAlgorithm(algorithm);
-    
     HashContext context = hash_init(env, algorithm, HASH_HMAC, key);
-    
+
     hash_update(env, context, data);
 
     return hash_final(env, context, isBinary);
@@ -215,10 +223,8 @@ public class HashModule extends AbstractQuercusModule {
                               StringValue key,
                               @Optional boolean isBinary)
   {
-    algorithm = getAlgorithm(algorithm);
-    
     HashContext context = hash_init(env, algorithm, HASH_HMAC, key);
-    
+
     hash_update_file(env, context, path);
 
     return hash_final(env, context, isBinary);
@@ -233,10 +239,8 @@ public class HashModule extends AbstractQuercusModule {
                                @Optional StringValue keyString)
   {
     try {
-      algorithm = getAlgorithm(algorithm);
-      
       if (options == HASH_HMAC) {
-        algorithm = "Hmac" + algorithm;
+        algorithm = getHmacAlgorithm(algorithm);
 
         Mac mac = Mac.getInstance(algorithm);
 
@@ -258,6 +262,8 @@ public class HashModule extends AbstractQuercusModule {
         return new HashMacContext(mac);
       }
       else {
+        algorithm = getAlgorithm(algorithm);
+
         MessageDigest md = MessageDigest.getInstance(algorithm);
 
         return new HashDigestContext(md);
@@ -301,7 +307,7 @@ public class HashModule extends AbstractQuercusModule {
 
     try {
       is = path.openRead();
-      
+
       int len;
 
       while ((len = is.read(buffer, 0, buffer.length)) > 0) {
@@ -335,7 +341,7 @@ public class HashModule extends AbstractQuercusModule {
 
     TempBuffer tempBuffer = TempBuffer.allocate();
     byte []buffer = tempBuffer.getBuffer();
-    
+
     int readLength = 0;
 
     try {
@@ -363,7 +369,7 @@ public class HashModule extends AbstractQuercusModule {
 
     return readLength;
   }
-  
+
   // XXX: hash_update_file
   // XXX: hash_update_stream
   // XXX: hash_update
@@ -398,11 +404,21 @@ public class HashModule extends AbstractQuercusModule {
       return v;
     }
   }
-  
+
   private static String getAlgorithm(String algorithm)
   {
     String name = _algorithmMap.get(algorithm);
-    
+
+    if (name != null)
+      return name;
+    else
+      return algorithm;
+  }
+
+  private static String getHmacAlgorithm(String algorithm)
+  {
+    String name = _hmacAlgorithmMap.get(algorithm);
+
     if (name != null)
       return name;
     else
@@ -412,9 +428,9 @@ public class HashModule extends AbstractQuercusModule {
   public abstract static class HashContext
   {
     abstract void update(StringValue value);
-    
+
     abstract void update(byte []buffer, int offset, int length);
-    
+
     abstract byte []digest();
 
     abstract HashContext copy();
@@ -433,23 +449,23 @@ public class HashModule extends AbstractQuercusModule {
     {
       return _digest;
     }
-    
+
     void update(byte value)
     {
       _digest.update(value);
     }
-    
+
     void update(StringValue value)
     {
       int len = value.length();
 
       MessageDigest digest = _digest;
-    
+
       for (int i = 0; i < len; i++) {
         digest.update((byte) value.charAt(i));
       }
     }
-    
+
     void update(byte []buffer, int offset, int length)
     {
       _digest.update(buffer, offset, length);
@@ -485,12 +501,12 @@ public class HashModule extends AbstractQuercusModule {
     {
       _digest = digest;
     }
-    
+
     void update(byte value)
     {
       _digest.update(value);
     }
-    
+
     void update(StringValue value)
     {
       int len = value.length();
@@ -499,14 +515,14 @@ public class HashModule extends AbstractQuercusModule {
 
       TempBuffer tBuf = TempBuffer.allocate();
       byte []buffer = tBuf.getBuffer();
-      
+
       int offset = 0;
-      
+
       while (offset < len) {
         int sublen = len - offset;
         if (buffer.length < sublen)
           sublen = buffer.length;
-        
+
         for (int i = 0; i < sublen; i++) {
           buffer[i] = (byte) value.charAt(offset + i);
         }
@@ -518,7 +534,7 @@ public class HashModule extends AbstractQuercusModule {
 
       TempBuffer.free(tBuf);
     }
-    
+
     void update(byte []buffer, int offset, int length)
     {
       _digest.update(buffer, offset, length);
@@ -553,6 +569,61 @@ public class HashModule extends AbstractQuercusModule {
     _algorithmMap.put("sha256", "SHA-256");
     _algorithmMap.put("sha384", "SHA-384");
     _algorithmMap.put("sha512", "SHA-512");
+
+    _algorithmMap.put("adler32", "ADLER32");
+
+    _hmacAlgorithmMap.put("md5", "HmacMD5");
+    _hmacAlgorithmMap.put("sha1", "HmacSHA1");
+    _hmacAlgorithmMap.put("sha256", "HmacSHA256");
+    _hmacAlgorithmMap.put("sha384", "HmacSHA384");
+    _hmacAlgorithmMap.put("sha512", "HmacSHA512");
+
+
+  }
+
+  static class Adler32MessageDigest extends MessageDigest
+  {
+    private Adler32 _adler;
+
+    public Adler32MessageDigest()
+    {
+      super("ADLER32");
+
+      _adler = new Adler32();
+    }
+
+    @Override
+    public void engineUpdate(byte b)
+    {
+      _adler.update(b);
+    }
+
+    @Override
+    public void engineUpdate(byte[] bytes, int offset, int length)
+    {
+      _adler.update(bytes, offset, length);
+    }
+
+    @Override
+    protected byte[] engineDigest()
+    {
+      long value = _adler.getValue();
+
+      byte[] bytes = new byte[4];
+
+      bytes[0] = (byte) (value >>> 24);
+      bytes[1] = (byte) (value >>> 16);
+      bytes[2] = (byte) (value >>> 8);
+      bytes[3] = (byte) (value);
+
+      return bytes;
+    }
+
+    @Override
+    protected void engineReset()
+    {
+      _adler.reset();
+    }
   }
 }
 

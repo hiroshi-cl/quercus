@@ -76,7 +76,7 @@ public class CurlResource extends ResourceValue
   private boolean _isVerifySSLPeer = true;
   private boolean _isVerifySSLCommonName = true;
   private boolean _isVerifySSLHostname = true;
-  
+
   private boolean _ifModifiedSince = true;
   private String _modifiedTime;
 
@@ -85,8 +85,8 @@ public class CurlResource extends ResourceValue
   private boolean _failOnError = false;
   private boolean _isVerbose = false;
 
-  private int _readTimeout = -1;
-  private int _connectTimeout = -1;
+  private int _readTimeoutMs = -1;
+  private int _connectTimeoutMs = -1;
 
   private HashMap<String,String> _requestProperties
     = new HashMap<String, String>();
@@ -94,6 +94,8 @@ public class CurlResource extends ResourceValue
   private StringValue _header;
   private StringValue _body;
   private Value _postBody;
+
+  private StringValue _returnTransfer;
 
   private String _contentType;
   private int _contentLength;
@@ -104,7 +106,7 @@ public class CurlResource extends ResourceValue
   private BinaryOutput _outputFile;
   private BinaryOutput _outputHeaderFile;
   private BinaryInput _uploadFile;
-  private int _uploadFileSize;
+  private long _uploadFileSize = -1;
 
   private Callable _headerCallback;
   private Callable _passwordCallback;
@@ -136,15 +138,15 @@ public class CurlResource extends ResourceValue
    */
   public int getConnectTimeout()
   {
-    return _connectTimeout;
+    return _connectTimeoutMs;
   }
 
   /**
    * Sets the max time until timeout while establishing a connection.
    */
-  public void setConnectTimeout(int timeout)
+  public void setConnectTimeout(int timeoutMs)
   {
-    _connectTimeout = timeout;
+    _connectTimeoutMs = timeoutMs;
   }
 
   /**
@@ -250,8 +252,8 @@ public class CurlResource extends ResourceValue
   {
     _header = header;
   }
-  
-  /*
+
+  /**
    * Returns the header callback.
    */
   public Callable getHeaderCallback()
@@ -347,12 +349,12 @@ public class CurlResource extends ResourceValue
   {
     _isVerbose = verbose;
   }
-  
+
   public boolean getIsVerifySSLPeer()
   {
     return _isVerifySSLPeer;
   }
-  
+
   public void setIsVerifySSLPeer(boolean isVerify)
   {
     _isVerifySSLPeer = isVerify;
@@ -362,22 +364,22 @@ public class CurlResource extends ResourceValue
   {
     return _isVerifySSLCommonName;
   }
-  
+
   public void setIsVerifySSLCommonName(boolean isVerify)
   {
     _isVerifySSLCommonName = isVerify;
   }
-  
+
   public boolean getIsVerifySSLHostname()
   {
     return _isVerifySSLHostname;
   }
-  
+
   public void setIsVerifySSLHostname(boolean isVerify)
   {
     _isVerifySSLHostname = isVerify;
   }
-  
+
   /**
    * Sets the modified time request property.
    */
@@ -457,7 +459,7 @@ public class CurlResource extends ResourceValue
   {
     _postBody = body;
   }
-  
+
   /**
    * Returns the password to use for proxy authentication.
    */
@@ -538,14 +540,14 @@ public class CurlResource extends ResourceValue
     _proxyUsername = user;
   }
 
-  /*
+  /**
    * Returns the callback to read the body.
    */
   public Callable getReadCallback()
   {
     return _readCallback;
   }
-  
+
   /**
    * Sets the callback to read the body.
    */
@@ -559,15 +561,15 @@ public class CurlResource extends ResourceValue
    */
   public int getReadTimeout()
   {
-    return _readTimeout;
+    return _readTimeoutMs;
   }
 
   /**
    * Sets the max time until timeout while reading body.
    */
-  public void setReadTimeout(int timeout)
+  public void setReadTimeout(int timeoutMs)
   {
-    _readTimeout = timeout;
+    _readTimeoutMs = timeoutMs;
   }
 
   /**
@@ -618,7 +620,12 @@ public class CurlResource extends ResourceValue
    */
   public void setRequestProperty(String key, String value)
   {
-    _requestProperties.put(key, value);
+    // php/5034
+    // php/5035
+
+    if (value.length() > 0) {
+      _requestProperties.put(key, value);
+    }
   }
 
   /**
@@ -656,7 +663,7 @@ public class CurlResource extends ResourceValue
   /**
    * Returns size of file to upload.
    */
-  public int getUploadFileSize()
+  public long getUploadFileSize()
   {
     return _uploadFileSize;
   }
@@ -664,7 +671,7 @@ public class CurlResource extends ResourceValue
   /**
    * Sets size of file to upload.
    */
-  public void setUploadFileSize(int size)
+  public void setUploadFileSize(long size)
   {
     _uploadFileSize = size;
   }
@@ -699,6 +706,11 @@ public class CurlResource extends ResourceValue
   public void setUsername(String user)
   {
     _username = user;
+  }
+
+  public Callable getWriteCallback()
+  {
+    return _writeCallback;
   }
 
   /**
@@ -754,14 +766,16 @@ public class CurlResource extends ResourceValue
 
     env.addCleanup(httpRequest);
 
-    if (! httpRequest.execute(env))
+    if (! httpRequest.execute(env)) {
       return BooleanValue.FALSE;
+    }
 
     //if (hasError())
       //return BooleanValue.FALSE;
 
-    if (_cookie != null && _cookieFilename != null)
+    if (_cookie != null && _cookieFilename != null) {
       saveCookie(env);
+    }
 
     return getReturnValue(env);
   }
@@ -793,9 +807,6 @@ public class CurlResource extends ResourceValue
       data = bb;
     }
 
-    if (_isReturningData)
-      return data;
-
     if (_outputHeaderFile != null) {
       FileModule.fwrite(env,
                         _outputHeaderFile,
@@ -810,11 +821,25 @@ public class CurlResource extends ResourceValue
                         Integer.MAX_VALUE);
 
     }
+
+    if (_isReturningData) {
+      _returnTransfer = data;
+
+      return data;
+    }
     else {
       env.print(data);
-    }
 
-    return BooleanValue.TRUE;
+      return BooleanValue.TRUE;
+    }
+  }
+
+  /**
+   * Returns the value for the CURLOPT_RETURNTRANSFER option.
+   */
+  public StringValue getReturnTransfer()
+  {
+    return _returnTransfer;
   }
 
   /**
@@ -872,7 +897,7 @@ public class CurlResource extends ResourceValue
     CurlResource curl = new CurlResource();
 
     curl.setBody(_body);
-    curl.setConnectTimeout(_connectTimeout);
+    curl.setConnectTimeout(_connectTimeoutMs);
     curl.setContentLength(_contentLength);
     curl.setContentType(_contentType);
     curl.setCookie(_cookie);
@@ -902,7 +927,7 @@ public class CurlResource extends ResourceValue
     curl.setProxyURL(_proxyURL);
     curl.setProxyUsername(_proxyUsername);
     curl.setReadCallback(_readCallback);
-    curl.setReadTimeout(_readTimeout);
+    curl.setReadTimeout(_readTimeoutMs);
     curl.setRequestMethod(_requestMethod);
 
     for (Map.Entry<String,String> entry : _requestProperties.entrySet()) {
@@ -921,12 +946,13 @@ public class CurlResource extends ResourceValue
 
   public String toString()
   {
-    return "CurlResource[" + _requestMethod + "]";
+    return "CurlResource[" + _requestMethod + " " + _URL + "]";
   }
 
 
   @Override
-  public boolean isResource() {
-      return true;
+  public boolean isResource()
+  {
+    return true;
   }
 }

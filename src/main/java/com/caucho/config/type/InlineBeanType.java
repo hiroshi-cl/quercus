@@ -42,6 +42,7 @@ import java.util.logging.Logger;
 
 import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.AnnotatedType;
+import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionTarget;
 
 import org.w3c.dom.Node;
@@ -126,7 +127,7 @@ public class InlineBeanType<T> extends ConfigType<T>
 
   //private ArrayList<ConfigProgram> _injectList;
   private ArrayList<ConfigProgram> _initList;
-
+  
   private boolean _isIntrospecting;
   private boolean _isIntrospected;
   private ArrayList<InlineBeanType<?>> _pendingChildList
@@ -171,9 +172,6 @@ public class InlineBeanType<T> extends ConfigType<T>
   public Object create(Object parent, QName name)
   {
     try {
-      InjectManager cdiManager
-        = InjectManager.create(_beanClass.getClassLoader());
-
       if (_injectionTarget == null) {
         if (_beanClass.isInterface())
           throw new ConfigException(L.l("{0} cannot be instantiated because it is an interface",
@@ -181,6 +179,9 @@ public class InlineBeanType<T> extends ConfigType<T>
 
         AnnotatedType<T> type = getAnnotatedType();
 
+        InjectManager cdiManager
+          = InjectManager.create(_beanClass.getClassLoader());
+        
         InjectionTargetBuilder<T> builder
           = new InjectionTargetBuilder<T>(cdiManager, type);
 
@@ -599,6 +600,7 @@ public class InlineBeanType<T> extends ConfigType<T>
           _isEL = ! _beanClass.isAnnotationPresent(NonEL.class);
           
           try {
+            // System.out.println("INTROSPECT: " + _beanClass);
             Method []methods = _beanClass.getDeclaredMethods();
 
             introspectMethods(methods);
@@ -825,7 +827,9 @@ public class InlineBeanType<T> extends ConfigType<T>
 
         _addMethodMap.put(paramTypes[0], addAttr);
 
-        // _addBean = addAttr;
+        if (paramTypes[0].equals(Bean.class)) { 
+          _addBean = addAttr;
+        }
       }
       else if ((name.startsWith("set") || name.startsWith("add"))
           && paramTypes.length == 1

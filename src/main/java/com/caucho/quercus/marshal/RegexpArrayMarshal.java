@@ -30,7 +30,6 @@
 package com.caucho.quercus.marshal;
 
 import com.caucho.quercus.env.Env;
-import com.caucho.quercus.env.NullValue;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.lib.regexp.RegexpModule;
 import com.caucho.quercus.lib.regexp.Regexp;
@@ -40,23 +39,29 @@ import com.caucho.quercus.expr.Expr;
  * Code for marshaling (PHP to Java) and unmarshaling (Java to PHP) arguments.
  */
 public class RegexpArrayMarshal extends StringMarshal {
-  public static final RegexpMarshal MARSHAL = new RegexpMarshal();
+  public static final RegexpArrayMarshal MARSHAL = new RegexpArrayMarshal();
 
+  @Override
   public Object marshal(Env env, Expr expr, Class expectedClass)
   {
-    return RegexpModule.createRegexpArray(env, expr.eval(env));
+    return marshal(env, expr.eval(env), expectedClass);
   }
 
+  @Override
   public Object marshal(Env env, Value value, Class expectedClass)
   {
-    return RegexpModule.createRegexpArray(env, value);
+    // php/154g
+    value = value.toValue();
+
+    return RegexpModule.createRegexpArray(value);
   }
 
+  @Override
   public Value unmarshal(Env env, Object value)
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
-  
+
   @Override
   protected int getMarshalingCostImpl(Value argValue)
   {
@@ -67,7 +72,7 @@ public class RegexpArrayMarshal extends StringMarshal {
     else
       return Marshal.MAX;
   }
-  
+
   @Override
   public int getMarshalingCost(Expr expr)
   {
@@ -76,7 +81,7 @@ public class RegexpArrayMarshal extends StringMarshal {
     else
       return Marshal.ONE;
   }
-  
+
   @Override
   public Class getExpectedClass()
   {

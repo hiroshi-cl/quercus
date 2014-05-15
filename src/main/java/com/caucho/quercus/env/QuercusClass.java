@@ -31,15 +31,15 @@ package com.caucho.quercus.env;
 
 import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.QuercusRuntimeException;
-import com.caucho.quercus.expr.ClassConstExpr;
 import com.caucho.quercus.expr.Expr;
-import com.caucho.quercus.expr.LiteralStringExpr;
 import com.caucho.quercus.module.ModuleContext;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.quercus.program.ClassDef;
+import com.caucho.quercus.program.ClassField;
 import com.caucho.quercus.program.InstanceInitializer;
 import com.caucho.quercus.program.JavaClassDef;
-import com.caucho.util.IntMap;
+import com.caucho.quercus.program.TraitAliasMap;
+import com.caucho.quercus.program.TraitInsteadofMap;
 import com.caucho.util.L10N;
 
 import java.lang.ref.WeakReference;
@@ -55,6 +55,7 @@ import java.util.logging.Logger;
 /**
  * Represents a Quercus runtime class.
  */
+@SuppressWarnings("serial")
 public class QuercusClass extends NullValue {
   private static final L10N L = new L10N(QuercusClass.class);
   private static final Logger log
@@ -65,13 +66,11 @@ public class QuercusClass extends NullValue {
   private final String _className;
 
   private QuercusClass _parent;
-  
+
   private WeakReference<QuercusClass> _cacheRef;
 
-  private boolean _isAbstract;
-  private boolean _isInterface;
   private boolean _isJavaWrapper;
-  
+
   private ClassDef []_classDefList;
 
   private AbstractFunction _constructor;
@@ -79,8 +78,10 @@ public class QuercusClass extends NullValue {
 
   private AbstractFunction _fieldGet;
   private AbstractFunction _fieldSet;
-  
+
   private AbstractFunction _call;
+  private AbstractFunction _callStatic;
+
   private AbstractFunction _invoke;
   private AbstractFunction _toString;
   private AbstractFunction _isset;
@@ -91,48 +92,42 @@ public class QuercusClass extends NullValue {
   private CountDelegate _countDelegate;
 
   private final ArrayList<InstanceInitializer> _initializers;
-  
+
   private final MethodMap<AbstractFunction> _methodMap;
-  private final HashMap<String,Expr> _constMap;
-  private final HashMap<String,Object> _constJavaMap;
+  private final HashMap<StringValue,Expr> _constMap;
+  private final HashMap<StringValue,Object> _constJavaMap;
   private final LinkedHashMap<StringValue,ClassField> _fieldMap;
   private final HashMap<String,ArrayList<StaticField>> _staticFieldExprMap;
   private final HashMap<StringValue,StringValue> _staticFieldNameMap;
 
   private final HashSet<String> _instanceofSet;
+  private final HashMap<StringValue,String> _traitMethodBindingClassMap;
 
   private boolean _isModified;
 
-  public QuercusClass(ClassDef classDef, QuercusClass parent)
-  {
-    this(ModuleContext
-      .getLocalContext(Thread.currentThread().getContextClassLoader()),
-         classDef,
-         parent);
-  }
+  private final ModuleContext _moduleContext;
 
   public QuercusClass(ModuleContext moduleContext,
                       ClassDef classDef,
                       QuercusClass parent)
   {
+    _moduleContext = moduleContext;
+
     _classDef = classDef.loadClassDef(); // force load of any lazy classes
     _className = classDef.getName();
     _parent = parent;
 
-    _isAbstract = _classDef.isAbstract();
-    _isInterface = _classDef.isInterface();
-    
     _initializers = new ArrayList<InstanceInitializer>();
-  
+
     _fieldMap = new LinkedHashMap<StringValue,ClassField>();
     _methodMap = new MethodMap<AbstractFunction>(this, null);
-    _constMap = new HashMap<String,Expr>();
-    _constJavaMap = new HashMap<String,Object>();
-    
+    _constMap = new HashMap<StringValue,Expr>();
+    _constJavaMap = new HashMap<StringValue,Object>();
+
     _staticFieldExprMap = new LinkedHashMap<String,ArrayList<StaticField>>();
-    
+
     _staticFieldNameMap = new LinkedHashMap<StringValue,StringValue>();
-    
+
     if (parent != null) {
       _staticFieldNameMap.putAll(parent._staticFieldNameMap);
     }
@@ -143,17 +138,9 @@ public class QuercusClass extends NullValue {
       javaClassDef = (JavaClassDef) classDef;
       _isJavaWrapper = ! javaClassDef.isDelegate();
     }
-    
-    for (QuercusClass cls = parent; cls != null; cls = cls.getParent()) {
-      AbstractFunction cons = cls.getConstructor();
-      
-      if (cons != null) {
-        addMethod(new StringBuilderValue(cls.getName()), cons);
-      }
-    }
 
     ClassDef []classDefList;
-    
+
     if (_parent != null) {
       classDefList = new ClassDef[parent._classDefList.length + 1];
 
@@ -172,42 +159,59 @@ public class QuercusClass extends NullValue {
       if (classDefList[i] instanceof JavaClassDef)
         javaClassDef = (JavaClassDef) classDefList[i];
     }
-    
+
     _javaClassDef = javaClassDef;
 
     _instanceofSet = new HashSet<String>();
 
-    HashSet<String> ifaces = new HashSet<String>();
-    
+    HashSet<String> classSet = new HashSet<String>();
+
     // add interfaces
     for (int i = classDefList.length - 1; i >= 0; i--) {
       classDef = classDefList[i];
-      
+
       if (classDef == null) {
         throw new NullPointerException("classDef:" + _classDef
                                        + " i:" + i + " parent:" + parent);
       }
-      
+
       classDef.init();
-      
-      addInstances(_instanceofSet, ifaces, classDef);
+
+      addInstances(_instanceofSet, classSet, classDef);
     }
 
-    // then add concrete ancestors
-    for (int i = classDefList.length - 1; i >= 0; i--) {
+    _traitMethodBindingClassMap = new HashMap<StringValue,String>();
+
+    // then add traits and concrete ancestors
+    for (int i = classDefList.length - 1; i >= 1; i--) {
       classDef = classDefList[i];
-      
-      classDef.initClass(this);
+
+      classSet.clear();
+      addTraitMethods(classSet, classDef);
+
+      classDef.initClassMethods(this, classDef.getName());
+      classDef.initClassFields(this, classDef.getName());
+
+      classSet.clear();
+      addTraitFields(classSet, classDef);
     }
-    
-    if (_constructor == null && parent != null)
-      _constructor = parent.getConstructor();
-    
-    // php/093n
-    if (_constructor != null
-        && ! _constructor.getName().equals("__construct")) {
-      addMethodIfNotExist(new StringBuilderValue("__construct"), _constructor);
-      addMethodIfNotExist(new StringBuilderValue(_className), _constructor);
+
+    // finally add this class
+    classSet.clear();
+    addTraitMethods(classSet, classDefList[0]);
+
+    classDefList[0].initClassMethods(this, classDefList[0].getName());
+    classDefList[0].initClassFields(this, classDefList[0].getName());
+
+    classSet.clear();
+    addTraitFields(classSet, classDefList[0]);
+
+    if (_constructor != null && parent != null) {
+      if (! _constructor.getName().equals("__construct")
+          && ! _className.equals(_constructor.getDeclaringClassName())) {
+        // php/093j, php/093n
+        addMethodIfNotExist(_moduleContext.createString(_className), _constructor);
+      }
     }
 
     if (_destructor == null && parent != null)
@@ -215,37 +219,82 @@ public class QuercusClass extends NullValue {
   }
 
   private void addInstances(HashSet<String> instanceofSet,
-                            HashSet<String> ifaces,
+                            HashSet<String> ifaceSet,
                             ClassDef classDef)
   {
-    // _instanceofSet.add(classDef.getName());
     classDef.addInterfaces(instanceofSet);
+
+    // XXX: 2012-12-28 nam: possibly rework this to be more like how it's done
+    // for parent classes (e.g. env.addClass(def, classId, parentId, ifaces, traits))
+
+    // _instanceofSet.add(classDef.getName());
 
     for (String iface : classDef.getInterfaces()) {
       boolean isJavaClassDef = classDef instanceof JavaClassDef;
-      
-      QuercusClass cl;
+
+      QuercusClass cls;
 
       // XXX: php/0cn2, but this is wrong:
-      cl = Env.getInstance().findClass(iface, 
-                                       ! isJavaClassDef,
-                                       true);
+      cls = Env.getInstance().findClass(iface, -1,
+                                        ! isJavaClassDef, true, true);
 
-      if (cl == null)
+      if (cls == null) {
         throw new QuercusRuntimeException(L.l("cannot find interface {0}",
                                               iface));
+      }
 
       // _instanceofSet.addAll(cl.getInstanceofSet());
-        
-      ClassDef ifaceDef = cl.getClassDef();
+
+      ClassDef ifaceDef = cls.getClassDef();
       // ClassDef ifaceDef = moduleContext.findClass(iface);
 
       if (ifaceDef != null) {
-        if (ifaces.add(iface)) {
-          addInstances(instanceofSet, ifaces, ifaceDef);
+        if (ifaceSet.add(iface)) {
+          addInstances(instanceofSet, ifaceSet, ifaceDef);
 
-          ifaceDef.initClass(this);
+          ifaceDef.initClassMethods(this, ifaceDef.getName());
+          ifaceDef.initClassFields(this, ifaceDef.getName());
         }
+      }
+    }
+  }
+
+  private void addTraitMethods(HashSet<String> traitSet, ClassDef classDef)
+  {
+    for (String trait : classDef.getTraits()) {
+      QuercusClass cls = Env.getInstance().findClass(trait);
+
+      if (cls == null) {
+        Env.getInstance().createErrorException(L.l("cannot find trait {0}",
+                                                   trait));
+      }
+
+      ClassDef traitDef = cls.getClassDef();
+
+      if (traitSet.add(trait)) {
+        addTraitMethods(traitSet, traitDef);
+
+        traitDef.initClassMethods(this, classDef.getName());
+      }
+    }
+  }
+
+  private void addTraitFields(HashSet<String> traitSet, ClassDef classDef)
+  {
+    for (String trait : classDef.getTraits()) {
+      QuercusClass cls = Env.getInstance().findClass(trait);
+
+      if (cls == null) {
+        Env.getInstance().createErrorException(L.l("cannot find trait {0}",
+                                                   trait));
+      }
+
+      ClassDef traitDef = cls.getClassDef();
+
+      if (traitSet.add(trait)) {
+        addTraitFields(traitSet, traitDef);
+
+        traitDef.initClassFields(this, classDef.getName());
       }
     }
   }
@@ -256,7 +305,7 @@ public class QuercusClass extends NullValue {
   public QuercusClass(QuercusClass cacheClass, QuercusClass parent)
   {
     _cacheRef = new WeakReference<QuercusClass>(cacheClass);
-    
+
     _javaClassDef = cacheClass._javaClassDef;
     _classDef = cacheClass._classDef;
     _className = cacheClass._className;
@@ -268,11 +317,12 @@ public class QuercusClass extends NullValue {
 
     _constructor = cacheClass._constructor;
     _destructor = cacheClass._destructor;
-    
+
     _fieldGet = cacheClass._fieldGet;
     _fieldSet = cacheClass._fieldSet;
-  
+
     _call = cacheClass._call;
+    _callStatic = cacheClass._callStatic;
     _invoke = cacheClass._invoke;
     _toString = cacheClass._toString;
 
@@ -281,22 +331,25 @@ public class QuercusClass extends NullValue {
     _countDelegate = cacheClass._countDelegate;
 
     _initializers = cacheClass._initializers;
-  
+
     _fieldMap = cacheClass._fieldMap;
     _methodMap = cacheClass._methodMap;
     _constMap = cacheClass._constMap;
     _constJavaMap = cacheClass._constJavaMap;
-    
+
     _staticFieldExprMap = cacheClass._staticFieldExprMap;
     _staticFieldNameMap = cacheClass._staticFieldNameMap;
     _instanceofSet = cacheClass._instanceofSet;
+    _traitMethodBindingClassMap = cacheClass._traitMethodBindingClassMap;
+
+    _moduleContext = cacheClass._moduleContext;
   }
 
   public ClassDef getClassDef()
   {
     return _classDef;
   }
-  
+
   public JavaClassDef getJavaClassDef()
   {
     return _javaClassDef;
@@ -305,6 +358,11 @@ public class QuercusClass extends NullValue {
   public MethodMap<AbstractFunction> getMethodMap()
   {
     return _methodMap;
+  }
+
+  public AbstractFunction getMethod(StringValue name)
+  {
+    return _methodMap.get(name);
   }
 
   public HashSet<String> getInstanceofSet()
@@ -328,14 +386,38 @@ public class QuercusClass extends NullValue {
     return _parent;
   }
 
-  /*
+  /**
+   * Returns the parent context for the trait.
+   */
+  public QuercusClass getTraitParent(Env env, String traitName)
+  {
+    if (_classDef.hasTrait(traitName)) {
+      return _parent;
+    }
+    else if (_parent != null) {
+      return _parent.getTraitParent(env, traitName);
+    }
+    else {
+      throw new QuercusException("this scope does not have a parent");
+    }
+  }
+
+  /**
+   * Returns the module context.
+   */
+  public ModuleContext getModuleContext()
+  {
+    return _moduleContext;
+  }
+
+  /**
    * Returns the class definitions for this class.
    */
   public ClassDef []getClassDefList()
   {
     return _classDefList;
   }
-  
+
   /*
    * Returns the name of the extension that this class is part of.
    */
@@ -346,14 +428,19 @@ public class QuercusClass extends NullValue {
 
   public boolean isInterface()
   {
-    return _isInterface;
+    return _classDef.isInterface();
   }
-  
+
   public boolean isAbstract()
   {
-    return _isAbstract;
+    return _classDef.isAbstract();
   }
-  
+
+  public boolean isTrait()
+  {
+    return _classDef.isTrait();
+  }
+
   public boolean isFinal()
   {
     return _classDef.isFinal();
@@ -411,7 +498,7 @@ public class QuercusClass extends NullValue {
   {
     if (! _isModified) {
       _isModified = true;
-      
+
       if (_cacheRef != null) {
         QuercusClass cacheClass = _cacheRef.get();
 
@@ -420,7 +507,7 @@ public class QuercusClass extends NullValue {
       }
     }
   }
-  
+
   /**
    * Sets the array delegate (see ArrayAccess)
    */
@@ -432,7 +519,7 @@ public class QuercusClass extends NullValue {
 
     _arrayDelegate = delegate;
   }
-  
+
   /**
    * Gets the array delegate (see ArrayAccess)
    */
@@ -440,7 +527,7 @@ public class QuercusClass extends NullValue {
   {
     return _arrayDelegate;
   }
-  
+
   /**
    * Sets the traversable delegate
    */
@@ -452,7 +539,7 @@ public class QuercusClass extends NullValue {
 
     _traversableDelegate = delegate;
   }
-  
+
   /**
    * Gets the traversable delegate
    */
@@ -460,7 +547,7 @@ public class QuercusClass extends NullValue {
   {
     return _traversableDelegate;
   }
-  
+
   /**
    * Sets the count delegate
    */
@@ -472,7 +559,7 @@ public class QuercusClass extends NullValue {
 
     _countDelegate = delegate;
   }
-  
+
   /**
    * Gets the count delegate
    */
@@ -530,6 +617,22 @@ public class QuercusClass extends NullValue {
   }
 
   /**
+   * Sets the _callStatic
+   */
+  public void setCallStatic(AbstractFunction fun)
+  {
+    _callStatic = fun;
+  }
+
+  /**
+   * Gets the _callStatic
+   */
+  public AbstractFunction getCallStatic()
+  {
+    return _callStatic;
+  }
+
+  /**
    * Sets the __invoke
    */
   public void setInvoke(AbstractFunction fun)
@@ -572,15 +675,36 @@ public class QuercusClass extends NullValue {
   /**
    * Adds a field.
    */
-  public void addField(StringValue name,
-                       Expr initExpr,
-                       FieldVisibility visibility)
+  public void addField(ClassField field)
   {
-    ClassField field = new ClassField(name, initExpr, visibility);
-    
+    StringValue name = field.getName();
+
+    //ClassField existingField = _fieldMap.get(name);
+
     _fieldMap.put(name, field);
   }
-  
+
+  /**
+   * Adds a trait field.
+   */
+  public void addTraitField(ClassField field)
+  {
+    StringValue name = field.getName();
+
+    ClassField existingField = _fieldMap.get(name);
+
+    if (existingField != null
+        && ! existingField.getInitExpr().equals(field.getInitExpr())) {
+      Env env = Env.getInstance();
+      throw env.createErrorException(L.l("trait field {0}->{1} conflicts with class field {2}->{1}.",
+                                         field.getDeclaringClassName(),
+                                         name,
+                                         getName()));
+    }
+
+    _fieldMap.put(name, field);
+  }
+
   /**
    * Returns a set of the fields and their initial values
    */
@@ -588,7 +712,7 @@ public class QuercusClass extends NullValue {
   {
     return _fieldMap;
   }
-  
+
   /**
    * Returns a set of the fields and their initial values
    */
@@ -596,7 +720,7 @@ public class QuercusClass extends NullValue {
   {
     return _fieldMap.get(name);
   }
-  
+
   /**
    * Returns a set of the fields and their initial values
    */
@@ -604,7 +728,7 @@ public class QuercusClass extends NullValue {
   {
     throw new UnsupportedOperationException();
   }
-  
+
   /**
    * Returns the declared functions.
    */
@@ -616,65 +740,193 @@ public class QuercusClass extends NullValue {
   /**
    * Adds a method.
    */
-  public void addMethod(String name, AbstractFunction fun)
-  {
-    addMethod(new StringBuilderValue(name), fun);
-  }
- 
-  /**
-   * Adds a method.
-   */
   public void addMethod(StringValue name, AbstractFunction fun)
   {
-    if (fun == null)
+    if (fun == null) {
       throw new NullPointerException(L.l("'{0}' is a null function", name));
-    
-    //php/09j9
-    // XXX: this is a hack to get Zend Framework running, the better fix is
-    // to initialize all interface classes before any concrete classes
-    AbstractFunction existingFun = _methodMap.getRaw(name);
-    
-    if (existingFun == null || ! fun.isAbstract())
-      _methodMap.put(name.toString(), fun);
-    else if (! existingFun.isAbstract() && fun.isAbstract())
-      Env.getInstance()
-        .error(L.l("cannot make non-abstract function {0}:{1}() abstract",
-                   getName(), name));
-  }
-  
-  /*
-   * Adds a method if it does not exist.
-   */
-  public void addMethodIfNotExist(StringValue name, AbstractFunction fun)
-  {
-    if (fun == null)
-      throw new NullPointerException(L.l("'{0}' is a null function", name));
-    
+    }
+
     //php/09j9
     // XXX: this is a hack to get Zend Framework running, the better fix is
     // to initialize all interface classes before any concrete classes
     AbstractFunction existingFun = _methodMap.getRaw(name);
 
-    if (existingFun == null && ! fun.isAbstract())
-      _methodMap.put(name.toString(), fun);
+    if (existingFun == null || ! fun.isAbstract()) {
+      _methodMap.put(name, fun);
+    }
+    else if (! existingFun.isAbstract() && fun.isAbstract()) {
+      Env.getInstance().error(L.l("cannot make non-abstract function {0}:{1}() abstract",
+                                  getName(), name));
+    }
+  }
+
+  /**
+   * Adds a method if it does not exist.
+   */
+  public void addMethodIfNotExist(StringValue name, AbstractFunction fun)
+  {
+    if (fun == null) {
+      throw new NullPointerException(L.l("'{0}' is a null function", name));
+    }
+
+    //php/09j9
+    // XXX: this is a hack to get Zend Framework running, the better fix is
+    // to initialize all interface classes before any concrete classes
+    AbstractFunction existingFun = _methodMap.getRaw(name);
+
+    if (existingFun == null && ! fun.isAbstract()) {
+      _methodMap.put(name, fun);
+    }
+  }
+
+  /**
+   * Adds a trait method to this class.
+   */
+  public void addTraitMethod(String bindingClassName,
+                             StringValue name,
+                             AbstractFunction fun)
+  {
+    TraitAliasMap aliasMap = _classDef.getTraitAliasMap();
+
+    StringValue alias = null;
+    if (aliasMap != null) {
+      alias = aliasMap.get(name, fun.getDeclaringClassName());
+    }
+
+    addTraitMethod(bindingClassName, name, alias, fun);
+  }
+
+  private void addTraitMethod(String bindingClassName,
+                              StringValue name,
+                              StringValue alias,
+                              AbstractFunction fun)
+  {
+    if (fun == null) {
+      throw new NullPointerException(L.l("'{0}' is a null function", name));
+    }
+
+    AbstractFunction existingFun = _methodMap.getRaw(name);
+
+    if (existingFun == null || existingFun.isAbstract()) {
+      _methodMap.put(name, fun);
+      _traitMethodBindingClassMap.put(name, bindingClassName);
+    }
+    else if (fun.isAbstract()) {
+      Env.getInstance().error(L.l("cannot make non-abstract function {0}:{1}() abstract",
+                                  getName(), name));
+    }
+    else if (existingFun.isTraitMethod()) {
+      TraitInsteadofMap insteadofMap = _classDef.getTraitInsteadofMap();
+
+      if (insteadofMap == null) {
+        traitCollisionError(getName(), name,
+                            fun.getDeclaringClassName(),
+                            existingFun.getDeclaringClassName());
+      }
+
+      int result = insteadofMap.get(name,
+                                    fun.getDeclaringClassName(),
+                                    existingFun.getDeclaringClassName());
+
+      if (result == TraitInsteadofMap.USE_EXISTING_TRAIT) {
+      }
+      else if (result == TraitInsteadofMap.USE_NEW_TRAIT) {
+        _methodMap.put(name, fun);
+        _traitMethodBindingClassMap.put(name, bindingClassName);
+      }
+      else {
+        traitCollisionError(getName(), name,
+                            fun.getDeclaringClassName(),
+                            existingFun.getDeclaringClassName());
+      }
+    }
+    else {
+      _methodMap.put(name, fun);
+      _traitMethodBindingClassMap.put(name, bindingClassName);
+    }
+
+    if (alias != null) {
+      addTraitMethod(bindingClassName, alias, null, fun);
+    }
+  }
+
+  private static final void traitCollisionError(String className,
+                                                StringValue funName,
+                                                String traitName,
+                                                String existingTraitName)
+  {
+    Env.getInstance().error(L.l("cannot add trait method {0}::{1}() to class {2}"
+                                + " because it collides with trait method {3}::{1}() ",
+                                traitName, funName,
+                                className, existingTraitName));
   }
 
   /**
    * Adds a static class field.
    */
-  public void addStaticFieldExpr(String className, String name, Expr value)
+  public void addStaticFieldExpr(String className, StringValue name, Expr value)
   {
     ArrayList<StaticField> fieldList = _staticFieldExprMap.get(className);
-    
+
     if (fieldList == null) {
       fieldList = new ArrayList<StaticField>();
 
       _staticFieldExprMap.put(className, fieldList);
     }
-    
+
     fieldList.add(new StaticField(name, value));
-    _staticFieldNameMap.put(new ConstStringValue(name),
-                            new ConstStringValue(className + "::" + name));
+
+    StringValue sb = createStringBuilder();
+    sb.append(className);
+    sb.append("::");
+    sb.append(name);
+
+    _staticFieldNameMap.put(name, sb);
+  }
+
+  /**
+   * Adds a static class field.
+   */
+  public void addStaticTraitFieldExpr(String bindingClassName,
+                                      StringValue name,
+                                      Expr value)
+  {
+    ArrayList<StaticField> fieldList = _staticFieldExprMap.get(bindingClassName);
+
+    if (fieldList == null) {
+      fieldList = new ArrayList<StaticField>();
+
+      _staticFieldExprMap.put(bindingClassName, fieldList);
+    }
+
+    fieldList.add(new StaticField(name, value));
+
+    StringValue sb = createStringBuilder();
+    sb.append(bindingClassName);
+    sb.append("::");
+    sb.append(name);
+
+    _staticFieldNameMap.put(name, sb);
+  }
+
+  private StringValue createString(String s)
+  {
+    if (_moduleContext.isUnicodeSemantics()) {
+      return new UnicodeBuilderValue(s);
+    }
+    else {
+      return new ConstStringValue(s);
+    }
+  }
+
+  private StringValue createStringBuilder()
+  {
+    if (_moduleContext.isUnicodeSemantics()) {
+      return new UnicodeBuilderValue();
+    }
+    else {
+      return new StringBuilderValue();
+    }
   }
 
   /**
@@ -696,15 +948,15 @@ public class QuercusClass extends NullValue {
   /**
    * Adds a constant definition
    */
-  public void addConstant(String name, Expr expr)
+  public void addConstant(StringValue name, Expr expr)
   {
     _constMap.put(name, expr);
   }
-  
+
   /**
    * Adds a constant definition
    */
-  public void addJavaConstant(String name, Object obj)
+  public void addJavaConstant(StringValue name, Object obj)
   {
     _constJavaMap.put(name, obj);
   }
@@ -717,9 +969,17 @@ public class QuercusClass extends NullValue {
     return _fieldMap.size();
   }
 
+  /**
+   * Returns the name of the class that included this trait.
+   */
+  public String getTraitMethodBindingClassName(StringValue traitMethodName)
+  {
+    return _traitMethodBindingClassMap.get(traitMethodName);
+  }
+
   public void validate(Env env)
   {
-    if (! _isAbstract && ! _isInterface) {
+    if (! isAbstract() && ! isInterface() && ! isTrait()) {
       for (AbstractFunction fun : _methodMap.values()) {
         /* XXX: abstract methods need to be validated
               php/393g, php/393i, php/39j2
@@ -739,13 +999,10 @@ public class QuercusClass extends NullValue {
           isAbstract = fun.isAbstract();
 
         if (isAbstract) {
-          throw env.createErrorException(
-            _classDef.getLocation(),
-            L.l(
-              "Abstract function '{0}' must be "
-              + "implemented in concrete class {1}.",
-              fun.getName(),
-              getName()));
+          throw env.createErrorException(_classDef.getLocation(),
+                                         L.l("Abstract function '{0}' must be implemented in concrete class {1}.",
+                                             fun.getName(),
+                                             getName()));
         }
       }
     }
@@ -760,88 +1017,88 @@ public class QuercusClass extends NullValue {
           : _staticFieldExprMap.entrySet()) {
       if (env.isInitializedClass(map.getKey()))
         continue;
-      
+
       for (StaticField field : map.getValue()) {
         Value val;
         Expr expr = field._expr;
 
         //php/096f
-        if (expr instanceof ClassConstExpr)
-          val = ((ClassConstExpr) expr).eval(env);
-        else
-          val = expr.eval(env);
+        val = expr.eval(env);
 
         StringValue fullName = env.createStringBuilder();
         fullName.append(_className);
         fullName.append("::");
         fullName.append(field._name);
-        
+
         env.setStaticRef(fullName, val);
       }
-      
+
       env.addInitializedClass(map.getKey());
     }
   }
 
+  @Override
   public Value getStaticFieldValue(Env env, StringValue name)
   {
     StringValue staticName = _staticFieldNameMap.get(name);
-    
+
     if (staticName == null) {
       env.error(L.l("{0}::${1} is an undeclared static field",
                     _className, name));
-      
+
       return NullValue.NULL;
     }
-    
+
     return env.getStaticValue(staticName);
   }
 
+  @Override
   public Var getStaticFieldVar(Env env, StringValue name)
   {
     StringValue staticName = _staticFieldNameMap.get(name);
-    
+
     if (staticName == null) {
       env.error(L.l("{0}::${1} is an undeclared static field",
                     _className, name));
-      
+
       throw new IllegalStateException();
     }
-    
+
     return env.getStaticVar(staticName);
   }
 
+  @Override
   public Value setStaticFieldRef(Env env, StringValue name, Value value)
   {
     StringValue staticName = _staticFieldNameMap.get(name);
-    
+
     if (staticName == null) {
       env.error(L.l("{0}::{1} is an unknown static field",
                     _className, name));
-      
+
       throw new IllegalStateException();
     }
-    
+
     return env.setStaticRef(staticName, value);
   }
-  
+
   /**
    * For Reflection.
    */
-  public Value getStaticField(Env env, StringValue name)
+  public Value getStaticFieldInternal(Env env, StringValue name)
   {
     StringValue staticName = _staticFieldNameMap.get(name);
-    
+
     if (staticName != null)
       return env.getStaticValue(staticName);
     else
       return null;
   }
-    
+
   //
   // Constructors
   //
-  
+
   /**
    * Creates a new instance.
    */
@@ -852,7 +1109,7 @@ public class QuercusClass extends NullValue {
 
     if (object != null)
       return object;
-    
+
     object = newInstance(env);
 
     AbstractFunction fun = findConstructor();
@@ -864,22 +1121,24 @@ public class QuercusClass extends NullValue {
     return object;
   }
   */
-  
+
   /**
    * Creates a new object without calling the constructor.  This is used
    * for unserializing classes.
    */
   public Value createObject(Env env)
   {
-    if (_isAbstract) {
-      throw env.createErrorException(L.l(
-        "abstract class '{0}' cannot be instantiated.",
-        _className));
+    if (isAbstract()) {
+      throw env.createErrorException(L.l("abstract class '{0}' cannot be instantiated.",
+                                         _className));
     }
-    else if (_isInterface) {
-      throw env.createErrorException(L.l(
-        "interface '{0}' cannot be instantiated.",
-        _className));
+    else if (isInterface()) {
+      throw env.createErrorException(L.l("interface '{0}' cannot be instantiated.",
+                                         _className));
+    }
+    else if (isTrait()) {
+      throw env.createErrorException(L.l("trait '{0}' cannot be instantiated.",
+                                         _className));
     }
 
     ObjectValue objectValue = null;
@@ -889,34 +1148,78 @@ public class QuercusClass extends NullValue {
       return _javaClassDef.callNew(env, Value.NULL_ARGS);
     }
     else if (_javaClassDef != null && _javaClassDef.isDelegate()) {
-      objectValue = new ObjectExtValue(this);
+      objectValue = new ObjectExtValue(env, this);
     }
     else if (_javaClassDef != null && _javaClassDef.isPhpClass()) {
+      Object object = null;
+
       // Java objects always need to call the constructor?
-      Value javaWrapper = _javaClassDef.callNew(env, Value.NULL_ARGS);
-      Object object = javaWrapper.toJavaObject();
-      
-      objectValue = new ObjectExtJavaValue(this, object, _javaClassDef);
+      //Value javaWrapper = _javaClassDef.callNew(env, Value.NULL_ARGS);
+      //object = javaWrapper.toJavaObject();
+
+      objectValue = new ObjectExtJavaValue(env, this, object, _javaClassDef);
     }
     else if (_javaClassDef != null && ! _javaClassDef.isDelegate()) {
-      objectValue = new ObjectExtJavaValue(this, null, _javaClassDef);
+      objectValue = new ObjectExtJavaValue(env, this, null, _javaClassDef);
     }
     else {
       objectValue = _classDef.createObject(env, this);
     }
-    
+
     initObject(env, objectValue);
 
     return objectValue;
   }
-  
+
   /**
    * Initializes the object's methods and fields.
    */
   public void initObject(Env env, ObjectValue obj)
   {
-    for (int i = 0; i < _initializers.size(); i++) {
-      _initializers.get(i).initInstance(env, obj);
+    for (InstanceInitializer initializer : _initializers) {
+      initializer.initInstance(env, obj);
+    }
+  }
+
+  public Value callNew(Env env, Object parentJavaObject, Value ...args)
+  {
+    QuercusClass oldCallingClass = env.setCallingClass(this);
+
+    try {
+      if (_classDef.isAbstract()) {
+        throw env.createErrorException(L.l("abstract class '{0}' cannot be instantiated.",
+                                           _className));
+      }
+      else if (_classDef.isInterface()) {
+        throw env.createErrorException(L.l("interface '{0}' cannot be instantiated.",
+                                           _className));
+      }
+      else if (isTrait()) {
+        throw env.createErrorException(L.l("trait '{0}' cannot be instantiated.",
+                                           _className));
+      }
+
+      ObjectValue objectValue
+        = new ObjectExtJavaValue(env, this, parentJavaObject, _javaClassDef);
+
+      initObject(env, objectValue);
+
+      AbstractFunction fun = findConstructor();
+
+      // don't want to call the Java constructor to create another java object
+      // php/0cl4, php/0cl5
+      if (fun != null && ! fun.isJavaMethod()) {
+        fun.callMethod(env, this, objectValue, args);
+      }
+      else {
+        //  if expr
+      }
+
+      return objectValue;
+
+    }
+    finally {
+      env.setCallingClass(oldCallingClass);
     }
   }
 
@@ -926,53 +1229,60 @@ public class QuercusClass extends NullValue {
   public Value callNew(Env env, Value ...args)
   {
     QuercusClass oldCallingClass = env.setCallingClass(this);
-    
+
     try {
-      if (_classDef.isAbstract()) {
-        throw env.createErrorException(L.l(
-          "abstract class '{0}' cannot be instantiated.",
-          _className));
+      if (isAbstract()) {
+        throw env.createErrorException(L.l( "abstract class '{0}' cannot be instantiated.",
+                                            _className));
       }
-      else if (_classDef.isInterface()) {
-        throw env.createErrorException(L.l(
-          "interface '{0}' cannot be instantiated.",
-          _className));
+      else if (isInterface()) {
+        throw env.createErrorException(L.l("interface '{0}' cannot be instantiated.",
+                                           _className));
+      }
+      else if (isTrait()) {
+        throw env.createErrorException(L.l("trait '{0}' cannot be instantiated.",
+                                           _className));
       }
 
       ObjectValue objectValue = null;
 
       if (_isJavaWrapper) {
-        return _javaClassDef.callNew(env, args);
+        Value obj = _javaClassDef.callNew(env, args);
+
+        return obj;
       }
       else if (_javaClassDef != null && _javaClassDef.isDelegate()) {
-        objectValue = new ObjectExtValue(this);
+        objectValue = new ObjectExtValue(env, this);
       }
       else if (_javaClassDef != null && _javaClassDef.isPhpClass()) {
-        // php/0k3-
-        Value javaWrapper = _javaClassDef.callNew(env, args);
-        Object object = javaWrapper.toJavaObject();
-        
-        objectValue = new ObjectExtJavaValue(this, object, _javaClassDef);
+        Object object = null;
+
+        // php/0k3-, php/0k4-
+        //Value javaWrapper = _javaClassDef.callNew(env, args);
+        //object = javaWrapper.toJavaObject();
+
+        objectValue = new ObjectExtJavaValue(env, this, object, _javaClassDef);
       }
       else if (_javaClassDef != null && ! _javaClassDef.isDelegate()) {
-        objectValue = new ObjectExtJavaValue(this, null, _javaClassDef);
+        objectValue = new ObjectExtJavaValue(env, this, null, _javaClassDef);
       }
       else {
-        objectValue = _classDef.newInstance(env, this);
+        objectValue = new ObjectExtValue(env, this);
       }
 
       initObject(env, objectValue);
-      
+
       AbstractFunction fun = findConstructor();
 
       if (fun != null)
-        fun.callMethod(env, this, objectValue, args);
+        fun.callNew(env, this, objectValue, args);
       else {
         //  if expr
       }
 
       return objectValue;
-    } finally {
+    }
+    finally {
       env.setCallingClass(oldCallingClass);
     }
   }
@@ -988,25 +1298,38 @@ public class QuercusClass extends NullValue {
   /**
    * Returns true for an implementation of a class
    */
-  public boolean isA(String name)
+  @Override
+  public boolean isA(Env env, String name)
   {
-    return _instanceofSet.contains(name.toLowerCase(Locale.ENGLISH));
+    boolean isA = _instanceofSet.contains(name.toLowerCase(Locale.ENGLISH));
+
+    if (isA) {
+      return true;
+    }
+
+    QuercusClass cls = env.findClassByAlias(name);
+
+    if (cls == null) {
+      return false;
+    }
+
+    return isA(env, cls.getName());
   }
-  
-  /*
+
+  /**
    * Returns an array of the interfaces that this class and its parents
    * implements.
    */
   public ArrayValue getInterfaces(Env env, boolean autoload)
   {
     ArrayValue array = new ArrayValueImpl();
-    
+
     getInterfaces(env, array, autoload, true);
-    
+
     return array;
   }
-  
-  /*
+
+  /**
    * Puts the interfaces that this class and its parents implements
    * into the array.
    */
@@ -1014,21 +1337,21 @@ public class QuercusClass extends NullValue {
                              boolean autoload, boolean isTop)
   {
     ClassDef [] defList = _classDefList;
-    
+
     for (int i = 0; i < defList.length; i++) {
       ClassDef def = defList[i];
-      
+
       if (! isTop && def.isInterface()) {
         String name = def.getName();
-        
+
         array.put(name, name);
       }
 
       String []defNames = def.getInterfaces();
-      
+
       for (int j = 0; j < defNames.length; j++) {
         QuercusClass cls = env.findClass(defNames[j]);
-        
+
         cls.getInterfaces(env, array, autoload, false);
       }
     }
@@ -1036,22 +1359,22 @@ public class QuercusClass extends NullValue {
     if (_parent != null)
       _parent.getInterfaces(env, array, autoload, false);
   }
-  
-  /*
+
+  /**
    * Returns true if this class or its parents implements specified interface.
    */
   public boolean implementsInterface(Env env, String name)
   {
     ClassDef [] defList = _classDefList;
-    
+
     for (int i = 0; i < defList.length; i++) {
       ClassDef def = defList[i];
-      
+
       if (def.isInterface() && def.getName().equals(name))
         return true;
 
       String []defNames = def.getInterfaces();
-      
+
       for (int j = 0; j < defNames.length; j++) {
         QuercusClass cls = env.findClass(defNames[j]);
 
@@ -1059,7 +1382,7 @@ public class QuercusClass extends NullValue {
           return true;
       }
     }
-    
+
     if (_parent != null)
       return _parent.implementsInterface(env, name);
     else
@@ -1086,17 +1409,16 @@ public class QuercusClass extends NullValue {
   {
     // php/09km, php/09kn
     // push/pop to prevent infinite recursion
-    if(issetField(name) && _fieldMap.get(name).isPublic())
-    {
-        Value v_current = this.get(name); // TODO: move to ObjectExtValue if possible
+    if (issetField(env, name) && _fieldMap.get(name).isPublic()) {
+      Value v_current = this.get(name); // TODO: move to ObjectExtValue if possible
 
-        if(v_current != NullValue.NULL && v_current != UnsetValue.UNSET)
-        {
-            return v_current;
-        }
-        if(_fieldGet == null){
-            return ((ClassField) _fieldMap.get(name)).getInitValue().eval(env);
-        }
+      if (v_current != NullValue.NULL && v_current != UnsetValue.UNSET) {
+        return v_current;
+      }
+      
+      if (_fieldGet == null) {
+        return ((ClassField) _fieldMap.get(name)).getInitExpr().eval(env);
+      }
     }
 
     if (_fieldGet != null) {
@@ -1117,37 +1439,37 @@ public class QuercusClass extends NullValue {
    * Implements the __isset method call.
    * __isset() is triggered by calling isset() or empty()  on inaccessible properties.
   */
-  public Value issetField(Env env, Value qThis, StringValue name)
+  public boolean issetField(Env env, Value qThis, StringValue name)
   {
-    if(issetField(name) && _fieldMap.get(name).isPublic())
-    {
-        // php/09c3
-        Value v_current = qThis.get(name);
-        if(v_current != NullValue.NULL && v_current != UnsetValue.UNSET)
-            return BooleanValue.TRUE;
+    ClassField field = _fieldMap.get(name);
+
+    if (field != null && field.isPublic()) {
+      return true;
     }
 
-    // basically a copy of the __get code with slightly different semantics
     if (_isset != null) {
       if (! env.pushFieldGet(Env.OVERLOADING_TYPES.ISSET, qThis.getClassName(), name))
-        return UnsetValue.UNSET;
+        return false;
 
       try {
-          return _isset.callMethod(env, this, qThis, name);
-      } finally {
+          Value result = _isset.callMethod(env, this, qThis, name);
+
+          return result.toBoolean();
+      }
+      finally {
         env.popFieldGet(Env.OVERLOADING_TYPES.ISSET);
       }
     }
-    else
-    {
-      return UnsetValue.UNSET;
-    }
+
+    return false;
   }
 
   @Override
-  public boolean issetField(StringValue name) {
-    if(_fieldMap.containsKey(name))
+  public boolean issetField(Env env, StringValue name) {
+    if(_fieldMap.containsKey(name)) {
       return true;
+    }
+
     return false;
   }
 
@@ -1163,7 +1485,7 @@ public class QuercusClass extends NullValue {
    */
   public Value unsetField(Env env, Value qThis, StringValue name)
   {
-    if(issetField(name) && _fieldMap.get(name).isPublic()){
+    if(issetField(env, name) && _fieldMap.get(name).isPublic()){
       // TODO: move to ObjectExtValue if possible
       unsetField(name);
       return NullValue.NULL;
@@ -1221,14 +1543,14 @@ public class QuercusClass extends NullValue {
     return _methodMap.get(methodName, methodName.hashCodeCaseInsensitive());
   }
 
-
   /**
    * Finds the matching function.
    */
-  @Override
   public final AbstractFunction findFunction(String methodName)
   {
-    return _methodMap.getRaw(new StringBuilderValue(methodName));
+    StringValue nameV = _moduleContext.createString(methodName);
+
+    return _methodMap.getRaw(nameV);
   }
 
   /**
@@ -1245,22 +1567,25 @@ public class QuercusClass extends NullValue {
   public final AbstractFunction getFunction(StringValue methodName, int hash)
   {
     return _methodMap.get(methodName, methodName.hashCode());
+  }
 
-    /*
-    AbstractFunction fun = _methodMap.get(methodName, hash);
-    
-    if (fun != null)
-      return fun;
-    else if (_className.equalsIgnoreCase(toMethod(name, nameLen))
-             && _parent != null) {
-      // php/093j
-      return _parent.getFunction(_parent.getName());
+  /**
+   * Calls the A::__construct constructor.
+   */
+  public Value callConstructor(Env env, Value qThis, Value ...args)
+  {
+    AbstractFunction cons = getConstructor();
+
+    if (cons == null) {
+      env.error(L.l("cannot call constructor for class {0}", getName()));
     }
-    else {
-      throw new QuercusRuntimeException(L.l("{0}::{1} is an unknown method",
-                                       getName(), toMethod(name, nameLen)));
+    else if (qThis.isNull()) {
+      env.error(L.l("{0}::{1}() cannot be called statically",
+                    getName(),
+                    cons.getName()));
     }
-    */
+
+    return getConstructor().callMethod(env, this, qThis, args);
   }
 
   /**
@@ -1271,18 +1596,19 @@ public class QuercusClass extends NullValue {
                           StringValue methodName, int hash,
                           Value []args)
   {
-    if (qThis.isNull())
+    if (qThis.isNull()) {
       qThis = this;
-    
+    }
+
     AbstractFunction fun = _methodMap.get(methodName, hash);
 
     return fun.callMethod(env, this, qThis, args);
   }
-  
+
   public final Value callMethod(Env env, Value qThis, StringValue methodName,
                                 Value []args)
   {
-    return callMethod(env, qThis, 
+    return callMethod(env, qThis,
                       methodName, methodName.hashCodeCaseInsensitive(),
                       args);
   }
@@ -1299,11 +1625,11 @@ public class QuercusClass extends NullValue {
     AbstractFunction fun = _methodMap.get(methodName, hash);
 
     return fun.callMethod(env, this, qThis);
-  }  
-  
+  }
+
   public final Value callMethod(Env env, Value qThis, StringValue methodName)
   {
-    return callMethod(env, qThis, 
+    return callMethod(env, qThis,
                       methodName, methodName.hashCodeCaseInsensitive());
   }
 
@@ -1316,16 +1642,16 @@ public class QuercusClass extends NullValue {
   {
     if (qThis.isNull())
       qThis = this;
-    
+
     AbstractFunction fun = _methodMap.get(methodName, hash);
 
     return fun.callMethod(env, this, qThis, a1);
-  }  
-  
+  }
+
   public final Value callMethod(Env env, Value qThis, StringValue methodName,
                                 Value a1)
   {
-    return callMethod(env, qThis, 
+    return callMethod(env, qThis,
                       methodName, methodName.hashCodeCaseInsensitive(),
                       a1);
   }
@@ -1339,16 +1665,16 @@ public class QuercusClass extends NullValue {
   {
     if (qThis.isNull())
       qThis = this;
-    
+
     AbstractFunction fun = _methodMap.get(methodName, hash);
 
     return fun.callMethod(env, this, qThis, a1, a2);
-  }  
-  
+  }
+
   public final Value callMethod(Env env, Value qThis, StringValue methodName,
                                 Value a1, Value a2)
   {
-    return callMethod(env, qThis, 
+    return callMethod(env, qThis,
                       methodName, methodName.hashCodeCaseInsensitive(),
                       a1, a2);
   }
@@ -1362,16 +1688,16 @@ public class QuercusClass extends NullValue {
   {
     if (qThis.isNull())
       qThis = this;
-    
+
     AbstractFunction fun = _methodMap.get(methodName, hash);
 
     return fun.callMethod(env, this, qThis, a1, a2, a3);
-  }  
-  
+  }
+
   public final Value callMethod(Env env, Value qThis, StringValue methodName,
                                 Value a1, Value a2, Value a3)
   {
-    return callMethod(env, qThis, 
+    return callMethod(env, qThis,
                       methodName, methodName.hashCodeCaseInsensitive(),
                       a1, a2, a3);
   }
@@ -1385,16 +1711,16 @@ public class QuercusClass extends NullValue {
   {
     if (qThis.isNull())
       qThis = this;
-    
+
     AbstractFunction fun = _methodMap.get(methodName, hash);
 
     return fun.callMethod(env, this, qThis, a1, a2, a3, a4);
-  }  
-  
+  }
+
   public final Value callMethod(Env env, Value qThis, StringValue methodName,
                                 Value a1, Value a2, Value a3, Value a4)
   {
-    return callMethod(env, qThis, 
+    return callMethod(env, qThis,
                       methodName, methodName.hashCodeCaseInsensitive(),
                       a1, a2, a3, a4);
   }
@@ -1408,17 +1734,17 @@ public class QuercusClass extends NullValue {
   {
     if (qThis.isNull())
       qThis = this;
-    
+
     AbstractFunction fun = _methodMap.get(methodName, hash);
 
     return fun.callMethod(env, this, qThis, a1, a2, a3, a4, a5);
-  }  
-  
+  }
+
   public final Value callMethod(Env env, Value qThis, StringValue methodName,
                                 Value a1, Value a2, Value a3, Value a4,
                                 Value a5)
   {
-    return callMethod(env, qThis, 
+    return callMethod(env, qThis,
                       methodName, methodName.hashCodeCaseInsensitive(),
                       a1, a2, a3, a4, a5);
   }
@@ -1432,16 +1758,16 @@ public class QuercusClass extends NullValue {
   {
     if (qThis.isNull())
       qThis = this;
-    
+
     AbstractFunction fun = _methodMap.get(methodName, hash);
 
     return fun.callMethodRef(env, this, qThis, args);
-  }  
-  
+  }
+
   public final Value callMethodRef(Env env, Value qThis, StringValue methodName,
                                    Value []args)
   {
-    return callMethodRef(env, qThis, 
+    return callMethodRef(env, qThis,
                          methodName, methodName.hashCodeCaseInsensitive(),
                          args);
   }
@@ -1454,15 +1780,15 @@ public class QuercusClass extends NullValue {
   {
     if (qThis.isNull())
       qThis = this;
-    
+
     AbstractFunction fun = _methodMap.get(methodName, hash);
 
     return fun.callMethodRef(env, this, qThis);
-  }  
-  
+  }
+
   public final Value callMethodRef(Env env, Value qThis, StringValue methodName)
   {
-    return callMethodRef(env, qThis, 
+    return callMethodRef(env, qThis,
                          methodName, methodName.hashCodeCaseInsensitive());
   }
 
@@ -1475,16 +1801,16 @@ public class QuercusClass extends NullValue {
   {
     if (qThis.isNull())
       qThis = this;
-    
+
     AbstractFunction fun = _methodMap.get(methodName, hash);
 
     return fun.callMethodRef(env, this, qThis, a1);
-  }  
-  
+  }
+
   public final Value callMethodRef(Env env, Value qThis, StringValue methodName,
                                    Value a1)
   {
-    return callMethodRef(env, qThis, 
+    return callMethodRef(env, qThis,
                          methodName, methodName.hashCodeCaseInsensitive(),
                          a1);
   }
@@ -1498,16 +1824,16 @@ public class QuercusClass extends NullValue {
   {
     if (qThis.isNull())
       qThis = this;
-    
+
     AbstractFunction fun = _methodMap.get(methodName, hash);
 
     return fun.callMethodRef(env, this, qThis, a1, a2);
-  }  
-  
+  }
+
   public final Value callMethodRef(Env env, Value qThis, StringValue methodName,
                                    Value a1, Value a2)
   {
-    return callMethodRef(env, qThis, 
+    return callMethodRef(env, qThis,
                          methodName, methodName.hashCodeCaseInsensitive(),
                          a1, a2);
   }
@@ -1521,16 +1847,16 @@ public class QuercusClass extends NullValue {
   {
     if (qThis.isNull())
       qThis = this;
-    
+
     AbstractFunction fun = _methodMap.get(methodName, hash);
 
     return fun.callMethodRef(env, this, qThis, a1, a2, a3);
-  }  
-  
+  }
+
   public final Value callMethodRef(Env env, Value qThis, StringValue methodName,
                                    Value a1, Value a2, Value a3)
   {
-    return callMethodRef(env, qThis, 
+    return callMethodRef(env, qThis,
                          methodName, methodName.hashCodeCaseInsensitive(),
                          a1, a2, a3);
   }
@@ -1544,17 +1870,17 @@ public class QuercusClass extends NullValue {
   {
     if (qThis.isNull())
       qThis = this;
-    
+
     AbstractFunction fun = _methodMap.get(methodName, hash);
 
     return fun.callMethodRef(env, this, qThis,
                              a1, a2, a3, a4);
-  }  
-  
+  }
+
   public final Value callMethodRef(Env env, Value qThis, StringValue methodName,
                                    Value a1, Value a2, Value a3, Value a4)
   {
-    return callMethodRef(env, qThis, 
+    return callMethodRef(env, qThis,
                          methodName, methodName.hashCodeCaseInsensitive(),
                          a1, a2, a3, a4);
   }
@@ -1568,43 +1894,443 @@ public class QuercusClass extends NullValue {
   {
     if (qThis.isNull())
       qThis = this;
-    
+
     AbstractFunction fun = _methodMap.get(methodName, hash);
 
     return fun.callMethodRef(env, this, qThis,
                              a1, a2, a3, a4, a5);
   }
-  
+
   public final Value callMethodRef(Env env, Value qThis, StringValue methodName,
                                    Value a1, Value a2, Value a3, Value a4,
                                    Value a5)
   {
-    return callMethodRef(env, qThis, 
+    return callMethodRef(env, qThis,
                          methodName, methodName.hashCodeCaseInsensitive(),
                          a1, a2, a3, a4, a5);
   }
-  
+
   //
   // Static method calls
   //
-  
+
   /**
-   * calls the function.
+   * calls the function statically.
    */
-  /*
-  private Value callStaticMethod(Env env,
-                                Value thisValue,
+  public Value callStaticMethod(Env env,
+                                Value qThis,
                                 StringValue methodName,
-                                Expr []args)
+                                Value []args)
   {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethod(env, thisValue, methodName, args);
-    } finally {
-      env.setCallingClass(oldClass);
+    return callStaticMethod(env, qThis,
+                            methodName, methodName.hashCodeCaseInsensitive(),
+                            args);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethod(Env env,
+                                Value qThis,
+                                StringValue methodName)
+  {
+    return callStaticMethod(env, qThis,
+                            methodName, methodName.hashCodeCaseInsensitive());
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethod(Env env,
+                                Value qThis,
+                                StringValue methodName,
+                                Value a1)
+  {
+    return callStaticMethod(env, qThis,
+                            methodName, methodName.hashCodeCaseInsensitive(),
+                            a1);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethod(Env env,
+                                Value qThis,
+                                StringValue methodName,
+                                Value a1, Value a2)
+  {
+    return callStaticMethod(env, qThis,
+                            methodName, methodName.hashCodeCaseInsensitive(),
+                            a1, a2);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethod(Env env,
+                                Value qThis,
+                                StringValue methodName,
+                                Value a1, Value a2, Value a3)
+  {
+    return callStaticMethod(env, qThis,
+                            methodName, methodName.hashCodeCaseInsensitive(),
+                            a1, a2, a3);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethod(Env env,
+                                Value qThis,
+                                StringValue methodName,
+                                Value a1, Value a2, Value a3, Value a4)
+  {
+    return callStaticMethod(env, qThis,
+                            methodName, methodName.hashCodeCaseInsensitive(),
+                            a1, a2, a3, a4);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethod(Env env,
+                                Value qThis,
+                                StringValue methodName,
+                                Value a1, Value a2, Value a3, Value a4,
+                                Value a5)
+  {
+    return callStaticMethod(env, qThis,
+                            methodName, methodName.hashCodeCaseInsensitive(),
+                            a1, a2, a3, a4, a5);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethod(Env env,
+                                Value qThis,
+                                StringValue methodName, int hash,
+                                Value []args)
+  {
+    if (qThis.isNull()) {
+      qThis = this;
     }
-  }*/
+
+    AbstractFunction fun = _methodMap.getStatic(methodName, hash);
+
+    return fun.callMethod(env, this, qThis, args);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethod(Env env,
+                                Value qThis,
+                                StringValue methodName, int hash)
+  {
+    if (qThis.isNull()) {
+      qThis = this;
+    }
+
+    AbstractFunction fun = _methodMap.getStatic(methodName, hash);
+
+    return fun.callMethod(env, this, qThis);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethod(Env env,
+                                Value qThis,
+                                StringValue methodName, int hash,
+                                Value a1)
+  {
+    if (qThis.isNull()) {
+      qThis = this;
+    }
+
+    AbstractFunction fun = _methodMap.getStatic(methodName, hash);
+
+    return fun.callMethod(env, this, qThis, a1);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethod(Env env,
+                                Value qThis,
+                                StringValue methodName, int hash,
+                                Value a1, Value a2)
+  {
+    if (qThis.isNull()) {
+      qThis = this;
+    }
+
+    AbstractFunction fun = _methodMap.getStatic(methodName, hash);
+
+    return fun.callMethod(env, this, qThis, a1, a2);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethod(Env env,
+                                Value qThis,
+                                StringValue methodName, int hash,
+                                Value a1, Value a2, Value a3)
+  {
+    if (qThis.isNull()) {
+      qThis = this;
+    }
+
+    AbstractFunction fun = _methodMap.getStatic(methodName, hash);
+
+    return fun.callMethod(env, this, qThis, a1, a2, a3);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethod(Env env,
+                                Value qThis,
+                                StringValue methodName, int hash,
+                                Value a1, Value a2, Value a3, Value a4)
+  {
+    if (qThis.isNull()) {
+      qThis = this;
+    }
+
+    AbstractFunction fun = _methodMap.getStatic(methodName, hash);
+
+    return fun.callMethod(env, this, qThis, a1, a2, a3, a4);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethod(Env env,
+                                Value qThis,
+                                StringValue methodName, int hash,
+                                Value a1, Value a2, Value a3, Value a4,
+                                Value a5)
+  {
+    if (qThis.isNull()) {
+      qThis = this;
+    }
+
+    AbstractFunction fun = _methodMap.getStatic(methodName, hash);
+
+    return fun.callMethod(env, this, qThis, a1, a2, a3, a4, a5);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethodRef(Env env,
+                                   Value qThis,
+                                   StringValue methodName,
+                                   Value []args)
+  {
+    return callStaticMethodRef(env, qThis,
+                               methodName, methodName.hashCodeCaseInsensitive(),
+                               args);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethodRef(Env env,
+                                   Value qThis,
+                                   StringValue methodName)
+  {
+    return callStaticMethodRef(env, qThis,
+                               methodName, methodName.hashCodeCaseInsensitive());
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethodRef(Env env,
+                                   Value qThis,
+                                   StringValue methodName,
+                                   Value a1)
+  {
+    return callStaticMethodRef(env, qThis,
+                               methodName, methodName.hashCodeCaseInsensitive(),
+                               a1);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethodRef(Env env,
+                                   Value qThis,
+                                   StringValue methodName,
+                                   Value a1, Value a2)
+  {
+    return callStaticMethodRef(env, qThis,
+                               methodName, methodName.hashCodeCaseInsensitive(),
+                               a1, a2);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethodRef(Env env,
+                                   Value qThis,
+                                   StringValue methodName,
+                                   Value a1, Value a2, Value a3)
+  {
+    return callStaticMethodRef(env, qThis,
+                               methodName, methodName.hashCodeCaseInsensitive(),
+                               a1, a2, a3);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethodRef(Env env,
+                                   Value qThis,
+                                   StringValue methodName,
+                                   Value a1, Value a2, Value a3, Value a4)
+  {
+    return callStaticMethodRef(env, qThis,
+                               methodName, methodName.hashCodeCaseInsensitive(),
+                               a1, a2, a3, a4);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethodRef(Env env,
+                                   Value qThis,
+                                   StringValue methodName,
+                                   Value a1, Value a2, Value a3, Value a4,
+                                   Value a5)
+  {
+    return callStaticMethodRef(env, qThis,
+                               methodName, methodName.hashCodeCaseInsensitive(),
+                               a1, a2, a3, a4, a5);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethodRef(Env env,
+                                   Value qThis,
+                                   StringValue methodName, int hash,
+                                   Value []args)
+  {
+    if (qThis.isNull()) {
+      qThis = this;
+    }
+
+    AbstractFunction fun = _methodMap.getStatic(methodName, hash);
+
+    return fun.callMethodRef(env, this, qThis, args);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethodRef(Env env,
+                                   Value qThis,
+                                   StringValue methodName, int hash)
+  {
+    if (qThis.isNull()) {
+      qThis = this;
+    }
+
+    AbstractFunction fun = _methodMap.getStatic(methodName, hash);
+
+    return fun.callMethodRef(env, this, qThis);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethodRef(Env env,
+                                   Value qThis,
+                                   StringValue methodName, int hash,
+                                   Value a1)
+  {
+    if (qThis.isNull()) {
+      qThis = this;
+    }
+
+    AbstractFunction fun = _methodMap.getStatic(methodName, hash);
+
+    return fun.callMethodRef(env, this, qThis, a1);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethodRef(Env env,
+                                   Value qThis,
+                                   StringValue methodName, int hash,
+                                   Value a1, Value a2)
+  {
+    if (qThis.isNull()) {
+      qThis = this;
+    }
+
+    AbstractFunction fun = _methodMap.getStatic(methodName, hash);
+
+    return fun.callMethodRef(env, this, qThis, a1, a2);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethodRef(Env env,
+                                   Value qThis,
+                                   StringValue methodName, int hash,
+                                   Value a1, Value a2, Value a3)
+  {
+    if (qThis.isNull()) {
+      qThis = this;
+    }
+
+    AbstractFunction fun = _methodMap.getStatic(methodName, hash);
+
+    return fun.callMethodRef(env, this, qThis, a1, a2, a3);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethodRef(Env env,
+                                   Value qThis,
+                                   StringValue methodName, int hash,
+                                   Value a1, Value a2, Value a3, Value a4)
+  {
+    if (qThis.isNull()) {
+      qThis = this;
+    }
+
+    AbstractFunction fun = _methodMap.getStatic(methodName, hash);
+
+    return fun.callMethodRef(env, this, qThis, a1, a2, a3, a4);
+  }
+
+  /**
+   * calls the function statically.
+   */
+  public Value callStaticMethodRef(Env env,
+                                   Value qThis,
+                                   StringValue methodName, int hash,
+                                   Value a1, Value a2, Value a3, Value a4,
+                                   Value a5)
+  {
+    if (qThis.isNull()) {
+      qThis = this;
+    }
+
+    AbstractFunction fun = _methodMap.getStatic(methodName, hash);
+
+    return fun.callMethodRef(env, this, qThis, a1, a2, a3, a4, a5);
+  }
 
   /**
    * calls the function.
@@ -1615,7 +2341,7 @@ public class QuercusClass extends NullValue {
                           Value []args)
   {
     return callMethod(env, this, methodName, hash, args);
-  }  
+  }
 
   /**
    * calls the function.
@@ -1625,7 +2351,7 @@ public class QuercusClass extends NullValue {
                           StringValue methodName, int hash)
   {
     return callMethod(env, this, methodName, hash);
-  }  
+  }
 
   /**
    * calls the function.
@@ -1637,7 +2363,7 @@ public class QuercusClass extends NullValue {
   {
     return callMethod(env, this, methodName, hash,
                       a1);
-  }  
+  }
 
   /**
    * calls the function.
@@ -1649,19 +2375,19 @@ public class QuercusClass extends NullValue {
   {
     return callMethod(env, this, methodName, hash,
                       a1, a2);
-  }  
+  }
 
   /**
    * calls the function.
    */
   @Override
   public Value callMethod(Env env,
-                                StringValue methodName, int hash,
-                                Value a1, Value a2, Value a3)
+                          StringValue methodName, int hash,
+                          Value a1, Value a2, Value a3)
   {
     return callMethod(env, this, methodName, hash,
                       a1, a2, a3);
-  }  
+  }
 
   /**
    * calls the function.
@@ -1673,7 +2399,7 @@ public class QuercusClass extends NullValue {
   {
     return callMethod(env, this, methodName, hash,
                       a1, a2, a3, a4);
-  }  
+  }
 
   /**
    * calls the function.
@@ -1686,7 +2412,7 @@ public class QuercusClass extends NullValue {
   {
     return callMethod(env, this, methodName, hash,
                       a1, a2, a3, a4, a5);
-  }  
+  }
 
   /**
    * calls the function.
@@ -1697,7 +2423,7 @@ public class QuercusClass extends NullValue {
                              Value []args)
   {
     return callMethodRef(env, this, methodName, hash, args);
-  }  
+  }
 
   /**
    * calls the function.
@@ -1707,7 +2433,7 @@ public class QuercusClass extends NullValue {
                              StringValue methodName, int hash)
   {
     return callMethodRef(env, this, methodName, hash);
-  }  
+  }
 
   /**
    * calls the function.
@@ -1719,7 +2445,7 @@ public class QuercusClass extends NullValue {
   {
     return callMethodRef(env, this, methodName, hash,
                          a1);
-  }  
+  }
 
   /**
    * calls the function.
@@ -1727,11 +2453,11 @@ public class QuercusClass extends NullValue {
   @Override
   public Value callMethodRef(Env env,
                              StringValue methodName, int hash,
-                             Value a1, Value a2)  
+                             Value a1, Value a2)
   {
     return callMethodRef(env, this, methodName, hash,
                          a1, a2);
-  }  
+  }
 
   /**
    * calls the function.
@@ -1743,7 +2469,7 @@ public class QuercusClass extends NullValue {
   {
     return callMethodRef(env, this, methodName, hash,
                          a1, a2, a3);
-  }  
+  }
 
   /**
    * calls the function.
@@ -1755,7 +2481,7 @@ public class QuercusClass extends NullValue {
   {
     return callMethodRef(env, this, methodName, hash,
                          a1, a2, a3, a4);
-  }  
+  }
 
   /**
    * calls the function.
@@ -1768,7 +2494,7 @@ public class QuercusClass extends NullValue {
   {
     return callMethodRef(env, this, methodName, hash,
                          a1, a2, a3, a4, a5);
-  }  
+  }
 
   private String toMethod(char []key, int keyLength)
   {
@@ -1795,7 +2521,7 @@ public class QuercusClass extends NullValue {
 
     fun = findStaticFunctionLowerCase(name.toLowerCase(Locale.ENGLISH));
     */
-    
+
     if (fun != null)
       return fun;
     else {
@@ -1807,55 +2533,55 @@ public class QuercusClass extends NullValue {
   /**
    * Finds the matching constant
    */
-  public final Value getConstant(Env env, String name)
+  public final Value getConstant(Env env, StringValue name)
   {
     Expr expr = _constMap.get(name);
 
     if (expr != null)
       return expr.eval(env);
-    
+
     Object obj = _constJavaMap.get(name);
-    
+
     if (obj != null)
       return env.wrapJava(obj);
 
     throw new QuercusRuntimeException(L.l("{0}::{1} is an unknown constant",
                                           getName(), name));
   }
-  
+
   /**
    * Returns true if the constant exists.
    */
-  public final boolean hasConstant(String name)
+  public final boolean hasConstant(StringValue name)
   {
     if (_constMap.get(name) != null)
       return true;
     else
       return _constJavaMap.get(name) != null;
   }
-  
+
   /**
    * Returns the constants defined in this class.
    */
-  public final HashMap<String, Value> getConstantMap(Env env)
+  public final HashMap<StringValue, Value> getConstantMap(Env env)
   {
-    HashMap<String, Value> map = new HashMap<String, Value>();
-    
-    for (Map.Entry<String, Expr> entry : _constMap.entrySet()) {
+    HashMap<StringValue, Value> map = new HashMap<StringValue, Value>();
+
+    for (Map.Entry<StringValue, Expr> entry : _constMap.entrySet()) {
       map.put(entry.getKey(), entry.getValue().eval(env));
     }
-    
-    for (Map.Entry<String, Object> entry : _constJavaMap.entrySet()) {
+
+    for (Map.Entry<StringValue, Object> entry : _constJavaMap.entrySet()) {
       map.put(entry.getKey(), env.wrapJava(entry.getValue()));
     }
-    
+
     return map;
   }
-  
+
   //
   // Value methods
   //
-  
+
   @Override
   public boolean isNull()
   {
@@ -1870,9 +2596,15 @@ public class QuercusClass extends NullValue {
   {
     return getName();
   }
-  
+
   @Override
   public QuercusClass getQuercusClass()
+  {
+    return this;
+  }
+
+  @Override
+  public QuercusClass findQuercusClass(Env env)
   {
     return this;
   }
@@ -1893,7 +2625,7 @@ public class QuercusClass extends NullValue {
 
     if (_classDef != qClass._classDef)
       return false;
-    
+
     if (_javaClassDef != qClass._javaClassDef)
       return false;
 
@@ -1902,28 +2634,6 @@ public class QuercusClass extends NullValue {
 
     else
       return (_parent != null && _parent.equals(qClass._parent));
-  }
-
-  public String toString()
-  {
-    return getClass().getSimpleName() + "[" + getName() + "]";
-  }
-  
-  static class StaticField
-  {
-    String _name;
-    Expr _expr;
-    
-    StaticField(String name, Expr expr)
-    {
-      _name = name;
-      _expr = expr;
-    }
-    
-    String getName()
-    {
-      return _name;
-    }
   }
 
   public void setIsset(AbstractFunction isset)
@@ -1944,6 +2654,28 @@ public class QuercusClass extends NullValue {
   public AbstractFunction getUnset()
   {
     return _unset;
+  }
+
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + getName() + "]";
+  }
+
+  static class StaticField
+  {
+    StringValue _name;
+    Expr _expr;
+
+    StaticField(StringValue name, Expr expr)
+    {
+      _name = name;
+      _expr = expr;
+    }
+
+    StringValue getName()
+    {
+      return _name;
+    }
   }
 }
 

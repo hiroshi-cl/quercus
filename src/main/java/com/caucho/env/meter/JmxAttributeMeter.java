@@ -31,6 +31,8 @@ package com.caucho.env.meter;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.management.AttributeNotFoundException;
+import javax.management.InstanceNotFoundException;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
@@ -44,20 +46,26 @@ public final class JmxAttributeMeter extends AbstractMeter {
   private MBeanServer _server;
   private ObjectName _objectName;
   private String _attribute;
+  private boolean _isOptional;
   
   private double _lastSample;
+  private double _value;
 
-  public JmxAttributeMeter(String name, String objectName, String attribute)
+  public JmxAttributeMeter(String name,
+                           String objectName,
+                           String attribute,
+                           boolean isOptional)
   {
     super(name);
 
     try {
-        _objectName = new ObjectName(objectName);
+      _objectName = new ObjectName(objectName);
     } catch (Exception e) {
         throw ConfigException.create(e);
     }
 
     _attribute = attribute;
+    _isOptional = isOptional;
     _server = Jmx.getGlobalMBeanServer();
   }
 
@@ -65,27 +73,50 @@ public final class JmxAttributeMeter extends AbstractMeter {
    * Polls the statistics attribute.
    */
   @Override
-  public double sample()
+  public void sample()
   {
     try {
       Object value = _server.getAttribute(_objectName, _attribute);
 
-      if (value == null)
-        return 0;
+      if (value == null) {
+        _value = 0;
+        return;
+      }
       
-      _lastSample = ((Number) value).doubleValue();
-
-      return _lastSample;
+      _value = ((Number) value).doubleValue();
     } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
+      if (isOptional()
+          && (e instanceof InstanceNotFoundException
+              || e instanceof AttributeNotFoundException)) {
+        log.log(Level.FINEST, e.toString(), e);
+      }
+      else {
+        log.log(Level.FINE, e.toString(), e);
+      }
 
-      return 0;
+      _value = 0;
     }
+  }
+  
+  @Override
+  public double calculate()
+  {
+    return _value;
   }
   
   @Override
   public double peek()
   {
-    return _lastSample;
+    return _value;
+  }
+
+  public boolean isOptional()
+  {
+    return _isOptional;
+  }
+
+  public void setOptional(boolean optional)
+  {
+    _isOptional = optional;
   }
 }

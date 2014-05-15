@@ -29,11 +29,10 @@
 
 package com.caucho.quercus.lib.spl;
 
-import com.caucho.quercus.annotation.Hide;
-import com.caucho.quercus.annotation.Name;
 import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.annotation.This;
 import com.caucho.quercus.env.ArrayValue;
+import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.Callback;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.MethodIntern;
@@ -55,9 +54,6 @@ public class ArrayIterator
 {
   public static final int STD_PROP_LIST = 0x00000001;
   public static final int ARRAY_AS_PROPS = 0x00000002;
-  
-  private static final StringValue _rewind
-    = MethodIntern.intern("rewind");
 
   private Env _env;
   private Value _qThis;
@@ -66,24 +62,21 @@ public class ArrayIterator
 
   private java.util.Iterator<Map.Entry<Value,Value>> _iterator;
   private Map.Entry<Value, Value> _current;
-  
-  @Name("__construct")
-  public Value __construct(Env env,
-                           @This Value qThis,
-                           @Optional Value value,
-                           @Optional int flags)
+
+  public ArrayIterator(Env env,
+                       @This Value qThis,
+                       @Optional Value value,
+                       @Optional int flags)
   {
-    
     _env = env;
     _qThis = qThis;
 
-    if (value == null)
-      value = NullValue.NULL;
-    
+    if (value == null || value.isNull()) {
+      value = new ArrayValueImpl();
+    }
+
     _value = value;
     _flags = flags;
-
-    return qThis;
   }
 
   public void append(Value value)
@@ -99,9 +92,10 @@ public class ArrayIterator
       ArrayModule.asort(_env, (ArrayValue) _value, sortFlag);
   }
 
-  public int count()
+  @Override
+  public int count(Env env)
   {
-    return _value.getCount(_env);
+    return _value.getCount(env);
   }
 
   public Value current(Env env)
@@ -151,48 +145,54 @@ public class ArrayIterator
   public void next(Env env)
   {
     if (_iterator == null)
-      rewind();
-    
+      rewind(env);
+
     if (_iterator.hasNext())
       _current = _iterator.next();
     else
       _current = null;
   }
 
-  public boolean offsetExists(Value offset)
+  @Override
+  public boolean offsetExists(Env env, Value offset)
   {
     return _value.get(offset).isset();
   }
 
-  public Value offsetGet(Value offset)
+  @Override
+  public Value offsetGet(Env env, Value offset)
   {
     return _value.get(offset);
   }
 
-  public Value offsetSet(Value offset, Value value)
+  @Override
+  public Value offsetSet(Env env, Value offset, Value value)
   {
     return _value.put(offset, value);
   }
 
-  public Value offsetUnset(Value offset)
+  @Override
+  public Value offsetUnset(Env env, Value offset)
   {
     return _value.remove(offset);
   }
 
   public void rewindJava(Env env)
   {
-    if (_qThis != null)
-      _qThis.callMethod(env, _rewind);
-    else
-      rewind();
+    if (_qThis != null) {
+      _qThis.callMethod(env, env.createString("rewind"));
+    }
+    else {
+      rewind(env);
+    }
   }
 
   @Override
-  public void rewind()
+  public void rewind(Env env)
   {
     // php/4as8
     _iterator = _value.getBaseIterator(_env);
-    
+
     if (_iterator.hasNext())
       _current = _iterator.next();
     else
@@ -231,11 +231,11 @@ public class ArrayIterator
   }
 
   @Override
-  public boolean valid()
+  public boolean valid(Env env)
   {
     if (_iterator == null)
-      rewind();
-    
+      rewind(env);
+
     return _current != null;
   }
 
@@ -255,10 +255,10 @@ public class ArrayIterator
     throws IOException
   {
     String name = "ArrayIterator";
-    
+
     if (obj != null)
       name = obj.getClassName();
-    
+
     if ((_flags & STD_PROP_LIST) != 0) {
       // XXX:  env.getThis().varDumpObject(env, out, depth, valueSet);
     }

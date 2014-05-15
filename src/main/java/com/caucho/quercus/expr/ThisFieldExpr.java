@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -38,31 +38,28 @@ import com.caucho.quercus.env.Value;
 import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Var;
 import com.caucho.quercus.parser.QuercusParser;
-import com.caucho.quercus.program.InterpretedClassDef;
-import com.caucho.util.L10N;
+import com.caucho.quercus.program.ClassField;
 
 /**
  * Represents a PHP field reference.
  */
 public class ThisFieldExpr extends AbstractVarExpr {
-  private static final L10N L = new L10N(ThisFieldExpr.class);
-
   protected final ThisExpr _qThis;
-  
-  protected final StringValue _name;
 
-  public ThisFieldExpr(ThisExpr qThis, StringValue name)
+  protected StringValue _name;
+
+  protected boolean _isInit;
+
+  public ThisFieldExpr(Location location,
+                       ThisExpr qThis,
+                       StringValue name)
   {
+    super(location);
+
     _qThis = qThis;
     _name = name;
   }
 
-  private Value cannotUseThisError(Env env)
-  {
-    return env.error(getLocation(),
-                     "Cannot use '$this' when not in object context.");
-  }
-  
   //
   // function call creation
   //
@@ -77,8 +74,20 @@ public class ThisFieldExpr extends AbstractVarExpr {
     throws IOException
   {
     ExprFactory factory = parser.getExprFactory();
-    
-    return factory.createThisMethod(location, _qThis, _name.toString(), args);
+
+    return factory.createThisMethod(location,
+                                    _qThis, _name, args);
+  }
+
+  public void init()
+  {
+    /// XXX: have this called by QuercusParser after class parsing
+
+    ClassField entry = _qThis.getClassDef().getField(_name);
+
+    if (entry != null) {
+      _name = entry.getCanonicalName();
+    }
   }
 
   /**
@@ -90,14 +99,17 @@ public class ThisFieldExpr extends AbstractVarExpr {
    */
   public Value eval(Env env)
   {
+    init();
+
     Value obj = env.getThis();
 
-    if (obj.isNull())
-      return cannotUseThisError(env);
-    
+    if (obj.isNull()) {
+      return env.thisError(getLocation());
+    }
+
     return obj.getThisField(env, _name);
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -107,11 +119,14 @@ public class ThisFieldExpr extends AbstractVarExpr {
    */
   public Value evalCopy(Env env)
   {
+    init();
+
     Value obj = env.getThis();
 
-    if (obj.isNull())
-      return cannotUseThisError(env);
-    
+    if (obj.isNull()) {
+      return env.thisError(getLocation());
+    }
+
     return obj.getThisField(env, _name).copy();
   }
 
@@ -125,17 +140,19 @@ public class ThisFieldExpr extends AbstractVarExpr {
   @Override
   public Var evalVar(Env env)
   {
+    init();
+
     Value obj = env.getThis();
 
     if (obj.isNull()) {
-      cannotUseThisError(env);
-      
+      env.thisError(getLocation());
+
       return new Var();
     }
-    
+
     return obj.getThisFieldVar(env, _name);
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -146,14 +163,17 @@ public class ThisFieldExpr extends AbstractVarExpr {
   @Override
   public Value evalArg(Env env, boolean isTop)
   {
+    init();
+
     Value obj = env.getThis();
 
-    if (obj.isNull())
-      return cannotUseThisError(env);
-    
+    if (obj.isNull()) {
+      return env.thisError(getLocation());
+    }
+
     return obj.getThisFieldArg(env, _name);
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -164,16 +184,19 @@ public class ThisFieldExpr extends AbstractVarExpr {
   @Override
   public Value evalAssignValue(Env env, Value value)
   {
+    init();
+
     Value obj = env.getThis();
 
-    if (obj.isNull())
-      cannotUseThisError(env);
-    
+    if (obj.isNull()) {
+      return env.thisError(getLocation());
+    }
+
     obj.putThisField(env, _name, value);
-    
+
     return value;
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -184,31 +207,63 @@ public class ThisFieldExpr extends AbstractVarExpr {
   @Override
   public Value evalAssignRef(Env env, Value value)
   {
+    init();
+
     Value obj = env.getThis();
 
-    if (obj.isNull())
-      cannotUseThisError(env);
-    
+    if (obj.isNull()) {
+      return env.thisError(getLocation());
+    }
+
     obj.putThisField(env, _name, value);
-    
+
     return value;
   }
-  
+
   /**
    * Evaluates as an array index assign ($a[index] = value).
    */
   @Override
-  public Value evalArrayAssign(Env env, Value index, Value value)
+  public Value evalArrayAssign(Env env, Expr indexExpr, Expr valueExpr)
   {
+    init();
+
     Value obj = env.getThis();
 
-    if (obj.isNull())
-      cannotUseThisError(env);
-    
-    Value fieldVar = obj.getThisFieldVar(env, _name);
+    if (obj.isNull()) {
+      return env.thisError(getLocation());
+    }
 
-    // php/03mm
-    return fieldVar.put(index, value);
+    // php/044i
+    Value fieldVar = obj.getThisFieldArray(env, _name);
+    Value index = indexExpr.eval(env);
+
+    Value value = valueExpr.evalCopy(env);
+
+    return fieldVar.putThisFieldArray(env, obj, _name, index, value);
+  }
+
+  /**
+   * Evaluates as an array index assign ($a[index] = value).
+   */
+  @Override
+  public Value evalArrayAssignRef(Env env, Expr indexExpr, Expr valueExpr)
+  {
+    init();
+
+    Value obj = env.getThis();
+
+    if (obj.isNull()) {
+      return env.thisError(getLocation());
+    }
+
+    // php/044i
+    Value fieldVar = obj.getThisFieldArray(env, _name);
+    Value index = indexExpr.eval(env);
+
+    Value value = valueExpr.evalRef(env);
+
+    return fieldVar.putThisFieldArray(env, obj, _name, index, value);
   }
 
   /**
@@ -220,11 +275,14 @@ public class ThisFieldExpr extends AbstractVarExpr {
    */
   public Value evalArray(Env env)
   {
+    init();
+
     Value obj = env.getThis();
 
-    if (obj.isNull())
-      return cannotUseThisError(env);
-    
+    if (obj.isNull()) {
+      return env.thisError(getLocation());
+    }
+
     return obj.getThisFieldArray(env, _name);
   }
 
@@ -237,14 +295,17 @@ public class ThisFieldExpr extends AbstractVarExpr {
    */
   public Value evalObject(Env env)
   {
+    init();
+
     Value obj = env.getThis();
 
-    if (obj.isNull())
-      return cannotUseThisError(env);
-    
+    if (obj.isNull()) {
+      return env.thisError(getLocation());
+    }
+
     return obj.getThisFieldObject(env, _name);
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -254,14 +315,17 @@ public class ThisFieldExpr extends AbstractVarExpr {
    */
   public void evalUnset(Env env)
   {
+    init();
+
     Value obj = env.getThis();
 
-    if (obj.isNull())
-      cannotUseThisError(env);
-    
+    if (obj.isNull()) {
+      env.thisError(getLocation());
+    }
+
     obj.unsetThisField(_name);
   }
-  
+
   public String toString()
   {
     return "$this->" + _name;

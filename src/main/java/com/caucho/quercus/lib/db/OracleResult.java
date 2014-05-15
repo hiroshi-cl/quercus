@@ -29,23 +29,20 @@
 
 package com.caucho.quercus.lib.db;
 
-import com.caucho.util.L10N;
-
 import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.Value;
 
+import java.sql.Blob;
+import java.sql.Clob;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
-import java.sql.Statement;
-import java.util.logging.Logger;
-
+import java.sql.SQLException;
 
 /**
  * oracle result set class (postgres has NO object oriented API)
  */
 public class OracleResult extends JdbcResultResource {
-  private static final Logger log
-    = Logger.getLogger(OracleResult.class.getName());
-  private static final L10N L = new L10N(OracleResult.class);
+  private final Oracle _conn;
 
   /**
    * Constructor for OracleResult
@@ -54,12 +51,11 @@ public class OracleResult extends JdbcResultResource {
    * @param rs the corresponding result set
    * @param conn the corresponding connection
    */
-  public OracleResult(Env env,
-                      Statement stmt,
-                      ResultSet rs,
-                      Oracle conn)
+  public OracleResult(ResultSet rs, Oracle conn)
   {
-    super(env, stmt, rs, conn);
+    super(rs);
+
+    _conn = conn;
   }
 
   /**
@@ -68,10 +64,40 @@ public class OracleResult extends JdbcResultResource {
    * @param metaData the corresponding result set meta data
    * @param conn the corresponding connection
    */
-  public OracleResult(Env env,
-                      ResultSetMetaData metaData,
-                      Oracle conn)
+  public OracleResult(ResultSetMetaData metaData, Oracle conn)
   {
-    super(env, metaData, conn);
+    super(metaData);
+
+    _conn = conn;
+  }
+
+  @Override
+  protected Value getBlobValue(Env env,
+                               ResultSet rs,
+                               ResultSetMetaData metaData,
+                               int column)
+    throws SQLException
+  {
+    Blob object = rs.getBlob(column);
+    OracleOciLob ociLob = new OracleOciLob(_conn,
+                                           OracleModule.OCI_D_LOB);
+    ociLob.setLob(object);
+
+    return env.wrapJava(ociLob);
+  }
+
+  @Override
+  protected Value getClobValue(Env env,
+                               ResultSet rs,
+                               ResultSetMetaData metaData,
+                               int column)
+    throws SQLException
+  {
+    Clob clob = rs.getClob(column);
+    OracleOciLob ociLob = new OracleOciLob(_conn,
+                                           OracleModule.OCI_D_LOB);
+    ociLob.setLob(clob);
+
+    return env.wrapJava(ociLob);
   }
 }

@@ -30,21 +30,20 @@
 package com.caucho.quercus.env;
 
 import com.caucho.quercus.function.AbstractFunction;
+import com.caucho.quercus.program.Arg;
 
 /**
  * Represents a call to a function.
  */
+@SuppressWarnings("serial")
 public class CallbackFunction extends Callback {
   // public static final CallbackFunction INVALID_CALLBACK
   // = new CallbackFunction(null, "Invalid Callback");
 
-  private String _funName;
-
+  private StringValue _funName;
   private AbstractFunction _fun;
 
- // private boolean _isInvalid = false;
-
-  public CallbackFunction(Env env, String funName)
+  public CallbackFunction(Env env, StringValue funName)
   {
     _funName = funName;
   }
@@ -54,7 +53,7 @@ public class CallbackFunction extends Callback {
     _fun = fun;
   }
 
-  public CallbackFunction(AbstractFunction fun, String funName)
+  public CallbackFunction(AbstractFunction fun, StringValue funName)
   {
     _fun = fun;
     _funName = funName;
@@ -67,30 +66,31 @@ public class CallbackFunction extends Callback {
   {
     _fun = fun;
   }
-  
+
   @Override
   public boolean isValid(Env env)
   {
-    if (_fun != null)
+    if (_fun != null) {
       return true;
+    }
 
-    return env.findFunction(_funName) != null;
+    _fun = env.findFunction(_funName);
 
-    //return _isInvalid;
+    return _fun != null;
   }
-  
+
   /**
    * Serializes the value.
    */
   public void serialize(Env env, StringBuilder sb)
   {
-    String name;
-    
+    CharSequence name;
+
     if (_fun != null)
       name = _fun.getName();
     else
       name = _funName;
-    
+
     sb.append("S:");
     sb.append(name.length());
     sb.append(":\"");
@@ -174,13 +174,14 @@ public class CallbackFunction extends Callback {
 
   public String getCallbackName()
   {
-    return _funName;
+    return _funName.toString();
   }
 
   public AbstractFunction getFunction(Env env)
   {
-    if (_fun == null)
+    if (_fun == null) {
       _fun = env.getFunction(_funName);
+    }
 
     return _fun;
   }
@@ -190,11 +191,48 @@ public class CallbackFunction extends Callback {
   {
     return getFunction(env) instanceof JavaInvoker;
   }
-  
+
+  @Override
+  public String getDeclFileName(Env env)
+  {
+    return getFunction(env).getDeclFileName(env);
+  }
+
+  @Override
+  public int getDeclStartLine(Env env)
+  {
+    return getFunction(env).getDeclStartLine(env);
+  }
+
+  @Override
+  public int getDeclEndLine(Env env)
+  {
+    return getFunction(env).getDeclEndLine(env);
+  }
+
+  @Override
+  public String getDeclComment(Env env)
+  {
+    return getFunction(env).getDeclComment(env);
+  }
+
+  @Override
+  public boolean isReturnsReference(Env env)
+  {
+    return getFunction(env).isReturnsReference(env);
+  }
+
+  @Override
+  public Arg []getArgs(Env env)
+  {
+    return getFunction(env).getArgs(env);
+  }
+
   /**
    * Exports the value.
    */
-  public void varExport(StringBuilder sb)
+  @Override
+  protected void varExportImpl(StringValue sb, int level)
   {
     sb.append("'' . \"\\0\" . '" + _funName.substring(1) + "'");
   }

@@ -57,6 +57,7 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 import javax.el.MethodExpression;
+import javax.enterprise.inject.spi.Bean;
 
 import org.w3c.dom.Node;
 
@@ -71,6 +72,7 @@ import com.caucho.config.program.ContainerProgram;
 import com.caucho.config.program.PropertyStringProgram;
 import com.caucho.config.types.AnnotationConfig;
 import com.caucho.config.types.RawString;
+import com.caucho.config.util.ClassLoadUtil;
 import com.caucho.config.xml.XmlBeanConfig;
 import com.caucho.config.xml.XmlBeanType;
 import com.caucho.el.Expr;
@@ -80,6 +82,7 @@ import com.caucho.loader.Environment;
 import com.caucho.loader.EnvironmentBean;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentLocal;
+import com.caucho.loader.RootDynamicClassLoader;
 import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
 import com.caucho.util.QDate;
@@ -306,8 +309,10 @@ public class TypeFactory implements AddLoaderListener
       }
     }
 
+    /*
     if (RESIN_NS.equals(uri))
       uri = "urn:java:ee";
+      */
 
     if (uri != null && uri.startsWith("urn:java:")) {
       String pkg = uri.substring("urn:java:".length());
@@ -458,11 +463,18 @@ public class TypeFactory implements AddLoaderListener
     if (cl == null) {
       cl = loadClassImpl(pkg, name, loader);
       
-      if (cl != null)
-        putUrnClass(urnName, cl, cl.getClassLoader());
+      // save negative lookups
+      if (cl == null) {
+        cl = void.class;
+      }
+      
+      putUrnClass(urnName, cl, cl.getClassLoader());
     }
     
-    return cl;
+    if (cl == void.class)
+      return null;
+    else
+      return cl;
   }
   
   private Class<?> findUrnClass(String urnName, ClassLoader loader)
@@ -472,7 +484,7 @@ public class TypeFactory implements AddLoaderListener
       
       Class<?> cl = factory._urnClassMap.get(urnName);
       
-      if (cl != null)
+      if (cl != null && cl != void.class)
         return cl;
     }
     
@@ -501,10 +513,14 @@ public class TypeFactory implements AddLoaderListener
         
         String className = pkgName + '.' + name;
 
-        if (dynLoader != null)
+        if (dynLoader != null) {
+          dynLoader.updateScan();
+
           cl = dynLoader.loadClassImpl(className, false);
-        else
-          cl = Class.forName(className, false, loader);
+        }
+        else {
+          cl = ClassLoadUtil.load(className, loader);
+        }
 
         if (cl != null)
           return cl;
@@ -591,10 +607,11 @@ public class TypeFactory implements AddLoaderListener
         throw ConfigException.create(e);
       }
     }
+    else if (Enum.class.isAssignableFrom(type)) {
+      return new EnumType(type);
+    }
     else if ((editor = findEditor(type)) != null)
       return new PropertyEditorType(type, editor);
-    else if (type.getEnumConstants() != null)
-      return new EnumType(type);
     else if (Set.class.isAssignableFrom(type))
       return new SetType(type);
     else if (Collection.class.isAssignableFrom(type)
@@ -736,7 +753,7 @@ public class TypeFactory implements AddLoaderListener
 
     try {
       ClassLoader loader = Thread.currentThread().getContextClassLoader();
-      Class<?> cl = Class.forName(typeName, false, loader);
+      Class<?> cl = ClassLoadUtil.load(typeName, loader);
 
       if (! api.isAssignableFrom(cl))
         throw new ConfigException(L.l("'{0}' is not assignable to '{1}' for scheme '{2}'",
@@ -772,7 +789,7 @@ public class TypeFactory implements AddLoaderListener
 
     try {
       ClassLoader loader = Thread.currentThread().getContextClassLoader();
-      Class<?> cl = Class.forName(typeName, false, loader);
+      Class<?> cl = ClassLoadUtil.load(typeName, loader);
 
       if (! api.isAssignableFrom(cl))
         throw new ConfigException(L.l("'{0}' is not assignable to '{1}' for scheme '{2}'",
@@ -852,7 +869,7 @@ public class TypeFactory implements AddLoaderListener
       String type = entry.getValue();
 
       try {
-        Class cl = Class.forName(type, false, loader);
+        Class<?> cl = ClassLoadUtil.load(type, loader);
 
         if (cl != null)
           schemes.add(scheme);
@@ -969,9 +986,13 @@ public class TypeFactory implements AddLoaderListener
     _nsMap.put(ns.getName(), ns);
   }
 
+  @Override
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _loader + "]";
+  }
+  
+  private static class NullClass {
   }
 
   static {
@@ -1018,13 +1039,15 @@ public class TypeFactory implements AddLoaderListener
 
     _primitiveTypes.put(MethodExpression.class, MethodExpressionType.TYPE);
 
+    /*
     ClassLoader systemClassLoader = null;
 
     try {
       systemClassLoader = ClassLoader.getSystemClassLoader();
     } catch (Exception e) {
     }
+    */
 
-    _systemClassLoader = systemClassLoader;
+    _systemClassLoader = RootDynamicClassLoader.getSystemRootClassLoader();
   }
 }

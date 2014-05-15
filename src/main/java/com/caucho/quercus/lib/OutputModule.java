@@ -29,20 +29,27 @@
 
 package com.caucho.quercus.lib;
 
+import com.caucho.quercus.annotation.Hide;
 import com.caucho.quercus.annotation.Optional;
-import com.caucho.quercus.env.*;
+import com.caucho.quercus.env.ArrayValue;
+import com.caucho.quercus.env.ArrayValueImpl;
+import com.caucho.quercus.env.BooleanValue;
+import com.caucho.quercus.env.Callable;
+import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.LongValue;
+import com.caucho.quercus.env.NullValue;
+import com.caucho.quercus.env.OutputBuffer;
+import com.caucho.quercus.env.StringBuilderOutputStream;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.Value;
 import com.caucho.quercus.module.AbstractQuercusModule;
 import com.caucho.quercus.module.ModuleStartupListener;
 import com.caucho.quercus.module.IniDefinitions;
 import com.caucho.quercus.module.IniDefinition;
 import com.caucho.util.L10N;
-import com.caucho.vfs.StreamImplOutputStream;
-import com.caucho.vfs.TempStream;
-import com.caucho.vfs.TempBuffer;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.HashMap;
 import java.util.logging.Logger;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.GZIPOutputStream;
@@ -50,14 +57,11 @@ import java.util.zip.GZIPOutputStream;
 /**
  * PHP output routines.
  */
-public class OutputModule extends AbstractQuercusModule 
+public class OutputModule extends AbstractQuercusModule
   implements ModuleStartupListener {
   private static final L10N L = new L10N(OutputModule.class);
   private static final Logger log = Logger.getLogger(
       OutputModule.class.getName());
-
-  private static final StringValue HTTP_ACCEPT_ENCODING
-    = new ConstStringValue("HTTP_ACCEPT_ENCODING");
 
   private static final IniDefinitions _iniDefinitions = new IniDefinitions();
 
@@ -69,13 +73,10 @@ public class OutputModule extends AbstractQuercusModule
     public OutputStream _outputStream;
   }
 
-  private static HashMap<Env,GZOutputPair> _gzOutputPairs 
-    = new HashMap<Env,GZOutputPair>();
-
   public static final int PHP_OUTPUT_HANDLER_START = 1;
   public static final int PHP_OUTPUT_HANDLER_CONT = 2;
   public static final int PHP_OUTPUT_HANDLER_END = 4;
-  
+
   /**
    * Returns the default php.ini values.
    */
@@ -84,18 +85,18 @@ public class OutputModule extends AbstractQuercusModule
     return _iniDefinitions;
   }
 
+  @Hide
   public void startup(Env env)
   {
     boolean isOutputBuffering = INI_OUTPUT_BUFFERING.getAsBoolean(env);
-    String handlerName = INI_OUTPUT_HANDLER.getAsString(env);
+    StringValue handlerName = INI_OUTPUT_HANDLER.getAsStringValue(env);
 
-    if (handlerName != null
-        && ! "".equals(handlerName)
-        && env.getFunction(handlerName) != null) {
-      Callable callback = env.createString(handlerName).toCallable(env);
+    if (handlerName.length() > 0 && env.getFunction(handlerName) != null) {
+      Callable callback = handlerName.toCallable(env, false);
 
       ob_start(env, callback, 0, true);
-    } else if (isOutputBuffering) {
+    }
+    else if (isOutputBuffering) {
       ob_start(env, null, 0, true);
     }
 
@@ -225,7 +226,7 @@ public class OutputModule extends AbstractQuercusModule
       ob.flush();
 
       return BooleanValue.TRUE;
-    } 
+    }
     else
       return BooleanValue.FALSE;
   }
@@ -271,12 +272,12 @@ public class OutputModule extends AbstractQuercusModule
 
     Callable callback = ob.getCallback();
 
-    if (callback != null) 
+    if (callback != null)
       handlers.put(env.createString(callback.getCallbackName()));
     else
       handlers.put(env.createString("default output handler"));
   }
-  
+
   /**
    * Returns a list of all the output handlers in use.
    */
@@ -313,16 +314,16 @@ public class OutputModule extends AbstractQuercusModule
       name = callback.getCallbackName();
     else
       name = "default output handler".intern();
-    
+
     // XXX: there appears to be only one "internal" callback
     if (name.equals("URL-Rewriter"))
       type = LongValue.ZERO;
-    
+
     element.put(env.createString("type"), type);
 
     // the rewriter is a special case where it includes a field
-    // "buffer_size" right in the middle of the common elements, 
-    // but only when called with full status.  It appears always 
+    // "buffer_size" right in the middle of the common elements,
+    // but only when called with full status.  It appears always
     // to be 0 and there is no interface to change this buffer_size
     // and no indication of its meaning.
     if (fullStatus && callback != null
@@ -330,11 +331,11 @@ public class OutputModule extends AbstractQuercusModule
       element.put(env.createString("buffer_size"), LongValue.ZERO);
 
     // Technically, there are supposed to be three possible values
-    // for status: 
+    // for status:
     //   0 if the stream has never been flushed (PHP_OUTPUT_HANDLER_START)
     //   1 if the stream has been flushed (PHP_OUTPUT_HANDLER_CONT)
     //   2 if the stream was flushed at the end (PHP_OUTPUT_HANDLER_END)
-    // However, there is no way to access the buffer after it has ended, 
+    // However, there is no way to access the buffer after it has ended,
     // so the final case doesn't seem to be an issue!  (Even calling
     // ob_get_status() in the handler on a ob_end_flush() does not
     // invoke this state.)
@@ -347,7 +348,7 @@ public class OutputModule extends AbstractQuercusModule
 
     Value del = ob.getEraseFlag() ? BooleanValue.TRUE
         : BooleanValue.FALSE;
-    
+
     element.put(env.createString("del"), del);
   }
 
@@ -366,21 +367,21 @@ public class OutputModule extends AbstractQuercusModule
 
     element.put(env.createString("chunk_size"),
                 LongValue.create(ob.getChunkSize()));
-    
-    // XXX: Not sure why we even need to list a size -- PHP doesn't 
-    // even seem to respect it.  -1 => infinity?  
+
+    // XXX: Not sure why we even need to list a size -- PHP doesn't
+    // even seem to respect it.  -1 => infinity?
     // (Note: "size" == "capacity")
     element.put(env.createString("size"), LongValue.create(-1));
     element.put(env.createString("block_size"), LongValue.create(-1));
 
     putCommonStatus(element, ob, env, true);
-   
+
     result.put(element);
   }
 
   /**
    * Gets the status of the current output buffer(s)
-   */ 
+   */
   public static Value ob_get_status(Env env, @Optional boolean full_status)
   {
     if (full_status) {
@@ -425,21 +426,23 @@ public class OutputModule extends AbstractQuercusModule
                                  @Optional int chunkSize,
                                  @Optional("true") boolean erase)
   {
-    if (callback != null
-        && callback.getCallbackName().equals("ob_gzhandler")) {
+    if (callback != null && ! callback.isValid(env)) {
+      return false;
+    }
+
+    if (callback != null && callback.getCallbackName().equals("ob_gzhandler")) {
       OutputBuffer ob = env.getOutputBuffer();
 
       for (; ob != null; ob = ob.getNext()) {
         Callable cb = ob.getCallback();
 
         if (cb.getCallbackName().equals("ob_gzhandler")) {
-          env.warning(
-              L.l("output handler 'ob_gzhandler' cannot be used twice"));
+          env.warning(L.l("output handler 'ob_gzhandler' cannot be used twice"));
           return false;
         }
       }
     }
-    
+
     env.pushOutputBuffer(callback, chunkSize, erase);
 
     return true;
@@ -461,7 +464,7 @@ public class OutputModule extends AbstractQuercusModule
       // its callback is null
       if (ob != null && ob.getCallback() == null)
         ob.setCallback(rewriter);
-      else 
+      else
         ob_start(env, rewriter, 0, true);
     }
 
@@ -471,11 +474,11 @@ public class OutputModule extends AbstractQuercusModule
   /**
    * Adds a variable to the list for rewritten URLs.
    */
-  public static boolean output_add_rewrite_var(Env env, 
+  public static boolean output_add_rewrite_var(Env env,
                                                String name, String value)
   {
     UrlRewriterCallback rewriter = pushUrlRewriter(env);
-   
+
     rewriter.addRewriterVar(name, value);
 
     return true;
@@ -486,7 +489,7 @@ public class OutputModule extends AbstractQuercusModule
    */
   public static boolean output_reset_rewrite_vars(Env env)
   {
-    UrlRewriterCallback rewriter = UrlRewriterCallback.getInstance(env); 
+    UrlRewriterCallback rewriter = UrlRewriterCallback.getInstance(env);
 
     rewriter.resetRewriterVars();
 
@@ -495,10 +498,10 @@ public class OutputModule extends AbstractQuercusModule
 
   /**
    * Output buffering compatible callback that automatically compresses
-   * the output.  The output of this function depends on the value of 
+   * the output.  The output of this function depends on the value of
    * state.  Specifically, if the PHP_OUTPUT_HANDLER_START bit is on
    * in the state field, the function supplies a header with the output
-   * and initializes a gzip/deflate stream which will be used for 
+   * and initializes a gzip/deflate stream which will be used for
    * subsequent calls.
    */
   public static Value ob_gzhandler(Env env, StringValue buffer, int state)
@@ -507,7 +510,7 @@ public class OutputModule extends AbstractQuercusModule
     Value _SERVER = env.getGlobalVar("_SERVER");
 
     String [] acceptedList
-      = _SERVER.get(HTTP_ACCEPT_ENCODING).toString().split(",");
+      = _SERVER.get(env.createString("HTTP_ACCEPT_ENCODING")).toString().split(",");
 
     for (String accepted : acceptedList) {
       accepted = accepted.trim();
@@ -527,7 +530,7 @@ public class OutputModule extends AbstractQuercusModule
     GZOutputPair pair = null;
 
     StringValue result = env.createBinaryBuilder();
-    
+
     if ((state & (PHP_OUTPUT_HANDLER_START)) != 0) {
       HttpModule.header(
           env, env.createString("Vary: Accept-Encoding"), true, 0);
@@ -557,13 +560,13 @@ public class OutputModule extends AbstractQuercusModule
       env.setGzStream(pair);
     } else {
       pair = (GZOutputPair) env.getGzStream();
-      
+
       if (pair == null)
         return BooleanValue.FALSE;
-      
+
       pair._tempStream.setStringBuilder(result);
     }
-    
+
     try {
       buffer.writeTo(pair._outputStream);
       pair._outputStream.flush();

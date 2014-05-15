@@ -32,6 +32,8 @@ import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -44,7 +46,7 @@ import com.caucho.config.ConfigException;
 public final class HostUtil {
   private static final Logger log = Logger.getLogger(HostUtil.class.getName());
   
-  private static final TimedCache _cache = new TimedCache(128, 2000);
+  private static final TimedCache<String,ArrayList<NetworkInterface>> _cache;
   
   private HostUtil() {}
   
@@ -59,33 +61,39 @@ public final class HostUtil {
     }
     
     for (InetAddress addr : getLocalAddresses()) {
-      if (isPrivateNetwork(addr))
+      if (isPrivateNetwork(addr)) {
         return addr.getHostAddress();
+      }
     }
-    /*
-    for (InetAddress addr : getLocalAddresses()) {
-      if (isLinkLocalNetwork(addr))
-        return addr.getHostAddress();
-    }
-    */
     
     return "127.0.0.1";
   }
   
+  public static String getLocalHostAddress()
+  {
+    for (InetAddress addr : getLocalAddresses()) {
+      if (isPrivateNetwork(addr)) {
+        return addr.getHostAddress();
+      }
+    }
+    
+    return "127.0.0.1";
+  }
+
   public static boolean isPrivateNetwork(InetAddress addr)
   {
     byte []bytes = addr.getAddress();
-    
+
     if (bytes.length != 4)
       return false;
     
     if (bytes[0] == 10)
       return true;
     
-    if (bytes[0] == 172 && bytes[1] >= 16 &&  bytes[1] <= 31)
+    if ((bytes[0] & 0xff) == 172 && 16 <= bytes[1] &&  bytes[1] <= 31)
       return true;
         
-    if (bytes[0] == 192 && bytes[1] == 168)
+    if ((bytes[0] & 0xff) == 192 && (bytes[1] & 0xff) == 168)
       return true;
 
     return false;
@@ -98,7 +106,7 @@ public final class HostUtil {
     if (bytes.length != 4)
       return false;
     
-    if (bytes[0] == 169 && bytes[1] == 254)
+    if ((bytes[0] & 0xff) == 169 && (bytes[1] & 0xff) == 254)
       return true;
 
     return false;
@@ -108,41 +116,25 @@ public final class HostUtil {
   {
     ArrayList<InetAddress> localAddresses = new ArrayList<InetAddress>();
     
-    try {
-      for (NetworkInterface iface : getNetworkInterfaces()) {
-        Enumeration<InetAddress> addrEnum = iface.getInetAddresses();
+    synchronized (HostUtil.class) {
+      try {
+        for (NetworkInterface iface : getNetworkInterfaces()) {
+          Enumeration<InetAddress> addrEnum = iface.getInetAddresses();
       
-        while (addrEnum.hasMoreElements()) {
-          InetAddress addr = addrEnum.nextElement();
+          while (addrEnum.hasMoreElements()) {
+            InetAddress addr = addrEnum.nextElement();
         
-          localAddresses.add(addr);
+            localAddresses.add(addr);
+          }
         }
+      } catch (Exception e) {
+        log.log(Level.WARNING, e.toString(), e);
       }
-    } catch (Exception e) {
-      log.log(Level.WARNING, e.toString(), e);
     }
+    
+    Collections.sort(localAddresses, new LocalIpCompare());
     
     return localAddresses;
-  }
-  
-  private boolean isLocalAddress(ArrayList<InetAddress> localAddresses,
-                                 String address)
-  {
-    if (address == null || "".equals(address))
-      return false;
-    
-    try {
-      InetAddress addr = InetAddress.getByName(address);
-      
-      if (localAddresses.contains(addr))
-        return true;
-    } catch (Exception e) {
-      log.log(Level.FINER, e.toString(), e);
-      
-      return false;
-    }
-    
-    return false;
   }
 
   /**
@@ -174,5 +166,49 @@ public final class HostUtil {
     }
 
     return new ArrayList<NetworkInterface>(interfaceList);
+  }
+  
+  static class LocalIpCompare implements Comparator<InetAddress>
+  {
+    @Override
+    public int compare(InetAddress a, InetAddress b)
+    {
+      byte []bytesA = a.getAddress();
+      byte []bytesB = b.getAddress();
+      
+      if (bytesA[0] == bytesB[0]) {
+      }
+      else if (bytesA[0] == 0) {
+        return 1;
+      }
+      else if (bytesB[0] == 0) {
+        return -1;
+      }
+      else if (bytesA[0] == 127) {
+        return 1;
+      }
+      else if (bytesB[0] == 127) {
+        return -1;
+      }
+      
+      if (bytesA.length != bytesB.length) {
+        return bytesA.length - bytesB.length;
+      }
+      
+      for (int i = 0; i < bytesA.length; i++) {
+        if (bytesA[i] != bytesB[i]) {
+          return bytesA[i] - bytesB[i];
+        }
+      }
+
+      return 0;
+    }
+    
+  }
+  
+  static {
+    long timeout = CurrentTime.isTest() ? Integer.MAX_VALUE : 120000;
+  
+    _cache = new TimedCache<String,ArrayList<NetworkInterface>>(128, timeout);
   }
 }

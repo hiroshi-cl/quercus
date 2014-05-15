@@ -93,7 +93,7 @@ public class ReflectionExtension
 
       if (extensionSet.contains(_name)) {
         for (String functionName : moduleInfo.getFunctions().keySet()) {
-          AbstractFunction fun = env.findFunction(functionName);
+          AbstractFunction fun = env.findFunction(env.createString(functionName));
 
           array.put(env.wrapJava(new ReflectionFunction(fun)));
         }
@@ -178,6 +178,6 @@ public class ReflectionExtension
 
   public String toString()
   {
-    return "ReflectionExtension[" + _name + "]";
+    return getClass().getSimpleName() + "[" + _name + "]";
   }
 }

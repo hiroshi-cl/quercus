@@ -65,6 +65,7 @@ public class BinaryInstanceOfExpr extends AbstractUnaryExpr {
   /**
    * Evaluates the equality as a boolean.
    */
+  @Override
   public Value eval(Env env)
   {
     return evalBoolean(env) ? BooleanValue.TRUE : BooleanValue.FALSE;
@@ -75,8 +76,10 @@ public class BinaryInstanceOfExpr extends AbstractUnaryExpr {
    */
   public boolean evalBoolean(Env env)
   {
+    Value obj = _expr.eval(env);
+
     // php/03p1
-    return _expr.eval(env).isA(_right);
+    return obj.isA(env, _right);
   }
 
   public String toString()

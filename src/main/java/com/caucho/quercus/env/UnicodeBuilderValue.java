@@ -33,6 +33,7 @@ import com.caucho.quercus.QuercusModuleException;
 import com.caucho.vfs.*;
 
 import java.io.*;
+import java.util.Locale;
 
 /**
  * Represents a PHP string value.
@@ -152,12 +153,12 @@ public class UnicodeBuilderValue
   public UnicodeBuilderValue(StringBuilderValue v, boolean isCopy)
   {
     byte []vBuffer = v.getBuffer();
-    int vOffset = v.getOffset();
-    
+    int vOffset = v.length();
+
     _buffer = new char[vBuffer.length];
-    
+
     System.arraycopy(vBuffer, 0, _buffer, 0, vOffset);
-    
+
     _length = vOffset;
   }
 
@@ -554,6 +555,9 @@ public class UnicodeBuilderValue
     int i = 0;
     int ch = buffer[i];
     if (ch == '-') {
+      if (len == 1)
+        return this;
+
       sign = -1;
       i++;
     }
@@ -630,25 +634,18 @@ public class UnicodeBuilderValue
   }
 
   /**
-   * Returns the offset.
+   * Sets the length.
    */
-  public int getOffset()
+  @Override
+  public final void setLength(int length)
   {
-    return _length;
-  }
-
-  /**
-   * Sets the offset.
-   */
-  public void setOffset(int offset)
-  {
-    _length = offset;
+    _length = length;
   }
 
   /**
    * Returns the current capacity.
    */
-  public int getLength()
+  public final int getBufferLength()
   {
     return _buffer.length;
   }
@@ -774,7 +771,7 @@ public class UnicodeBuilderValue
   /**
    * Returns the length of the string.
    */
-  public int length()
+  public final int length()
   {
     return _length;
   }
@@ -813,7 +810,7 @@ public class UnicodeBuilderValue
    * Convert to lower case.
    */
   @Override
-  public StringValue toLowerCase()
+  public StringValue toLowerCase(Locale locale)
   {
     int length = _length;
 
@@ -1252,30 +1249,54 @@ public class UnicodeBuilderValue
     }
 
     ValueType typeA = getValueType();
+
     if (typeA.isNumberCmp() && typeB.isNumberCmp()) {
       double l = toDouble();
       double r = rValue.toDouble();
 
       return l == r;
     }
-
-    if (rValue instanceof UnicodeBuilderValue) {
+    else if (rValue instanceof UnicodeBuilderValue) {
       UnicodeBuilderValue value = (UnicodeBuilderValue) rValue;
 
       int length = _length;
 
-      if (length != value._length)
+      if (length != value._length) {
         return false;
+      }
 
       char []bufferA = _buffer;
       char []bufferB = value._buffer;
 
       for (int i = length - 1; i >= 0; i--) {
-        if (bufferA[i] != bufferB[i])
+        if (bufferA[i] != bufferB[i]) {
           return false;
+        }
       }
 
       return true;
+    }
+    else if (rValue instanceof StringValue) {
+      StringValue value = (StringValue) rValue;
+
+      int length = _length;
+
+      if (length != value.length()) {
+        return false;
+      }
+
+      char []buffer = _buffer;
+
+      for (int i = length - 1; i >= 0; i--) {
+        if (buffer[i] != value.charAt(i)) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+    else if (rValue.isObject()) {
+      return super.eq(rValue);
     }
     else {
       String rString = rValue.toString();
@@ -1283,11 +1304,11 @@ public class UnicodeBuilderValue
       int len = rString.length();
 
       if (_length != len)
-    return false;
+        return false;
 
       for (int i = len - 1; i >= 0; i--) {
-    if (_buffer[i] != rString.charAt(i))
-      return false;
+        if (_buffer[i] != rString.charAt(i))
+          return false;
       }
 
       return true;
@@ -1297,16 +1318,18 @@ public class UnicodeBuilderValue
   @Override
   public boolean equals(Object o)
   {
-    if (o == this)
+    if (o == this) {
       return true;
+    }
 
     if (o instanceof UnicodeBuilderValue) {
       UnicodeBuilderValue value = (UnicodeBuilderValue) o;
 
       int length = _length;
 
-      if (length != value._length)
+      if (length != value._length) {
         return false;
+      }
 
       char []bufferA = _buffer;
       char []bufferB = value._buffer;
@@ -1314,6 +1337,25 @@ public class UnicodeBuilderValue
       for (int i = length - 1; i >= 0; i--) {
         if (bufferA[i] != bufferB[i])
           return false;
+      }
+
+      return true;
+    }
+    else if (o instanceof StringValue) {
+      StringValue str = (StringValue) o;
+
+      int len = _length;
+
+      if (len != str.length()) {
+        return false;
+      }
+
+      char []buffer = _buffer;
+
+      for (int i = len - 1; i >= 0; i--) {
+        if (buffer[i] != str.charAt(i)) {
+          return false;
+        }
       }
 
       return true;
@@ -1325,8 +1367,9 @@ public class UnicodeBuilderValue
       return value.equals(this);
     }
     */
-    else
+    else {
       return false;
+    }
   }
 
   @Override
@@ -1334,29 +1377,52 @@ public class UnicodeBuilderValue
   {
     o = o.toValue();
 
-    if (o == this)
+    if (o == this) {
       return true;
+    }
 
     if (o instanceof UnicodeBuilderValue) {
       UnicodeBuilderValue value = (UnicodeBuilderValue) o;
 
       int length = _length;
 
-      if (length != value._length)
+      if (length != value._length) {
         return false;
+      }
 
       char []bufferA = _buffer;
       char []bufferB = value._buffer;
 
       for (int i = length - 1; i >= 0; i--) {
-        if (bufferA[i] != bufferB[i])
+        if (bufferA[i] != bufferB[i]) {
           return false;
+        }
       }
 
       return true;
     }
-    else
+    else if (o instanceof StringValue) {
+      StringValue str = (StringValue) o;
+
+      int length = _length;
+
+      if (length != str.length()) {
+        return false;
+      }
+
+      char []buffer = _buffer;
+
+      for (int i = length - 1; i >= 0; i--) {
+        if (buffer[i] != str.charAt(i)) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+    else {
       return false;
+    }
   }
 
   private void readObject(ObjectInputStream in)

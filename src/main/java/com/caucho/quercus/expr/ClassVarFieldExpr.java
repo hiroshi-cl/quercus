@@ -51,13 +51,13 @@ public class ClassVarFieldExpr extends AbstractVarExpr {
   protected final Expr _className;
   protected final StringValue _varName;
 
-  public ClassVarFieldExpr(Expr className, String varName)
+  public ClassVarFieldExpr(Expr className, StringValue varName)
   {
     _className = className;
 
-    _varName = MethodIntern.intern(varName);
+    _varName = varName;
   }
-  
+
   //
   // function call creation
   //
@@ -72,8 +72,8 @@ public class ClassVarFieldExpr extends AbstractVarExpr {
     throws IOException
   {
     ExprFactory factory = parser.getExprFactory();
-    Expr var = parser.createVar(_varName.toString());
-    
+    Expr var = parser.createVar(_varName);
+
     return factory.createClassMethodCall(location, _className, var, args);
   }
 
@@ -87,11 +87,9 @@ public class ClassVarFieldExpr extends AbstractVarExpr {
   @Override
   public Value eval(Env env)
   {
-    String className = _className.evalString(env);
+    QuercusClass cls = _className.evalQuercusClass(env);
 
-    QuercusClass qClass = env.getClass(className);
-    
-    return qClass.getStaticFieldValue(env, _varName);
+    return cls.getStaticFieldValue(env, _varName);
   }
 
   /**
@@ -104,11 +102,9 @@ public class ClassVarFieldExpr extends AbstractVarExpr {
   @Override
   public Var evalVar(Env env)
   {
-    String className = _className.evalString(env);
+    QuercusClass cls = _className.evalQuercusClass(env);
 
-    QuercusClass qClass = env.getClass(className);
-    
-    return qClass.getStaticFieldVar(env, _varName);
+    return cls.getStaticFieldVar(env, _varName);
   }
 
   /**
@@ -121,11 +117,9 @@ public class ClassVarFieldExpr extends AbstractVarExpr {
   @Override
   public Value evalAssignRef(Env env, Value value)
   {
-    String className = _className.evalString(env);
+    QuercusClass cls = _className.evalQuercusClass(env);
 
-    QuercusClass qClass = env.getClass(className);
-    
-    return qClass.setStaticFieldRef(env, _varName, value);
+    return cls.setStaticFieldRef(env, _varName, value);
   }
 
   /**
@@ -138,9 +132,9 @@ public class ClassVarFieldExpr extends AbstractVarExpr {
   @Override
   public void evalUnset(Env env)
   {
-    env.error(getLocation(),
-              L.l("{0}::${1}: Cannot unset static variables.",
-                  _className, _varName));
+    env.error(L.l("{0}::${1}: Cannot unset static variables.",
+                  _className, _varName),
+              getLocation());
   }
 
   public String toString()

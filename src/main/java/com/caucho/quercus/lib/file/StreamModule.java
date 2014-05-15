@@ -29,16 +29,26 @@
 
 package com.caucho.quercus.lib.file;
 
-import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.annotation.NotNull;
 import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.ReadOnly;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
-import com.caucho.quercus.env.*;
+import com.caucho.quercus.env.ArrayValue;
+import com.caucho.quercus.env.ArrayValueImpl;
+import com.caucho.quercus.env.BooleanValue;
+import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.LongValue;
+import com.caucho.quercus.env.QuercusClass;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.Value;
 import com.caucho.quercus.lib.file.SocketInputOutput.Domain;
 import com.caucho.quercus.module.AbstractQuercusModule;
 import com.caucho.quercus.resources.StreamContextResource;
 import com.caucho.util.L10N;
+import com.caucho.vfs.FilePath;
+import com.caucho.vfs.MemoryPath;
+import com.caucho.vfs.Path;
 import com.caucho.vfs.TempBuffer;
 
 import java.io.IOException;
@@ -76,16 +86,10 @@ public class StreamModule extends AbstractQuercusModule {
   public static final int STREAM_URL_STAT_LINK = 1;
   public static final int STREAM_URL_STAT_QUIET = 2;
 
+  public static final int PHP_STREAM_META_TOUCH = 1;
+
   private static final HashMap<StringValue,Value> _constMap
     = new HashMap<StringValue,Value>();
-
-  private static final HashMap<String,ProtocolWrapper> _wrapperMap
-    = new HashMap<String,ProtocolWrapper>();
-
-  private static final HashMap<String,ProtocolWrapper> _unregisteredWrapperMap
-    = new HashMap<String,ProtocolWrapper>();
-
-  private static final ArrayValue _wrapperArray = new ArrayValueImpl();
 
   /**
    * Adds the constant to the PHP engine's constant map.
@@ -264,7 +268,7 @@ public class StreamModule extends AbstractQuercusModule {
       if (in == null)
         return BooleanValue.FALSE;
 
-      StringBuilder sb = new StringBuilder();
+      StringValue sb = env.createStringBuilder();
 
       int ch;
 
@@ -278,7 +282,7 @@ public class StreamModule extends AbstractQuercusModule {
         sb.append((char) ch);
       }
 
-      return env.createString(sb.toString());
+      return sb;
     } catch (IOException e) {
       env.warning(e);
 
@@ -301,7 +305,6 @@ public class StreamModule extends AbstractQuercusModule {
         length = Integer.MAX_VALUE;
 
       StringValue line = file.readLine(length);
-
 
       if (line == null)
         return BooleanValue.FALSE;
@@ -369,13 +372,57 @@ public class StreamModule extends AbstractQuercusModule {
    */
   public static Value stream_get_wrappers(Env env)
   {
-    return _wrapperArray;
+    ArrayValue array = new ArrayValueImpl();
+
+    HashMap<StringValue,ProtocolWrapper> streamMap = env.getStreamWrappers();
+
+    for (StringValue name : streamMap.keySet()) {
+      array.append(name);
+    }
+
+    // XXX: 2012-05-05 nam: do we need to do this?
+    array.append(env.createString("quercus"));
+    array.append(env.createString("file"));
+    array.append(env.createString("http"));
+    array.append(env.createString("ftp"));
+
+    return array;
   }
 
-  public static boolean stream_register_wrapper(Env env, StringValue protocol,
-                                                String className)
+  /**
+   * bool stream_is_local ( mixed $stream_or_url )
+   */
+  public static boolean stream_is_local(Env env, Value stream)
   {
-    return stream_wrapper_register(env, protocol, className);
+    if (stream.isString()) {
+      Path path = env.lookupPwd(stream);
+
+      return (path instanceof FilePath) || (path instanceof MemoryPath);
+    }
+    else {
+      return false;
+    }
+  }
+
+  public static boolean stream_register_wrapper(Env env,
+                                                StringValue protocol,
+                                                String className,
+                                                @Optional int flags)
+  {
+    return stream_wrapper_register(env, protocol, className, flags);
+  }
+
+  public static Value stream_resolve_include_path(Env env, StringValue relPath)
+  {
+    Path path = env.lookupInclude(relPath);
+
+    if (path != null && path.exists()) {
+      return env.createString(path.getNativePath());
+    }
+    else {
+      return BooleanValue.FALSE;
+    }
+
   }
 
   /**
@@ -424,7 +471,7 @@ public class StreamModule extends AbstractQuercusModule {
     return 0;
   }
 
-  /*
+  /**
    * Opens an Internet connection.
    */
   @ReturnNullAsFalse
@@ -513,28 +560,86 @@ public class StreamModule extends AbstractQuercusModule {
 
       return null;
     }
+    catch (SecurityException e) {
+      errorStr.set(env.createString(e.getMessage()));
+
+      return null;
+    }
+    catch (NoClassDefFoundError e) {
+      errorStr.set(env.createString(e.getMessage()));
+
+      return null;
+    }
   }
 
-  public static void stream_wrapper_register(StringValue protocol,
-                                             ProtocolWrapper wrapper)
+  public static Value stream_select(Env env,
+                                    @ReadOnly Value read,
+                                    @ReadOnly Value write,
+                                    @ReadOnly Value except,
+                                    int timeoutSeconds,
+                                    @Optional int timeoutMicroseconds)
   {
-    _wrapperMap.put(protocol.toString(), wrapper);
+    int count = 0;
 
-    _wrapperArray.append(protocol);
+    if (read.isArray()) {
+      ArrayValue array = read.toArrayValue(env);
+
+      for (Map.Entry<Value,Value> entry : array.entrySet()) {
+        Object obj = entry.getValue().toJavaObject();
+
+        if (obj instanceof SocketInputOutput
+            && ((SocketInputOutput) obj).isConnected()) {
+          count++;
+        }
+      }
+    }
+
+    if (write.isArray()) {
+      ArrayValue array = write.toArrayValue(env);
+
+      for (Map.Entry<Value,Value> entry : array.entrySet()) {
+        Object obj = entry.getValue().toJavaObject();
+
+        if (obj instanceof SocketInputOutput
+            && ((SocketInputOutput) obj).isConnected()) {
+          count++;
+        }
+      }
+    }
+
+    if (except.isArray()) {
+      ArrayValue array = except.toArrayValue(env);
+
+      for (Map.Entry<Value,Value> entry : array.entrySet()) {
+        Object obj = entry.getValue().toJavaObject();
+
+        if (obj instanceof SocketInputOutput
+            && ((SocketInputOutput) obj).isConnected()) {
+          count++;
+        }
+      }
+    }
+
+    return LongValue.create(count);
   }
 
   /**
    * Register a wrapper for a protocol.
    */
-  public static boolean stream_wrapper_register(Env env, StringValue protocol,
-                                                String className)
+  public static boolean stream_wrapper_register(Env env,
+                                                StringValue protocol,
+                                                String className,
+                                                @Optional int flags)
   {
-    if (_wrapperMap.containsKey(protocol.toString()))
+    HashMap<StringValue,ProtocolWrapper> wrapperMap = env.getStreamWrappers();
+
+    if (wrapperMap.containsKey(protocol)) {
       return false;
+    }
 
     QuercusClass qClass = env.getClass(className);
 
-    stream_wrapper_register(protocol, new ProtocolWrapper(qClass));
+    env.addStreamWrapper(protocol, new ProtocolWrapper(qClass));
 
     return true;
   }
@@ -542,45 +647,17 @@ public class StreamModule extends AbstractQuercusModule {
   /**
    * Register a wrapper for a protocol.
    */
-  public static boolean stream_wrapper_restore(Env env, StringValue protocol)
+  public static boolean stream_wrapper_restore(Env env, StringValue name)
   {
-    if (! _unregisteredWrapperMap.containsKey(protocol.toString()))
-      return false;
-
-    ProtocolWrapper oldWrapper =
-      _unregisteredWrapperMap.remove(protocol.toString());
-
-    stream_wrapper_register(protocol, oldWrapper);
-
-    return true;
+    return env.restoreStreamWrapper(name);
   }
 
   /**
    * Register a wrapper for a protocol.
    */
-  public static boolean stream_wrapper_unregister(Env env, StringValue protocol)
+  public static boolean stream_wrapper_unregister(Env env, StringValue name)
   {
-    if (! _wrapperMap.containsKey(protocol.toString()))
-      return false;
-
-    _unregisteredWrapperMap.put(protocol.toString(),
-                                _wrapperMap.remove(protocol.toString()));
-
-    _wrapperArray.remove(protocol);
-
-    return true;
-  }
-
-  protected static ProtocolWrapper getWrapper(String protocol)
-  {
-    return _wrapperMap.get(protocol);
-  }
-
-  static {
-    _wrapperArray.append(new ConstStringValue("quercus"));
-    _wrapperArray.append(new ConstStringValue("file"));
-    _wrapperArray.append(new ConstStringValue("http"));
-    _wrapperArray.append(new ConstStringValue("ftp"));
+    return env.unregisterStreamWrapper(name);
   }
 
   static {

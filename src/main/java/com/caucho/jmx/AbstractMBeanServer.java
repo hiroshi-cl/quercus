@@ -435,8 +435,9 @@ abstract public class AbstractMBeanServer implements MBeanServer {
 
     Class<?> ifc = getMBeanInterface(obj.getClass());
 
-    if (ifc == null)
+    if (ifc == null) {
       throw new NotCompliantMBeanException(L.l("{0} mbean has no MBean interface for class {1}", name, obj.getClass().getName()));
+    }
 
     return new IntrospectionMBean(obj, ifc);
   }
@@ -449,21 +450,25 @@ abstract public class AbstractMBeanServer implements MBeanServer {
     for (; cl != null; cl = cl.getSuperclass()) {
       Class<?> []interfaces = cl.getInterfaces();
 
-      String mbeanName = cl.getName() + "MBean";
-      String mxbeanName = cl.getName() + "MXBean";
-
-      int p = mbeanName.lastIndexOf('.');
-      mbeanName = mbeanName.substring(p);
-
-      p = mxbeanName.lastIndexOf('.');
-      mxbeanName = mxbeanName.substring(p);
-
       for (int i = 0; i < interfaces.length; i++) {
         Class<?> ifc = interfaces[i];
 
-        if (ifc.getName().endsWith(mbeanName)
-            || ifc.getName().endsWith(mxbeanName))
+        MXBean mxBean = ifc.getAnnotation(MXBean.class);
+        
+        if (mxBean != null) {
+          if (mxBean.value()) {
+            return ifc;
+          }
+          else {
+            continue;
+          }
+        }
+        
+        if (ifc.getName().endsWith("MBean")
+            || ifc.getName().endsWith("MXBean")) {
           return ifc;
+        }
+        
       }
     }
 

@@ -30,13 +30,10 @@
 package com.caucho.quercus.expr;
 
 import com.caucho.quercus.Location;
-import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.env.StringValue;
-import com.caucho.quercus.env.MethodMap;
-import com.caucho.quercus.env.Var;
 import com.caucho.quercus.parser.QuercusParser;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.util.L10N;
@@ -46,9 +43,10 @@ import java.util.ArrayList;
 /**
  * Represents a PHP static method expression.
  */
-public class ClassMethodVarExpr extends AbstractMethodExpr {
+public class ClassMethodVarExpr extends AbstractMethodExpr
+{
   private static final L10N L = new L10N(ClassMethodVarExpr.class);
-  
+
   protected final String _className;
   protected final Expr _nameExpr;
   protected final Expr []_args;
@@ -64,9 +62,8 @@ public class ClassMethodVarExpr extends AbstractMethodExpr {
                             ArrayList<Expr> args)
   {
     super(location);
-    
+
     _className = className.intern();
-    
     _nameExpr = nameExpr;
 
     _args = new Expr[args.size()];
@@ -79,9 +76,8 @@ public class ClassMethodVarExpr extends AbstractMethodExpr {
                             Expr []args)
   {
     super(location);
-    
+
     _className = className.intern();
-    
     _nameExpr = nameExpr;
 
     _args = args;
@@ -118,7 +114,7 @@ public class ClassMethodVarExpr extends AbstractMethodExpr {
   {
     return factory.createCopy(this);
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -132,20 +128,20 @@ public class ClassMethodVarExpr extends AbstractMethodExpr {
     QuercusClass cl = env.findClass(_className);
 
     if (cl == null) {
-      env.error(getLocation(), L.l("no matching class {0}", _className));
+      env.error(L.l("no matching class {0}", _className), getLocation());
     }
 
     // qa/0954 - static calls pass the current $this
     Value qThis = env.getThis();
-    
+
     StringValue methodName = _nameExpr.evalStringValue(env);
-    
+
     Value []args = evalArgs(env, _args);
     int hash = methodName.hashCodeCaseInsensitive();
 
-    return cl.callMethod(env, qThis, methodName, hash, args);
+    return cl.callStaticMethod(env, qThis, methodName, hash, args);
   }
-  
+
   public String toString()
   {
     return _nameExpr + "()";

@@ -38,6 +38,7 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -50,6 +51,7 @@ import com.caucho.loader.module.ArtifactManager;
 import com.caucho.management.server.EnvironmentMXBean;
 import com.caucho.util.Alarm;
 import com.caucho.util.Crc64;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.LruCache;
 import com.caucho.util.ResinThreadPoolExecutor;
 import com.caucho.vfs.Path;
@@ -110,13 +112,26 @@ public class EnvironmentClassLoader extends DynamicClassLoader
   private EnvironmentAdmin _admin;
 
   private Throwable _configException;
+  
+  private static AtomicInteger _debugCounter = new AtomicInteger();
+  private int _debugId = _debugCounter.incrementAndGet();
 
   /**
    * Creates a new environment class loader.
    */
   protected EnvironmentClassLoader(ClassLoader parent, String id)
   {
-    super(parent);
+    this(parent, id, false);
+  }
+
+  /**
+   * Creates a new environment class loader.
+   */
+  protected EnvironmentClassLoader(ClassLoader parent, 
+                                   String id, 
+                                   boolean isRoot)
+  {
+    super(parent, true, isRoot);
     
     if (id != null)
       setId(id);
@@ -995,7 +1010,7 @@ public class EnvironmentClassLoader extends DynamicClassLoader
   {
     if (! _lifecycle.toStop())
       return;
-
+    
     ArrayList<EnvironmentListener> listeners = getEnvironmentListeners();
 
     Thread thread = Thread.currentThread();
@@ -1135,14 +1150,14 @@ public class EnvironmentClassLoader extends DynamicClassLoader
       _url = url;
       
       if (isDirectoryLoader())
-        _expireTime = Alarm.getCurrentTime() + getDependencyCheckInterval();
+        _expireTime = CurrentTime.getCurrentTime() + getDependencyCheckInterval();
       else
         _expireTime = Long.MAX_VALUE / 2;
     }
     
     public boolean isModified()
     {
-      return _expireTime < Alarm.getCurrentTime();
+      return _expireTime < CurrentTime.getCurrentTime();
     }
     
     public URL getResource()

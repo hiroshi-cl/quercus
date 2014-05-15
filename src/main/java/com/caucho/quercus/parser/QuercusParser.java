@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,13 +37,12 @@ import com.caucho.quercus.expr.*;
 import com.caucho.quercus.function.*;
 import com.caucho.quercus.program.*;
 import com.caucho.quercus.statement.*;
-import com.caucho.util.CharBuffer;
 import com.caucho.util.IntMap;
 import com.caucho.util.L10N;
 import com.caucho.vfs.*;
 
 import java.io.CharConversionException;
-import java.io.UnsupportedEncodingException;
+import java.io.Reader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -63,6 +62,7 @@ public class QuercusParser {
   private final static int M_FINAL = 0x10;
   private final static int M_ABSTRACT = 0x20;
   private final static int M_INTERFACE = 0x40;
+  private final static int M_TRAIT = 0x80;
 
   private final static int IDENTIFIER = 256;
   private final static int STRING = 257;
@@ -171,12 +171,15 @@ public class QuercusParser {
   private final static int TRY = 570;
   private final static int CATCH = 571;
   private final static int INTERFACE = 572;
-  private final static int IMPLEMENTS = 573;
+  private final static int TRAIT = 573;
+  private final static int IMPLEMENTS = 574;
 
-  private final static int IMPORT = 574;
-  private final static int TEXT_PHP = 575;
-  private final static int NAMESPACE = 576;
-  private final static int USE = 577;
+  private final static int IMPORT = 575;
+  private final static int TEXT_PHP = 576;
+  private final static int NAMESPACE = 577;
+  private final static int USE = 578;
+  private final static int INSTEADOF = 579;
+  private final static int EMPTY = 580;
 
   private final static int LAST_IDENTIFIER_LEXEME = 1024;
 
@@ -196,16 +199,18 @@ public class QuercusParser {
 
   private int _peek = -1;
   private ReadStream _is;
-  private String _encoding;
+  private Reader _reader;
 
-  private CharBuffer _sb = new CharBuffer();
-  
-  private String _namespace = "";
-  private HashMap<String,String> _namespaceUseMap
-    = new HashMap<String,String>();
+  private String _scriptEncoding = "utf-8";
+
+  private StringValue _sb;
+
+  private StringValue _namespace;
+  private HashMap<StringValue,StringValue> _namespaceUseMap
+    = new HashMap<StringValue,StringValue>();
 
   private int _peekToken = -1;
-  private String _lexeme = "";
+  private StringValue _lexeme;
   private String _heredocEnd = null;
 
   private GlobalScope _globalScope;
@@ -232,8 +237,13 @@ public class QuercusParser {
 
   public QuercusParser(QuercusContext quercus)
   {
+    this(quercus, quercus != null ? quercus.getScriptEncoding() : "utf-8");
+  }
+
+  public QuercusParser(QuercusContext quercus, String scriptEncoding)
+  {
     _quercus = quercus;
-    
+
     if (quercus == null)
       _factory = ExprFactory.create();
     else
@@ -241,6 +251,21 @@ public class QuercusParser {
 
     _globalScope = new GlobalScope(_factory);
     _scope = _globalScope;
+
+    _scriptEncoding = scriptEncoding;
+
+    if (isUnicodeSemantics()) {
+      _namespace = UnicodeBuilderValue.EMPTY;
+      _lexeme = UnicodeBuilderValue.EMPTY;
+
+      _sb = new UnicodeBuilderValue();
+    }
+    else {
+      _namespace = ConstStringValue.EMPTY;
+      _lexeme = ConstStringValue.EMPTY;
+
+      _sb = new StringBuilderValue();
+    }
   }
 
   public QuercusParser(QuercusContext quercus,
@@ -249,22 +274,28 @@ public class QuercusParser {
   {
     this(quercus);
 
-    if (quercus == null || quercus.isUnicodeSemantics())
-      init(sourceFile, is, "UTF-8");
-    else
-      init(sourceFile, is, "ISO-8859-1");
+    init(sourceFile, is, null);
+  }
+
+  public QuercusParser(QuercusContext quercus,
+                       Path sourceFile,
+                       Reader reader)
+  {
+    this(quercus);
+
+    init(sourceFile, null, reader);
   }
 
   private void init(Path sourceFile)
     throws IOException
   {
-    init(sourceFile, sourceFile.openRead(), "UTF-8");
+    init(sourceFile, sourceFile.openRead(), null);
   }
 
-  private void init(Path sourceFile, ReadStream is, String encoding)
+  private void init(Path sourceFile, ReadStream is, Reader reader)
   {
     _is = is;
-    _encoding = encoding;
+    _reader = reader;
 
     if (sourceFile != null) {
       _parserLocation.setFileName(sourceFile);
@@ -287,9 +318,10 @@ public class QuercusParser {
   {
     _parserLocation.setFileName(fileName);
     _parserLocation.setLineNumber(line);
-    
-    if (line > 0)
+
+    if (line > 0) {
       _sourceOffset = 1 - line;
+    }
   }
 
   public static QuercusProgram parse(QuercusContext quercus,
@@ -300,7 +332,9 @@ public class QuercusParser {
     ReadStream is = path.openRead();
 
     try {
-      is.setEncoding(encoding);
+      if (quercus != null && quercus.isUnicodeSemantics()) {
+        is.setEncoding(encoding);
+      }
 
       QuercusParser parser;
       parser = new QuercusParser(quercus, path, is);
@@ -321,7 +355,9 @@ public class QuercusParser {
     ReadStream is = path.openRead();
 
     try {
-      is.setEncoding(encoding);
+      if (quercus != null && quercus.isUnicodeSemantics()) {
+        is.setEncoding(encoding);
+      }
 
       QuercusParser parser;
       parser = new QuercusParser(quercus, path, is);
@@ -330,7 +366,11 @@ public class QuercusParser {
         parser.setLocation(fileName, line);
 
       return parser.parse();
-    } finally {
+    }
+    catch (RuntimeException e) {
+      throw e;
+    }
+    finally {
       is.close();
     }
   }
@@ -346,28 +386,56 @@ public class QuercusParser {
   }
 
   public static QuercusProgram parse(QuercusContext quercus,
-                                     Path path, ReadStream is)
+                                     Path path,
+                                     Reader reader)
+    throws IOException
+  {
+    QuercusParser parser;
+    parser = new QuercusParser(quercus, path, reader);
+
+    return parser.parse();
+  }
+
+  public static QuercusProgram parse(QuercusContext quercus,
+                                     Path path,
+                                     ReadStream is)
     throws IOException
   {
     return new QuercusParser(quercus, path, is).parse();
   }
 
-  public static QuercusProgram parseEval(QuercusContext quercus, String str)
+  public static QuercusProgram parseEval(QuercusContext quercus,
+                                         StringValue str)
     throws IOException
   {
-    Path path = new StringPath(str);
+    QuercusParser parser;
 
-    QuercusParser parser = new QuercusParser(quercus, path, path.openRead());
+    if (str.isUnicode()) {
+      parser = new QuercusParser(quercus, null, str.toSimpleReader());
+    }
+    else {
+      ReadStream is = new ReadStream(new VfsStream(str.toInputStream(), null));
+
+      parser = new QuercusParser(quercus, null, is);
+    }
 
     return parser.parseCode();
   }
 
-  public static QuercusProgram parseEvalExpr(QuercusContext quercus, String str)
+  public static QuercusProgram parseEvalExpr(QuercusContext quercus,
+                                             StringValue str)
     throws IOException
   {
-    Path path = new StringPath(str);
+    QuercusParser parser;
 
-    QuercusParser parser = new QuercusParser(quercus, path, path.openRead());
+    if (str.isUnicode()) {
+      parser = new QuercusParser(quercus, null, str.toSimpleReader());
+    }
+    else {
+      ReadStream is = new ReadStream(new VfsStream(str.toInputStream(), null));
+
+      parser = new QuercusParser(quercus, null, is);
+    }
 
     return parser.parseCode().createExprReturn();
   }
@@ -389,10 +457,15 @@ public class QuercusParser {
 
     return fun;
   }
-  
+
   public boolean isUnicodeSemantics()
   {
     return _quercus != null && _quercus.isUnicodeSemantics();
+  }
+
+  public boolean isShortOpenTag()
+  {
+    return _quercus != null && _quercus.getIniBoolean("short_open_tag");
   }
 
   public static Expr parse(QuercusContext quercus, String str)
@@ -407,7 +480,7 @@ public class QuercusParser {
   {
     try {
       Path path = new StringPath(str);
-      
+
       return new QuercusParser(null, path, path.openRead()).parseExpr();
     } catch (IOException e) {
       throw new QuercusRuntimeException(e);
@@ -418,11 +491,11 @@ public class QuercusParser {
   {
     try {
       Path path = new StringPath(str);
-      
+
       QuercusParser parser = new QuercusParser(null, path, path.openRead());
-      
+
       parser._factory = factory;
-      
+
       return parser.parseExpr();
     } catch (IOException e) {
       throw new QuercusRuntimeException(e);
@@ -450,7 +523,7 @@ public class QuercusParser {
     else
       return null;
   }
-  
+
   /**
    * Returns the current line
    */
@@ -473,7 +546,7 @@ public class QuercusParser {
     throws IOException
   {
     ClassDef globalClass = null;
-    
+
     _function = getFactory().createFunctionInfo(_quercus, globalClass, "");
     _function.setPageMain(true);
 
@@ -505,7 +578,7 @@ public class QuercusParser {
     throws IOException
   {
     ClassDef globalClass = null;
-    
+
     _function = getFactory().createFunctionInfo(_quercus, globalClass, "eval");
     // XXX: need param or better function name for non-global?
     _function.setGlobal(false);
@@ -527,7 +600,7 @@ public class QuercusParser {
     throws IOException
   {
     ClassDef globalClass = null;
-    
+
     _function = getFactory().createFunctionInfo(_quercus, globalClass, name);
     _function.setGlobal(false);
     _function.setPageMain(true);
@@ -576,7 +649,7 @@ public class QuercusParser {
     else if (token == TEXT_PHP) {
       _peekToken = parseToken();
 
-      if (_peekToken == IDENTIFIER && _lexeme.equalsIgnoreCase("php")) {
+      if (_peekToken == IDENTIFIER && _lexeme.equalsStringIgnoreCase("php")) {
         _peekToken = -1;
       }
     }
@@ -682,7 +755,11 @@ public class QuercusParser {
         // parseClassDefinition(M_INTERFACE);
         statementList.add(parseClassDefinition(M_INTERFACE));
         break;
-        
+
+      case TRAIT:
+        statementList.add(parseClassDefinition(M_TRAIT));
+        break;
+
       case CONST:
         statementList.addAll(parseConstDefinition());
         break;
@@ -741,11 +818,11 @@ public class QuercusParser {
       case TRY:
         statementList.add(parseTry());
         break;
-        
+
       case NAMESPACE:
         statementList.addAll(parseNamespace());
         break;
-        
+
       case USE:
         parseUse();
         break;
@@ -786,7 +863,7 @@ public class QuercusParser {
 
         _peekToken = parseToken();
 
-        if (_peekToken == IDENTIFIER && _lexeme.equalsIgnoreCase("php")) {
+        if (_peekToken == IDENTIFIER && _lexeme.equalsStringIgnoreCase("php")) {
           _peekToken = -1;
         }
         break;
@@ -866,7 +943,7 @@ public class QuercusParser {
 
         _peekToken = parseToken();
 
-        if (_peekToken == IDENTIFIER && _lexeme.equalsIgnoreCase("php")) {
+        if (_peekToken == IDENTIFIER && _lexeme.equalsStringIgnoreCase("php")) {
           _peekToken = -1;
         }
 
@@ -986,7 +1063,7 @@ public class QuercusParser {
       LiteralStringExpr string = (LiteralStringExpr) expr;
 
       Statement statement
-        = _factory.createText(location, string.evalConstant().toString());
+        = _factory.createText(location, (StringValue) string.evalConstant());
 
       statements.add(statement);
     }
@@ -1015,7 +1092,7 @@ public class QuercusParser {
     ArrayList<Expr> args = new ArrayList<Expr>();
     args.add(parseTopExpr());
 
-    return _factory.createCall(this, "print", args);
+    return _factory.createCall(this, createStringValue("print"), args);
   }
 
   /**
@@ -1074,7 +1151,7 @@ public class QuercusParser {
     while (true) {
       expect('$');
 
-      String name = parseIdentifier();
+      StringValue name = parseIdentifier();
 
       VarExpr var = _factory.createVar(_function.createVar(name));
 
@@ -1088,16 +1165,33 @@ public class QuercusParser {
       }
 
       // var.getVarInfo().setReference();
-      
-      if (_classDef != null) {
-        statementList.add(_factory.createClassStatic(location,
-                                                     _classDef.getName(),
-                                                     var,
-                                                     init));
+
+      Statement statement;
+
+      if (_function.isClosure()) {
+        statement = _factory.createClosureStatic(location, var, init);
       }
       else {
-        statementList.add(_factory.createStatic(location, var, init));
+        StringValue sb = createStringBuilder();
+
+        if (_classDef != null) {
+          sb.append(_classDef.getName());
+          sb.append("::");
+        }
+
+        sb.append(_function.getName());
+        sb.append("::");
+        sb.append(name);
+
+        if (_classDef != null) {
+          statement = _factory.createClassStatic(location, sb, var, init);
+        }
+        else {
+          statement = _factory.createStatic(location, sb, var, init);
+        }
       }
+
+      statementList.add(statement);
 
       if (token != ',') {
         _peekToken = token;
@@ -1621,7 +1715,7 @@ public class QuercusParser {
       while (token == CATCH) {
         expect('(');
 
-        String id = parseNamespaceIdentifier();
+        StringValue id = parseNamespaceIdentifier();
 
         AbstractVarExpr lhs = parseLeftHandSide();
 
@@ -1657,8 +1751,11 @@ public class QuercusParser {
     boolean isAbstract = (modifiers & M_ABSTRACT) != 0;
     boolean isStatic = (modifiers & M_STATIC) != 0;
 
-    if (_classDef != null && _classDef.isInterface())
+    boolean isTraitMethod = _classDef != null && _classDef.isTrait();
+
+    if (_classDef != null && _classDef.isInterface()) {
       isAbstract = true;
+    }
 
     try {
       _returnsReference = false;
@@ -1673,46 +1770,46 @@ public class QuercusParser {
       else
         _peekToken = token;
 
-      String name;
-      
-      name = parseIdentifier();
-      
+      StringValue nameV = parseIdentifier();
+
       if (_classDef == null) {
-        name = resolveIdentifier(name);
+        nameV = resolveIdentifier(nameV);
       }
-      
+
       if (isAbstract && ! _scope.isAbstract()) {
-        if (_classDef != null)
-          throw error(L.l(
-              "'{0}' may not be abstract because class {1} is not abstract.",
-                          name, _classDef.getName()));
-        else
-          throw error(L.l(
-              "'{0}' may not be abstract. Abstract functions are only "
-                  + "allowed in abstract classes.",
-                          name));
-      }
-      
-      boolean isConstructor = false;
-      
-      if (_classDef != null
-          && (name.equals(_classDef.getName())
-              || name.equals("__constructor"))) {
-        if (isStatic) {
-          throw error(L.l(
-              "'{0}:{1}' may not be static because class constructors "
-                  + "may not be static",
-                          _classDef.getName(), name));
+        if (_classDef != null) {
+          throw error(L.l("'{0}' may not be abstract because class {1} is not abstract.",
+                          nameV, _classDef.getName()));
         }
-        
+        else {
+          throw error(L.l("'{0}' may not be abstract. Abstract functions are only "
+                          + "allowed in abstract classes.",
+                          nameV));
+        }
+      }
+
+      boolean isConstructor = false;
+
+      if (_classDef != null
+          && (nameV.equalsString(_classDef.getName())
+              || nameV.equalsString("__constructor"))) {
+        if (isStatic) {
+          throw error(L.l("'{0}:{1}' may not be static because class constructors may not be static",
+                          _classDef.getName(), nameV));
+        }
+
         isConstructor = true;
       }
+
+      String name = nameV.toString();
 
       _function = getFactory().createFunctionInfo(_quercus, _classDef, name);
       _function.setPageStatic(oldTop);
       _function.setConstructor(isConstructor);
 
       _function.setReturnsReference(_returnsReference);
+
+      _function.setStaticClassMethod(_classDef != null && isStatic);
 
       Location location = getLocation();
 
@@ -1768,6 +1865,7 @@ public class QuercusParser {
       function.setGlobal(oldTop);
       function.setStatic((modifiers & M_STATIC) != 0);
       function.setFinal((modifiers & M_FINAL) != 0);
+      function.setTraitMethod(isTraitMethod);
 
       function.setParseIndex(_functionsParsed++);
       function.setComment(comment);
@@ -1777,7 +1875,7 @@ public class QuercusParser {
       else if ((modifiers & M_PRIVATE) != 0)
         function.setVisibility(Visibility.PRIVATE);
 
-      _scope.addFunction(name, function, oldTop);
+      _scope.addFunction(createStringValue(name), function, oldTop);
 
       /*
     com.caucho.vfs.WriteStream out = com.caucho.vfs
@@ -1813,17 +1911,23 @@ public class QuercusParser {
 
       String comment = null;
 
-      if (token == '&')
+      if (token == '&') {
         _returnsReference = true;
-      else
+      }
+      else {
         _peekToken = token;
-      
+      }
+
       String name = "__quercus_closure_" + _functionsParsed;
 
-      ClassDef classDef = null;
+      ClassDef classDef = _classDef;
       _function = getFactory().createFunctionInfo(_quercus, classDef, name);
       _function.setReturnsReference(_returnsReference);
       _function.setClosure(true);
+
+      _function.setStaticClassMethod(_classDef != null
+                                     && oldFunction != null
+                                     && oldFunction.isStaticClassMethod());
 
       Location location = getLocation();
 
@@ -1835,18 +1939,17 @@ public class QuercusParser {
 
       Arg []useArgs;
       ArrayList<VarExpr> useVars = new ArrayList<VarExpr>();
-      
+
       token = parseToken();
-      
+
       if (token == USE) {
         expect('(');
 
         useArgs = parseFunctionArgDefinition();
-        
+
         for (Arg arg : useArgs) {
-          VarExpr var = _factory.createVar(
-              oldFunction.createVar(arg.getName()));
-          
+          VarExpr var = _factory.createVar(oldFunction.createVar(arg.getName()));
+
           useVars.add(var);
         }
 
@@ -1854,10 +1957,10 @@ public class QuercusParser {
       }
       else {
         useArgs = new Arg[0];
-      
+
         _peekToken = token;
       }
-      
+
       expect('{');
 
       Statement []statements = null;
@@ -1880,10 +1983,13 @@ public class QuercusParser {
       function.setComment(comment);
       function.setClosure(true);
       function.setClosureUseArgs(useArgs);
-      
-      _globalScope.addFunction(name, function, oldTop);
 
-      return _factory.createClosure(location, function, useVars);
+      _globalScope.addFunction(createStringValue(name), function, oldTop);
+
+      boolean isInClassScope = _classDef != null
+                               && ! oldFunction.isStaticClassMethod();
+
+      return _factory.createClosure(location, function, useVars, isInClassScope);
     } finally {
       _returnsReference = oldReturnsReference;
       _function = oldFunction;
@@ -1891,11 +1997,11 @@ public class QuercusParser {
     }
   }
 
-
   private Arg []parseFunctionArgDefinition()
     throws IOException
   {
-    LinkedHashMap<String, Arg> argMap = new LinkedHashMap<String, Arg>();
+    LinkedHashMap<StringValue, Arg> argMap
+      = new LinkedHashMap<StringValue, Arg>();
 
     while (true) {
       int token = parseToken();
@@ -1909,7 +2015,9 @@ public class QuercusParser {
           && token != '$'
           && token != -1) {
         _peekToken = token;
-        expectedClass = parseIdentifier();
+
+        // php/0m51
+        expectedClass = parseNamespaceIdentifier().toString();
         token = parseToken();
       }
 
@@ -1923,7 +2031,7 @@ public class QuercusParser {
         break;
       }
 
-      String argName = parseIdentifier();
+      StringValue argName = parseIdentifier();
       Expr defaultExpr = _factory.createRequired();
 
       token = parseToken();
@@ -2082,9 +2190,10 @@ public class QuercusParser {
   private Statement parseClassDefinition(int modifiers)
     throws IOException
   {
-    String name = parseIdentifier();
-    
-    name = resolveIdentifier(name);
+    StringValue nameV = parseIdentifier();
+    nameV = resolveIdentifier(nameV);
+
+    String name = nameV.toString();
 
     String comment = _comment;
 
@@ -2093,24 +2202,25 @@ public class QuercusParser {
     ArrayList<String> ifaceList = new ArrayList<String>();
 
     int token = parseToken();
-    if (token == EXTENDS) {
+    if (token == EXTENDS && (modifiers & M_TRAIT) == 0) {
       if ((modifiers & M_INTERFACE) != 0) {
         do {
-          ifaceList.add(parseNamespaceIdentifier());
+          ifaceList.add(parseNamespaceIdentifier().toString());
 
           token = parseToken();
         } while (token == ',');
       }
       else {
-        parentName = parseNamespaceIdentifier();
+        parentName = parseNamespaceIdentifier().toString();
 
         token = parseToken();
       }
     }
 
-    if ((modifiers & M_INTERFACE) == 0 && token == IMPLEMENTS) {
+    if (token == IMPLEMENTS
+        && (modifiers & M_INTERFACE) == 0 && ((modifiers & M_TRAIT) == 0)) {
       do {
-        ifaceList.add(parseNamespaceIdentifier());
+        ifaceList.add(parseNamespaceIdentifier().toString());
 
         token = parseToken();
       } while (token == ',');
@@ -2135,6 +2245,9 @@ public class QuercusParser {
         _classDef.setInterface(true);
       if ((modifiers & M_FINAL) != 0)
         _classDef.setFinal(true);
+      if ((modifiers & M_TRAIT) != 0) {
+        _classDef.setTrait(true);
+      }
 
       _scope = new ClassScope(_classDef);
 
@@ -2174,18 +2287,16 @@ public class QuercusParser {
         }
 
         case CLASS:
+        {
           parseClassDefinition(0);
           break;
-
-            /* quercus/0260
-        case VAR:
-              parseClassVarDefinition(false);
-              break;
-        */
+        }
 
         case CONST:
+        {
           parseClassConstDefinition();
           break;
+        }
 
         case PUBLIC:
         case PRIVATE:
@@ -2210,8 +2321,15 @@ public class QuercusParser {
         }
         break;
 
+        case USE:
+        {
+          parseUseTraitDefinition();
+
+          break;
+        }
+
         case IDENTIFIER:
-          if (_lexeme.equals("var")) {
+          if (_lexeme.equalsString("var")) {
             parseClassVarDefinition(0);
           }
           else {
@@ -2242,7 +2360,7 @@ public class QuercusParser {
 
       String comment = _comment;
 
-      String name = parseIdentifier();
+      StringValue name = parseIdentifier();
 
       token = parseToken();
 
@@ -2256,28 +2374,26 @@ public class QuercusParser {
         expr = _factory.createNull();
       }
 
-      StringValue nameV = createStringValue(name);
-
       if ((modifiers & M_STATIC) != 0) {
-        ((ClassScope) _scope).addStaticVar(nameV, expr, _comment);
+        ((ClassScope) _scope).addStaticClassField(name, expr, _comment);
       }
       else if ((modifiers & M_PRIVATE) != 0) {
-        ((ClassScope) _scope).addVar(nameV,
-                                     expr,
-                                     FieldVisibility.PRIVATE,
-                                     comment);
+        ((ClassScope) _scope).addClassField(name,
+                                            expr,
+                                            FieldVisibility.PRIVATE,
+                                            comment);
       }
       else if ((modifiers & M_PROTECTED) != 0) {
-        ((ClassScope) _scope).addVar(nameV,
-                                     expr,
-                                     FieldVisibility.PROTECTED,
-                                     comment);
+        ((ClassScope) _scope).addClassField(name,
+                                            expr,
+                                            FieldVisibility.PROTECTED,
+                                            comment);
       }
       else {
-        ((ClassScope) _scope).addVar(nameV,
-                                     expr,
-                                     FieldVisibility.PUBLIC,
-                                     comment);
+        ((ClassScope) _scope).addClassField(name,
+                                            expr,
+                                            FieldVisibility.PUBLIC,
+                                            comment);
       }
 
       token = parseToken();
@@ -2293,22 +2409,22 @@ public class QuercusParser {
     throws IOException
   {
     ArrayList<Statement> constList = new ArrayList<Statement>();
-    
+
     int token;
 
     do {
-      String name = parseNamespaceIdentifier();
+      StringValue name = parseNamespaceIdentifier();
 
       expect('=');
 
       Expr expr = parseExpr();
 
       ArrayList<Expr> args = new ArrayList<Expr>();
-      args.add(_factory.createString(name));
+      args.add(createStringExpr(name));
       args.add(expr);
-      
-      Expr fun = _factory.createCall(this, "define", args);
-      
+
+      Expr fun = _factory.createCall(this, createStringValue("define"), args);
+
       constList.add(_factory.createExpr(getLocation(), fun));
       // _scope.addConstant(name, expr);
 
@@ -2316,7 +2432,7 @@ public class QuercusParser {
     } while (token == ',');
 
     _peekToken = token;
-    
+
     return constList;
   }
 
@@ -2329,7 +2445,7 @@ public class QuercusParser {
     int token;
 
     do {
-      String name = parseIdentifier();
+      StringValue name = parseIdentifier();
 
       expect('=');
 
@@ -2341,6 +2457,77 @@ public class QuercusParser {
     } while (token == ',');
 
     _peekToken = token;
+  }
+
+  private void parseUseTraitDefinition()
+    throws IOException
+  {
+   int token;
+
+   ArrayList<StringValue> traitList = new ArrayList<StringValue>();
+
+    do {
+      traitList.add(parseNamespaceIdentifier());
+
+      token = parseToken();
+    } while (token == ',');
+
+    for (StringValue traitName : traitList) {
+      _classDef.addTrait(traitName.toString());
+    }
+
+    if (token == '{') {
+      while ((token = parseToken()) >= 0 && token != '}') {
+        _peekToken = token;
+
+        StringValue traitNameV = parseNamespaceIdentifier();
+        StringValue funName;
+
+        token = parseToken();
+
+        if (token == SCOPE) {
+          funName = parseIdentifier();
+
+          token = parseToken();
+        }
+        else if (traitList.size() == 1) {
+          funName = traitNameV;
+
+          traitNameV = traitList.get(0);
+        }
+        else {
+          throw error(L.l("cannot resolve method because multiple traits are defined"));
+        }
+
+        if (token == INSTEADOF) {
+          String insteadofTraitName = parseNamespaceIdentifier().toString();
+
+          _classDef.addTraitInsteadOf(funName, traitNameV.toString(), insteadofTraitName);
+        }
+        else if (token == AS) {
+          StringValue funNameAlias = parseIdentifier();
+
+          _classDef.addTraitAlias(funName, funNameAlias, traitNameV.toString());
+        }
+        else {
+          throw error(L.l("expected 'insteadof' or 'as' at {0}",
+                          tokenName(token)));
+        }
+
+        token = parseToken();
+
+        if (token != ';') {
+          _peekToken = token;
+        }
+      }
+
+      _peekToken = token;
+
+      expect('}');
+    }
+    else {
+      _peekToken = token;
+    }
   }
 
   private int parseModifiers()
@@ -2383,34 +2570,34 @@ public class QuercusParser {
       }
     }
   }
-  
+
   private ArrayList<Statement> parseNamespace()
     throws IOException
   {
     int token = parseToken();
-    
-    String var = "";
-    
+
+    StringValue var = _namespace.EMPTY;
+
     if (token == IDENTIFIER) {
       var = _lexeme;
-      
+
       token = parseToken();
     }
-    
+
     if (var.startsWith("\\"))
       var = var.substring(1);
-    
-    String oldNamespace = _namespace;
-    
+
+    StringValue oldNamespace = _namespace;
+
     _namespace = var;
-    
+
     if (token == '{') {
       ArrayList<Statement> statementList = parseStatementList();
-      
+
       expect('}');
-      
+
       _namespace = oldNamespace;
-      
+
       return statementList;
     }
     else if (token == ';') {
@@ -2420,41 +2607,45 @@ public class QuercusParser {
       throw error(L.l("namespace must be followed by '{' or ';'"));
     }
   }
-  
+
   private void parseUse()
     throws IOException
   {
     int token = parseNamespaceIdentifier(read());
-    
-    String name = _lexeme;
-    
+
+    StringValue name = _lexeme;
+
     int ns = name.lastIndexOf('\\');
-    
-    String tail;
+
+    StringValue tail;
     if (ns >= 0)
       tail = name.substring(ns + 1);
     else
       tail = name;
-    
+
     if (name.startsWith("\\"))
       name = name.substring(1);
-    
+
     token = parseToken();
-    
+
     if (token == ';') {
       _namespaceUseMap.put(tail, name);
+      _namespaceUseMap.put(tail.toLowerCase(), name);
+
       return;
     }
     else if (token == AS) {
       do {
         tail = parseIdentifier();
-        
+
         _namespaceUseMap.put(tail, name);
+        _namespaceUseMap.put(tail.toLowerCase(), name);
+
       } while ((token = parseToken()) == ',');
     }
-    
+
     _peekToken = token;
-    
+
     expect(';');
   }
 
@@ -2641,13 +2832,13 @@ public class QuercusParser {
       switch (token) {
       case '?':
         token = parseToken();
-        
+
         if (token == ':') {
           expr = _factory.createShortConditional(expr, parseOrExpr());
         }
         else {
           _peekToken = token;
-          
+
           Expr trueExpr = parseExpr();
           expect(':');
           // php/33c1
@@ -2828,10 +3019,21 @@ public class QuercusParser {
 
       Expr classNameExpr = parseShiftExpr();
 
-      if (classNameExpr instanceof ConstExpr)
-        return _factory.createInstanceOf(expr, classNameExpr.toString());
-      else
+      if (classNameExpr instanceof ConstExpr) {
+        String className = classNameExpr.evalConstant().toString();
+
+        if (className.equals("self")) {
+          className = getSelfClassName();
+        }
+        else if (className.equals("parent")) {
+          className = getParentClassName();
+        }
+
+        return _factory.createInstanceOf(expr, className);
+      }
+      else {
         return _factory.createInstanceOfVar(expr, classNameExpr);
+      }
 
     default:
       _peekToken = token;
@@ -3059,13 +3261,25 @@ public class QuercusParser {
         break;
 
       case INSTANCEOF:
+      {
         Expr classNameExpr = parseShiftExpr();
 
-        if (classNameExpr instanceof ConstExpr)
-          return _factory.createInstanceOf(expr, classNameExpr.toString());
-        else
-          return _factory.createInstanceOfVar(expr, classNameExpr);
+        if (classNameExpr instanceof ConstExpr) {
+          String className = classNameExpr.evalConstant().toString();
 
+          if (className.equals("self")) {
+            className = getSelfClassName();
+          }
+          else if (className.equals("parent")) {
+            className = getParentClassName();
+          }
+
+          return _factory.createInstanceOf(expr, className);
+        }
+        else {
+          return _factory.createInstanceOfVar(expr, classNameExpr);
+        }
+      }
       default:
         _peekToken = token;
         return expr;
@@ -3091,7 +3305,7 @@ public class QuercusParser {
     throws IOException
   {
     int token = parseToken();
-    
+
     switch (token) {
 
     case '+':
@@ -3149,10 +3363,10 @@ public class QuercusParser {
 
         return _factory.createPreIncrement(expr, -1);
       }
-      
+
     default:
       _peekToken = token;
-      
+
       return parseTerm(true);
     }
   }
@@ -3174,7 +3388,7 @@ public class QuercusParser {
     throws IOException
   {
     Expr term = parseTermBase();
-    
+
     while (true) {
       int token = parseToken();
 
@@ -3220,15 +3434,15 @@ public class QuercusParser {
       case DEREF:
         term = parseDeref(term);
         break;
-        
+
       case SCOPE:
         term = parseScope(term);
         break;
-        
+
 
       case '(':
         _peek = token;
-        
+
         if (isParseCall)
           term = parseCall(term);
         else
@@ -3316,7 +3530,6 @@ public class QuercusParser {
   private Expr parseDeref(Expr term)
     throws IOException
   {
-    String name = null;
     Expr nameExpr = null;
 
     int token = parseToken();
@@ -3324,21 +3537,23 @@ public class QuercusParser {
     if (token == '$') {
       // php/09e0
       _peekToken = token;
-      nameExpr = parseTerm(false);
-      
-      return term.createFieldGet(_factory, nameExpr);
+
+      //nameExpr = parseTerm(false);
+      nameExpr = parseTermArray(); // php/098e, php/398e
+
+      return term.createFieldGet(_factory, getLocation(), nameExpr);
     }
     else if (token == '{') {
       nameExpr = parseExpr();
       expect('}');
-      
-      return term.createFieldGet(_factory, nameExpr);
+
+      return term.createFieldGet(_factory, getLocation(), nameExpr);
     }
     else {
       _peekToken = token;
-      name = parseIdentifier();
-      
-      return term.createFieldGet(_factory, createStringValue(name));
+      StringValue name = parseIdentifier();
+
+      return term.createFieldGet(_factory, getLocation(), name);
     }
   }
 
@@ -3358,27 +3573,27 @@ public class QuercusParser {
 
     switch (token) {
     case STRING:
-      return createString(_lexeme);
+      return createStringExpr(_lexeme);
 
     case SYSTEM_STRING:
       {
         ArrayList<Expr> args = new ArrayList<Expr>();
-        args.add(createString(_lexeme));
-        return _factory.createCall(this, "shell_exec", args);
+        args.add(createStringExpr(_lexeme));
+        return _factory.createCall(this, createStringValue("shell_exec"), args);
       }
 
     case SIMPLE_SYSTEM_STRING:
       {
         ArrayList<Expr> args = new ArrayList<Expr>();
         args.add(parseEscapedString(_lexeme, SIMPLE_STRING_ESCAPE, true));
-        return _factory.createCall(this, "shell_exec", args);
+        return _factory.createCall(this, createStringValue("shell_exec"), args);
       }
 
     case COMPLEX_SYSTEM_STRING:
       {
         ArrayList<Expr> args = new ArrayList<Expr>();
         args.add(parseEscapedString(_lexeme, COMPLEX_STRING_ESCAPE, true));
-        return _factory.createCall(this, "shell_exec", args);
+        return _factory.createCall(this, createStringValue("shell_exec"), args);
       }
 
     case SIMPLE_STRING_ESCAPE:
@@ -3387,8 +3602,17 @@ public class QuercusParser {
 
     case BINARY:
       try {
-        return createBinary(_lexeme.getBytes("iso-8859-1"));
-      } catch (Exception e) {
+        if (isUnicodeSemantics()) {
+          BinaryValue value
+            = (BinaryValue) _lexeme.toBinaryValue(_scriptEncoding);
+
+          return _factory.createBinary(value);
+        }
+        else {
+          return _factory.createString(_lexeme);
+        }
+      }
+      catch (Exception e) {
         throw new QuercusParseException(e);
       }
 
@@ -3402,9 +3626,9 @@ public class QuercusParser {
       double doubleValue = 0;
       long sign = 1;
       boolean isOverflow = false;
-      
+
       char ch = _lexeme.charAt(0);
-      
+
       int i = 0;
       if (ch == '+') {
         i++;
@@ -3412,27 +3636,30 @@ public class QuercusParser {
         sign = -1;
         i++;
       }
-      
+
       int len = _lexeme.length();
       for (; i < len; i++) {
         int digit = _lexeme.charAt(i) - '0';
         long oldValue = value;
-        
+
         value = value * 10 + digit;
         doubleValue = doubleValue * 10 + digit;
-        
+
         if (value < oldValue)
-          isOverflow = true;           
+          isOverflow = true;
       }
-      
+
       if (! isOverflow)
         return _factory.createLiteral(LongValue.create(value * sign));
       else
         return _factory.createLiteral(new DoubleValue(doubleValue * sign));
     }
     case DOUBLE:
-      return _factory.createLiteral(
-          new DoubleValue(Double.parseDouble(_lexeme)));
+    {
+      double d = Double.parseDouble(_lexeme.toString());
+
+      return _factory.createLiteral(new DoubleValue(d));
+    }
 
     case NULL:
       return _factory.createNull();
@@ -3448,7 +3675,7 @@ public class QuercusParser {
 
     case NEW:
       return parseNew();
-      
+
     case FUNCTION:
       return parseClosure();
 
@@ -3475,24 +3702,36 @@ public class QuercusParser {
     case DIE:
       return parseDie();
 
+    case EMPTY:
+      return parseEmpty();
+
     case IDENTIFIER:
     case NAMESPACE:
       {
-        if (_lexeme.equals("new"))
+        if (_lexeme.equalsString("new"))
           return parseNew();
 
-        String name = _lexeme;
+        StringValue name = _lexeme;
 
         token = parseToken();
         _peekToken = token;
 
         if (token == '(' && ! _isNewExpr) {
           // shortcut for common case of static function
-          
+
           return parseCall(name);
         }
         else
           return parseConstant(name);
+      }
+    case STATIC:
+      {
+        if (_classDef == null) {
+          throw error(L.l("cannot use new {0}() outside of a class context.",
+                          tokenName(token)));
+        }
+
+        return parseConstant(_lexeme);
       }
 
     case '(':
@@ -3505,7 +3744,7 @@ public class QuercusParser {
 
         if (expr instanceof ConstExpr) {
           String type = ((ConstExpr) expr).getVar();
-          
+
           int ns = type.lastIndexOf('\\');
           if (ns >= 0)
             type = type.substring(ns + 1);
@@ -3534,10 +3773,14 @@ public class QuercusParser {
 
         return expr;
       }
+    case '[':
+      _peekToken = token;
+
+      return parseArrayFunction('[', ']');
 
     case IMPORT:
       {
-        String importTokenString = _lexeme;
+        StringValue importTokenString = _lexeme;
 
         token = parseToken();
 
@@ -3635,28 +3878,37 @@ public class QuercusParser {
     }
     else if (token == '$') {
       token = parseToken();
-      
+
       if (isIdentifier(token)) {
         return classNameExpr.createClassField(this, _lexeme);
       }
       else if (token == '{') {
         Expr expr = parseExpr();
-        
+
         expect('}');
-        
+
         return classNameExpr.createClassField(this, expr);
       }
       else {
         _peekToken = token;
-        
+
         return classNameExpr.createClassField(this, parseTermBase());
       }
     }
-    
+    else if (token == '{') {
+      Expr expr = parseExpr();
+
+      expect('}');
+
+      Expr name = classNameExpr.createClassConst(this, expr);
+
+      return parseCall(name);
+    }
+
     throw error(L.l("unexpected token '{0}' in class scope expression",
                     tokenName(token)));
   }
-  
+
   private boolean isIdentifier(int token)
   {
     return token == IDENTIFIER || FIRST_IDENTIFIER_LEXEME <= token;
@@ -3686,33 +3938,38 @@ public class QuercusParser {
 
       return expr;
     }
-    else if (_lexeme == null)
+    else if (_lexeme.length() == 0)
       throw error(L.l("Expected identifier at '{0}'", tokenName(token)));
-    
+
     if (_lexeme.indexOf('\\') >= 0) {
       throw error(L.l("Namespace is not allowed for variable ${0}", _lexeme));
     }
 
     return _factory.createVar(_function.createVar(_lexeme));
   }
-  
-  public Expr createVar(String name)
+
+  public Expr createVar(StringValue name)
   {
-    return _factory.createVar(_function.createVar(name));    
+    return _factory.createVar(_function.createVar(name));
   }
-  
+
   /**
    * Parses the next function
    */
-  private Expr parseCall(String name)
+  private Expr parseCall(StringValue name)
     throws IOException
   {
-    if (name.equalsIgnoreCase("array"))
-      return parseArrayFunction();
+    if (name.equalsStringIgnoreCase("array")) {
+      return parseArrayFunction('(', ')');
+    }
 
     ArrayList<Expr> args = parseArgs();
-    
+
     name = resolveIdentifier(name);
+
+    if (! _quercus.isStrict()) {
+      name = name.toLowerCase(Locale.ENGLISH);
+    }
 
     return _factory.createCall(this, name, args);
 
@@ -3731,43 +3988,55 @@ public class QuercusParser {
   /**
    * Parses the next constant
    */
-  private Expr parseConstant(String name)
+  private Expr parseConstant(StringValue name)
   {
-    if (name.equals("__FILE__")) {
+    if (name.equalsString("__FILE__")) {
       return _factory.createFileNameExpr(_parserLocation.getFileName());
     }
-    else if (name.equals("__DIR__")) {
+    else if (name.equalsString("__DIR__")) {
       Path parent = Vfs.lookup(_parserLocation.getFileName()).getParent();
-      
+
       return _factory.createDirExpr(parent.getNativePath());
     }
-    else if (name.equals("__LINE__"))
+    else if (name.equalsString("__LINE__"))
       return _factory.createLong(_parserLocation.getLineNumber());
-    else if (name.equals("__CLASS__") && _classDef != null)
-      return createString(_classDef.getName());
-    else if (name.equals("__FUNCTION__")) {
-      return createString(_function.getName());
+    else if (name.equalsString("__CLASS__") && _classDef != null) {
+      if (_classDef.isTrait()) {
+        StringValue funNameV = createStringValue(_function.getName());
+
+        return _factory.createClassExpr(getLocation(), funNameV);
+      }
+      else {
+        return createStringExpr(_classDef.getName());
+      }
     }
-    else if (name.equals("__METHOD__")) {
+    else if (name.equalsString("__FUNCTION__")) {
+      return createStringExpr(_function.getName());
+    }
+    else if (name.equalsString("__METHOD__")) {
       if (_classDef != null) {
         if (_function.getName().length() != 0)
-          return createString(_classDef.getName() + "::" + _function.getName());
+          return createStringExpr(_classDef.getName() + "::" + _function.getName());
         else
-          return createString(_classDef.getName());
+          return createStringExpr(_classDef.getName());
       }
       else
-        return createString(_function.getName());
+        return createStringExpr(_function.getName());
     }
-    else if (name.equals("__NAMESPACE__")) {
-      return createString(_namespace);
+    else if (name.equalsString("__NAMESPACE__")) {
+      return createStringExpr(_namespace);
     }
-    
+    else if (name.equalsString("self") && _classDef != null) {
+      // php/0m28
+      return _factory.createConst(_classDef.getName());
+    }
+
     name = resolveIdentifier(name);
-    
+
     if (name.startsWith("\\"))
       name = name.substring(1);
-    
-    return _factory.createConst(name);
+
+    return _factory.createConst(name.toString());
   }
 
   /**
@@ -3783,9 +4052,9 @@ public class QuercusParser {
     throws IOException
   {
     expect('(');
-    
+
     ArrayList<Expr> args = new ArrayList<Expr>();
-    
+
     int token;
 
     while ((token = parseToken()) > 0 && token != ')') {
@@ -3809,7 +4078,7 @@ public class QuercusParser {
       else if (token != ',')
         throw expect("','", token);
     }
-    
+
     return args;
   }
 
@@ -3817,8 +4086,12 @@ public class QuercusParser {
   {
     if (_classDef == null)
       throw error(L.l("'self' is not valid because there is no active class."));
-    
+
     return _classDef.getName();
+  }
+
+  public InterpretedClassDef getClassDef() {
+    return _classDef;
   }
 
   public String getParentClassName()
@@ -3826,10 +4099,10 @@ public class QuercusParser {
     if (_classDef == null)
       throw error(L.l(
           "'parent' is not valid because there is no active class."));
-    
+
     return _classDef.getParentName();
   }
-  
+
   /**
    * Parses the new expression
    */
@@ -3852,10 +4125,12 @@ public class QuercusParser {
       name = nameExpr.evalConstant().toString();
 
       // php/0957
-      if ("self".equals(name) && _classDef != null)
+      if ("self".equals(name) && _classDef != null) {
         name = _classDef.getName();
-      else if ("parent".equals(name) && getParentClassName() != null)
+      }
+      else if ("parent".equals(name) && getParentClassName() != null) {
         name = getParentClassName().toString();
+      }
       else {
         // name = resolveIdentifier(name);
       }
@@ -3883,10 +4158,19 @@ public class QuercusParser {
 
     Expr expr;
 
-    if (name != null)
-      expr =  _factory.createNew(getLocation(), name, args);
-    else
+    if (name != null) {
+      if (name.equals("static") || name.endsWith("\\static")) {
+        // php/093q
+        // php/0m27
+        expr = _factory.createNewStatic(getLocation(), args);
+      }
+      else {
+        expr = _factory.createNew(getLocation(), name, args);
+      }
+    }
+    else {
       expr = _factory.createVarNew(getLocation(), nameExpr, args);
+    }
 
     return expr;
   }
@@ -4007,22 +4291,42 @@ public class QuercusParser {
   }
 
   /**
-   * Parses the array() expression
+   * Parses the empty() expression.
    */
-  private Expr parseArrayFunction()
+  private Expr parseEmpty()
     throws IOException
   {
-    String name = _lexeme;
+    int token = parseToken();
+    _peekToken = token;
 
+    if (token == '(') {
+      ArrayList<Expr> args = parseArgs();
+
+      if (args.size() > 0)
+        return _factory.createEmpty(getLocation(), args.get(0));
+      else
+        throw error(L.l("empty must have one arg"));
+    }
+    else {
+      throw error(L.l("expected '('"));
+    }
+  }
+
+  /**
+   * Parses the array() expression
+   */
+  private Expr parseArrayFunction(char beginChar, char endChar)
+    throws IOException
+  {
     int token = parseToken();
 
-    if (token != '(')
-      throw error(L.l("Expected '('"));
+    if (token != beginChar)
+      throw error(L.l("Expected {0}", String.valueOf(beginChar)));
 
     ArrayList<Expr> keys = new ArrayList<Expr>();
     ArrayList<Expr> values = new ArrayList<Expr>();
 
-    while ((token = parseToken()) > 0 && token != ')') {
+    while ((token = parseToken()) > 0 && token != endChar) {
       _peekToken = token;
 
       Expr value = parseRefExpr();
@@ -4044,10 +4348,12 @@ public class QuercusParser {
         values.add(value);
       }
 
-      if (token == ')')
+      if (token == endChar) {
         break;
-      else if (token != ',')
+      }
+      else if (token != ',') {
         throw error(L.l("expected ','"));
+      }
     }
 
     return _factory.createArrayFun(keys, values);
@@ -4121,16 +4427,16 @@ public class QuercusParser {
         break;
 
       case '#':
-        while ((ch = readByte()) != '\n' && ch != '\r' && ch >= 0) {
+        while ((ch = read()) != '\n' && ch != '\r' && ch >= 0) {
           if (ch != '?') {
           }
-          else if ((ch = readByte()) != '>') {
+          else if ((ch = read()) != '>') {
             _peek = ch;
           }
           else {
-            ch = readByte();
+            ch = read();
             if (ch == '\r')
-              ch = readByte();
+              ch = read();
             if (ch != '\n')
               _peek = ch;
 
@@ -4217,13 +4523,13 @@ public class QuercusParser {
               break;
             }
             else if (ch == '?') {
-              ch = readByte();
+              ch = read();
 
               if (ch == '>') {
-                ch = readByte();
+                ch = read();
 
                 if (ch == '\r')
-                  ch = readByte();
+                  ch = read();
                 if (ch != '\n')
                   _peek = ch;
 
@@ -4231,7 +4537,7 @@ public class QuercusParser {
               }
             }
             else
-              ch = readByte();
+              ch = read();
           }
           break;
         }
@@ -4344,10 +4650,22 @@ public class QuercusParser {
           if (ch == '=')
             return LSHIFT_ASSIGN;
           else if (ch == '<') {
-            return parseHeredocToken();
+            ch = read();
+
+            if (ch == '\'') {
+              return parseNowdoc();
+            }
+            else if (ch == '"') {
+              return parseHeredocToken(true);
+            }
+            else {
+              _peek = ch;
+              return parseHeredocToken(false);
+            }
           }
-          else
+          else {
             _peek = ch;
+          }
 
           return LSHIFT;
         }
@@ -4356,7 +4674,7 @@ public class QuercusParser {
         else if (ch == '>')
           return NEQ;
         else if (ch == '/') {
-          StringBuilder sb = new StringBuilder();
+          StringValue sb = createStringBuilder();
 
           if (! parseTextMatch(sb, "script"))
             throw error(L.l("expected 'script' at '{0}'", sb));
@@ -4448,43 +4766,43 @@ public class QuercusParser {
           else
             _peek = ch2;
         }
-        
+
         return parseNamespaceIdentifier(ch);
       }
     }
   }
 
-  private String parseIdentifier()
+  private StringValue parseIdentifier()
     throws IOException
   {
     int token = _peekToken;
     _peekToken = -1;
-    
+
     if (token <= 0)
       token = parseIdentifier(read());
 
     if (token != IDENTIFIER && token < FIRST_IDENTIFIER_LEXEME)
       throw error(L.l("expected identifier at {0}.", tokenName(token)));
-    
+
     if (_lexeme.indexOf('\\') >= 0) {
       throw error(L.l("namespace identifier is not allowed at '{0}'",
                       _lexeme));
     }
     else if (_peek == '\\') {
-        throw error(L.l("namespace identifier is not allowed at '{0}\\'",
-                        _lexeme));
+      throw error(L.l("namespace identifier is not allowed at '{0}\\'",
+                      _lexeme));
     }
-    
+
     return _lexeme;
   }
-  
 
-  private String parseNamespaceIdentifier()
+
+  private StringValue parseNamespaceIdentifier()
     throws IOException
   {
     int token = _peekToken;
     _peekToken = -1;
-    
+
     if (token <= 0)
       token = parseNamespaceIdentifier(read());
 
@@ -4496,48 +4814,72 @@ public class QuercusParser {
       throw error(L.l("expected identifier at {0}.", tokenName(token)));
   }
 
-  public String getSystemFunctionName(String name)
+  public StringValue getSystemFunctionName(StringValue name)
   {
     int p = name.lastIndexOf('\\');
-    
+
     if (p < 0)
       return name;
-    
-    String systemName = name.substring(p + 1);
-    
-    if (_quercus.findFunction(systemName) != null)
+
+    StringValue systemName = name.substring(p + 1);
+
+    if (_quercus.findFunction(systemName) != null) {
       return systemName;
-    else
-      return null;
-  }
-  private String resolveIdentifier(String id)
-  {
-    if (id.startsWith("\\"))
-      return id.substring(1);
-    
-    int ns = id.indexOf('\\');
-    
-    if (ns > 0) {
-      String prefix = id.substring(0, ns);
-      
-      String use = _namespaceUseMap.get(prefix);
-      
-      if (use != null)
-        return use + id.substring(ns);
-      else if (_namespace.equals(""))
-        return id;
-      else
-        return _namespace + "\\" + id;
     }
     else {
-      String use = _namespaceUseMap.get(id);
-      
-      if (use != null)
-        return use;
-      else if (_namespace.equals(""))
+      return null;
+    }
+  }
+  private StringValue resolveIdentifier(StringValue id)
+  {
+    if (id.startsWith("\\")) {
+      return id.substring(1);
+    }
+
+    int ns = id.indexOf('\\');
+
+    if (ns > 0) {
+      StringValue prefix = id.substring(0, ns);
+      StringValue use = null;
+
+      if (_namespaceUseMap.size() > 0) {
+        use = _namespaceUseMap.get(prefix);
+
+        if (use == null) {
+          use = _namespaceUseMap.get(prefix.toLowerCase());
+        }
+      }
+
+      if (use != null) {
+        return createStringBuilder().append(use).append(id.substring(ns));
+      }
+      else if (_namespace.length() == 0) {
         return id;
-      else
-        return _namespace + '\\' + id;
+      }
+      else {
+        return createStringBuilder().append(_namespace).append("\\").append(id);
+      }
+    }
+    else {
+      StringValue use = null;
+
+      if (_namespaceUseMap.size() > 0) {
+        use = _namespaceUseMap.get(id);
+
+        if (use == null) {
+          use = _namespaceUseMap.get(id.toLowerCase());
+        }
+      }
+
+      if (use != null) {
+        return use;
+      }
+      else if (_namespace.length() == 0) {
+        return id;
+      }
+      else {
+        return createStringBuilder().append(_namespace).append('\\').append(id);
+      }
     }
   }
 
@@ -4546,7 +4888,7 @@ public class QuercusParser {
   {
     for (; Character.isWhitespace(ch); ch = read()) {
     }
-    
+
     if (isIdentifierStart(ch)) {
       _sb.setLength(0);
       _sb.append((char) ch);
@@ -4556,7 +4898,7 @@ public class QuercusParser {
       }
 
       _peek = ch;
-      
+
       return lexemeToToken();
     }
 
@@ -4568,7 +4910,7 @@ public class QuercusParser {
   {
     for (; Character.isWhitespace(ch); ch = read()) {
     }
-    
+
     if (isNamespaceIdentifierStart(ch)) {
       _sb.setLength(0);
       _sb.append((char) ch);
@@ -4578,7 +4920,7 @@ public class QuercusParser {
       }
 
       _peek = ch;
-        
+
       return lexemeToToken();
     }
 
@@ -4588,22 +4930,28 @@ public class QuercusParser {
   private int lexemeToToken()
     throws IOException
   {
-    _lexeme = _sb.toString();
+    _lexeme = copyStringValue(_sb);
 
     // the 'static' reserved keyword vs late static binding (static::$a)
-    if (_peek == ':' && "static".equals(_lexeme))
+    if (_peek == ':' && _lexeme.equalsString("static")) {
       return IDENTIFIER;
+    }
 
-    int reserved = _reserved.get(_lexeme);
+    String name = _lexeme.toString();
 
-    if (reserved > 0)
+    int reserved = _reserved.get(name);
+
+    if (reserved > 0) {
       return reserved;
+    }
 
-    reserved = _insensitiveReserved.get(_lexeme.toLowerCase(Locale.ENGLISH));
-    if (reserved > 0)
+    reserved = _insensitiveReserved.get(name.toLowerCase(Locale.ENGLISH));
+    if (reserved > 0) {
       return reserved;
-    else
+    }
+    else {
       return IDENTIFIER;
+    }
   }
 
   /**
@@ -4612,7 +4960,7 @@ public class QuercusParser {
   private void parseMultilineComment()
     throws IOException
   {
-    int ch = readByte();
+    int ch = read();
 
     if (ch == '*') {
       _sb.setLength(0);
@@ -4623,7 +4971,7 @@ public class QuercusParser {
         if (ch != '*') {
           _sb.append((char) ch);
         }
-        else if ((ch = readByte()) == '/') {
+        else if ((ch = read()) == '/') {
           _sb.append('*');
           _sb.append('/');
 
@@ -4635,7 +4983,7 @@ public class QuercusParser {
           _sb.append('*');
           _peek = ch;
         }
-      } while ((ch = readByte()) >= 0);
+      } while ((ch = read()) >= 0);
 
       _comment = _sb.toString();
     }
@@ -4643,11 +4991,11 @@ public class QuercusParser {
       do {
         if (ch != '*') {
         }
-        else if ((ch = readByte()) == '/')
+        else if ((ch = read()) == '/')
           return;
         else
           _peek = ch;
-      } while ((ch = readByte()) >= 0);
+      } while ((ch = read()) >= 0);
     }
   }
 
@@ -4657,7 +5005,7 @@ public class QuercusParser {
   private int parsePhpText()
     throws IOException
   {
-    StringBuilder sb = new StringBuilder();
+    StringValue sb = createStringBuilder();
 
     int ch = read();
     while (ch > 0) {
@@ -4668,19 +5016,18 @@ public class QuercusParser {
         if ((ch = read()) == 's' || ch == 'S') {
           _peek = ch;
           if (parseScriptBegin(sb)) {
-            _lexeme = sb.toString();
+            _lexeme = sb;
             return TEXT;
           }
           ch = read();
         }
         else if (ch == '%') {
           if ((ch = read()) == '=') {
-            _lexeme = sb.toString();
-
+            _lexeme = sb;
             return TEXT_ECHO;
           }
           else if (Character.isWhitespace(ch)) {
-            _lexeme = sb.toString();
+            _lexeme = sb;
 
             return TEXT;
           }
@@ -4689,12 +5036,20 @@ public class QuercusParser {
           sb.append('<');
         }
         else if ((ch = read()) == '=') {
-          _lexeme = sb.toString();
+          _lexeme = sb;
 
           return TEXT_ECHO;
         }
+        else if (ch != 'p' && ch != 'P' && ! isShortOpenTag()) {
+          sb.append('<');
+          sb.append('?');
+
+          sb.append((char) ch);
+
+          ch = read();
+        }
         else {
-          _lexeme = sb.toString();
+          _lexeme = sb;
           _peek = ch;
 
           if (ch == 'p' || ch == 'P')
@@ -4710,7 +5065,7 @@ public class QuercusParser {
       }
     }
 
-    _lexeme = sb.toString();
+    _lexeme = sb;
 
     return TEXT;
   }
@@ -4718,7 +5073,7 @@ public class QuercusParser {
   /**
    * Parses the <script language="quercus"> opening
    */
-  private boolean parseScriptBegin(StringBuilder sb)
+  private boolean parseScriptBegin(StringValue sb)
     throws IOException
   {
     int begin = sb.length();
@@ -4763,7 +5118,7 @@ public class QuercusParser {
     }
   }
 
-  private boolean parseTextMatch(StringBuilder sb, String text)
+  private boolean parseTextMatch(StringValue sb, String text)
     throws IOException
   {
     int len = text.length();
@@ -4785,7 +5140,7 @@ public class QuercusParser {
     return true;
   }
 
-  private void parseWhitespace(StringBuilder sb)
+  private void parseWhitespace(StringValue sb)
     throws IOException
   {
     int ch;
@@ -4820,26 +5175,26 @@ public class QuercusParser {
         if (isUnicode) {
           if (ch == 'u') {
             int value = parseUnicodeEscape(false);
-            
+
             if (value < 0) {
               _sb.append('\\');
               _sb.append('u');
             }
             else
               _sb.append((char) value); // Character.toChars(value));
-            
+
             continue;
           }
           else if (ch == 'U') {
             int value = parseUnicodeEscape(true);
-            
+
             if (value < 0) {
               _sb.append('\\');
               _sb.append('U');
             }
             else
               _sb.append((char) value); // Character.toChars(value));
-            
+
             continue;
           }
         }
@@ -4866,13 +5221,105 @@ public class QuercusParser {
         _sb.append((char) ch);
     }
 
-    _lexeme = _sb.toString();
+    _lexeme = copyStringValue(_sb);
+  }
+
+  /**
+   * Parses the nowdoc.
+   */
+  private int parseNowdoc()
+    throws IOException
+  {
+    _sb.setLength(0);
+    int ch;
+
+    while ((ch = read()) >= 0 && ch != '\'' && ! Character.isWhitespace(ch)) {
+      _sb.append((char) ch);
+    }
+
+    if (ch != '\'') {
+      throw expect("'", ch);
+    }
+
+    ch = read();
+
+    if (ch == '\r') {
+      ch = read();
+    }
+
+    if (ch != '\n') {
+      throw expect(L.l("nowdoc newline"), ch);
+    }
+
+    String nowdocName = _sb.toString();
+    _sb.setLength(0);
+
+    while ((ch = read()) >= 0) {
+      if (ch == '\r') {
+        if ((ch = read()) == '\n') {
+          if (parseNowdocEnd(nowdocName)) {
+            break;
+          }
+          else {
+            _sb.append('\r');
+            _sb.append((char) ch);
+          }
+        }
+        else {
+          _sb.append('\r');
+        }
+      }
+      else if (ch == '\n') {
+        if (parseNowdocEnd(nowdocName)) {
+          break;
+        }
+
+        _sb.append((char) ch);
+      }
+      else {
+        _sb.append((char) ch);
+      }
+    }
+
+    _lexeme = createStringValue(_sb.toString());
+
+    return STRING;
+  }
+
+  private boolean parseNowdocEnd(String nowdocName)
+    throws IOException
+  {
+    int i = 0;
+    int len = nowdocName.length();
+
+    int ch = read();
+    for (; i < len; i++) {
+      if (nowdocName.charAt(i) == ch) {
+        ch = read();
+
+        continue;
+      }
+      else {
+        break;
+      }
+    }
+
+    _peek = ch;
+
+    if (i == len) {
+      return true;
+    }
+    else {
+      _sb.append(nowdocName, 0, i);
+
+      return false;
+    }
   }
 
   /**
    * Parses the next heredoc token.
    */
-  private int parseHeredocToken()
+  private int parseHeredocToken(boolean isQuoted)
     throws IOException
   {
     _sb.setLength(0);
@@ -4884,30 +5331,45 @@ public class QuercusParser {
     }
     _peek = ch;
 
-    while ((ch = read()) >= 0 && ch != '\r' && ch != '\n') {
+    while ((ch = read()) >= 0
+           && ! Character.isWhitespace(ch)
+           && ! (isQuoted && ch == '"')) {
       _sb.append((char) ch);
     }
 
     _heredocEnd = _sb.toString();
 
-    if (ch == '\n') {
+    if (isQuoted && ch == '"') {
+      ch = read();
+
+      if (ch == '\r') {
+        ch = read();
+      }
+
+      if (ch != '\n') {
+        throw expect("\n", ch);
+      }
+    }
+    else if (ch == '\n') {
     }
     else if (ch == '\r') {
       ch = read();
       if (ch != '\n')
         _peek = ch;
     }
-    else
+    else {
       _peek = ch;
+    }
 
     return parseEscapedString('"');
   }
 
   /**
    * Parses the next string
-   * XXX: parse as Unicode if and only if unicode.semantics is on.
    */
-  private Expr parseEscapedString(String prefix, int token, boolean isSystem)
+  private Expr parseEscapedString(StringValue prefix,
+                                  int token,
+                                  boolean isSystem)
     throws IOException
   {
     return parseEscapedString(prefix, token, isSystem, true);
@@ -4916,19 +5378,19 @@ public class QuercusParser {
   /**
    * Parses the next string
    */
-  private Expr parseEscapedString(String prefix,
-                                   int token,
-                                   boolean isSystem,
-                                   boolean isUnicode)
+  private Expr parseEscapedString(StringValue prefix,
+                                  int token,
+                                  boolean isSystem,
+                                  boolean isUnicode)
     throws IOException
   {
     Expr expr;
 
-    if (isUnicode)
-      expr = createString(prefix);
+    if (isUnicode) {
+      expr = createStringExpr(prefix);
+    }
     else {
-      // XXX: getBytes isn't correct
-      expr = createBinary(prefix.getBytes("iso-8859-1"));
+      expr = createBinaryExpr(prefix.toBinaryValue(_scriptEncoding));
     }
 
     while (true) {
@@ -4952,12 +5414,12 @@ public class QuercusParser {
 
         _peek = ch;
 
-        String varName = _sb.toString();
-
-        if (varName.equals("this"))
+        if (_sb.equalsString("this")) {
           tail = _factory.createThis(_classDef);
-        else
-          tail = _factory.createVar(_function.createVar(varName));
+        }
+        else {
+          tail = _factory.createVar(_function.createVar(copyStringValue(_sb)));
+        }
 
         // php/013n
         if (((ch = read()) == '[' || ch == '-')) {
@@ -4968,19 +5430,19 @@ public class QuercusParser {
           }
           else {
             if ((ch = read()) != '>') {
-              tail = _factory.createAppend(tail, createString("-"));
+              tail = _factory.createAppend(tail, createStringExpr("-"));
             }
             else if (isIdentifierPart(ch = read())) {
-              _sb.clear();
+              _sb.setLength(0);
               for (; isIdentifierPart(ch); ch = read()) {
                 _sb.append((char) ch);
               }
 
-              tail = tail.createFieldGet(_factory,
-                  createStringValue(_sb.toString()));
+              tail = tail.createFieldGet(_factory, getLocation(),
+                                         copyStringValue(_sb));
             }
             else {
-              tail = _factory.createAppend(tail, createString("->"));
+              tail = _factory.createAppend(tail, createStringExpr("->"));
             }
 
             _peek = ch;
@@ -5003,9 +5465,9 @@ public class QuercusParser {
         Expr string;
 
         if (isUnicode)
-          string = createString(_sb.toString());
+          string = createStringExpr(copyStringValue(_sb));
         else
-          string = createBinary(_sb.toString().getBytes("iso-8859-1"));
+          string = createBinaryExpr(copyStringValue(_sb.toBinaryValue(_scriptEncoding)));
 
         expr = _factory.createAppend(expr, string);
       }
@@ -5023,14 +5485,16 @@ public class QuercusParser {
   {
     int ch = read();
 
-    _sb.clear();
+    _sb.setLength(0);
 
     if (ch == '$') {
       for (ch = read(); isIdentifierPart(ch); ch = read()) {
         _sb.append((char) ch);
       }
 
-      VarExpr var = _factory.createVar(_function.createVar(_sb.toString()));
+      StringValue nameV = copyStringValue(_sb);
+
+      VarExpr var = _factory.createVar(_function.createVar(nameV));
 
       tail = _factory.createArrayGet(getLocation(), tail, var);
     }
@@ -5044,7 +5508,7 @@ public class QuercusParser {
       }
 
       tail = _factory.createArrayGet(getLocation(),
-          tail, _factory.createLong(index));
+                                     tail, _factory.createLong(index));
     }
     else if (isIdentifierPart(ch)) {
       for (; isIdentifierPart(ch); ch = read()) {
@@ -5066,40 +5530,61 @@ public class QuercusParser {
     return tail;
   }
 
-  private Expr createString(String lexeme)
+  private Expr createStringExpr(String lexeme)
   {
-    // XXX: see QuercusParser.parseDefault for _quercus == null
-    if (isUnicodeSemantics())
-      return _factory.createUnicode(lexeme);
-    else
+    StringValue value = createStringValue(lexeme);
+
+    return createStringExpr(value);
+  }
+
+  private Expr createStringExpr(StringValue lexeme)
+  {
+    if (lexeme.isUnicode()) {
+      return _factory.createUnicode((UnicodeValue) lexeme);
+    }
+    else {
       return _factory.createString(lexeme);
+    }
+  }
+
+  private Expr createBinaryExpr(StringValue lexeme)
+  {
+    if (lexeme.isUnicode()) {
+      return _factory.createBinary((BinaryValue) lexeme);
+    }
+    else {
+      return _factory.createString(lexeme);
+    }
   }
 
   private StringValue createStringValue(String lexeme)
   {
     // XXX: see QuercusParser.parseDefault for _quercus == null
-    if (isUnicodeSemantics())
+    if (isUnicodeSemantics()) {
       return new UnicodeBuilderValue(lexeme);
-    else
+    }
+    else {
       return new ConstStringValue(lexeme);
+    }
   }
 
-  private Expr createBinary(byte []bytes)
-    throws IOException
+  private StringValue copyStringValue(StringValue value)
   {
-    // XXX: see QuercusParser.parseDefault for _quercus == null
-    // php/0ch1, php/0350
-    // return _factory.createBinary(bytes);
-
-    if (isUnicodeSemantics())
-      return _factory.createBinary(bytes);
+    if (value instanceof StringBuilderValue) {
+      return new ConstStringValue((StringBuilderValue) value);
+    }
     else {
-      try {
-        return _factory.createString(
-            new String(bytes, 0, bytes.length, "iso-8859-1"));
-      } catch (UnsupportedEncodingException e) {
-        throw new QuercusParseException(e);
-      }
+      return value.createStringBuilder().append(value);
+    }
+  }
+
+  private StringValue createStringBuilder()
+  {
+    if (isUnicodeSemantics()) {
+      return new UnicodeBuilderValue();
+    }
+    else {
+      return new StringBuilderValue();
     }
   }
 
@@ -5124,7 +5609,7 @@ public class QuercusParser {
 
     while ((ch = read()) > 0) {
       if (_heredocEnd == null && ch == end) {
-        _lexeme = _sb.toString();
+        _lexeme = copyStringValue(_sb);
         return STRING;
       }
       else if (ch == '\\') {
@@ -5156,20 +5641,21 @@ public class QuercusParser {
           break;
         case 'x': {
           int value = parseHexEscape();
-          
-          if (value >= 0)
+
+          if (value >= 0) {
             _sb.append((char) value);
+          }
           else {
             _sb.append('\\');
             _sb.append('x');
           }
-            
+
           break;
         }
         case 'u':
           if (isUnicode) {
             int result = parseUnicodeEscape(false);
-            
+
             if (result < 0) {
               _sb.append('\\');
               _sb.append('u');
@@ -5185,7 +5671,7 @@ public class QuercusParser {
         case 'U':
           if (isUnicode) {
             int result = parseUnicodeEscape(true);
-            
+
             if (result < 0) {
               _sb.append('\\');
               _sb.append('U');
@@ -5217,12 +5703,12 @@ public class QuercusParser {
 
         if (ch == '{') {
           _peek = '$';
-          _lexeme = _sb.toString();
+          _lexeme = copyStringValue(_sb);
           return COMPLEX_STRING_ESCAPE;
         }
         else if (isIdentifierStart(ch)) {
           _peek = ch;
-          _lexeme = _sb.toString();
+          _lexeme = copyStringValue(_sb);
           return SIMPLE_STRING_ESCAPE;
         }
         else {
@@ -5235,7 +5721,7 @@ public class QuercusParser {
 
         if (ch == '$') {
           _peek = ch;
-          _lexeme = _sb.toString();
+          _lexeme = copyStringValue(_sb);
           return COMPLEX_STRING_ESCAPE;
         }
         else {
@@ -5252,11 +5738,9 @@ public class QuercusParser {
 
         if (_heredocEnd == null || ! _sb.endsWith(_heredocEnd)) {
         }
-        else if (
-            _sb.length() == _heredocEnd.length()
-            || _sb.charAt(_sb.length() - _heredocEnd.length() - 1) == '\n'
-            || _sb.charAt(_sb.length() - _heredocEnd.length() - 1) == '\r'
-            ) {
+        else if (_sb.length() == _heredocEnd.length()
+                 || _sb.charAt(_sb.length() - _heredocEnd.length() - 1) == '\n'
+                 || _sb.charAt(_sb.length() - _heredocEnd.length() - 1) == '\r') {
           _sb.setLength(_sb.length() - _heredocEnd.length());
 
           if (_sb.length() > 0 && _sb.charAt(_sb.length() - 1) == '\n')
@@ -5265,48 +5749,54 @@ public class QuercusParser {
             _sb.setLength(_sb.length() - 1);
 
           _heredocEnd = null;
-          _lexeme = _sb.toString();
+          _lexeme = copyStringValue(_sb);
           return STRING;
         }
       }
     }
 
-    _lexeme = _sb.toString();
+    _lexeme = copyStringValue(_sb);
 
     return STRING;
   }
- 
+
   private boolean isNamespaceIdentifierStart(int ch)
   {
     return isIdentifierStart(ch) || ch == '\\';
   }
-  
+
   private boolean isIdentifierStart(int ch)
   {
-    if (ch < 0)
+    if (ch < 0) {
       return false;
-    else
-      return (ch >= 'a' && ch <= 'z' 
-              || ch >= 'A' && ch <= 'Z'
+    }
+    else {
+      return ('a' <= ch && ch <= 'z'
+              || 'A' <= ch && ch <= 'Z'
               || ch == '_'
+              || 0x7f <= ch && ch <= 0xff
               || Character.isLetter(ch));
+    }
   }
-  
+
   private boolean isNamespaceIdentifierPart(int ch)
   {
     return isIdentifierPart(ch) || ch == '\\';
   }
-  
+
   private boolean isIdentifierPart(int ch)
   {
-    if (ch < 0)
+    if (ch < 0) {
       return false;
-    else
-      return (ch >= 'a' && ch <= 'z'
-              || ch >= 'A' && ch <= 'Z'
+    }
+    else {
+      return ('a' <= ch && ch <= 'z'
+              || 'A' <= ch && ch <= 'Z'
               || ch >= '0' && ch <= '9'
               || ch == '_'
+              || 0x7f <= ch && ch <= 0xff
               || Character.isLetterOrDigit(ch));
+    }
   }
 
   private int parseOctalEscape(int ch)
@@ -5374,20 +5864,20 @@ public class QuercusParser {
 
     if (codePoint < 0)
       return -1;
-    
+
     int low = parseHexEscape();
-    
+
     if (low < 0)
       return codePoint;
-    
+
     codePoint = codePoint * 256 + low;
 
     if (isLongForm) {
       low = parseHexEscape();
-      
+
       if (low < 0)
         return codePoint;
-      
+
       codePoint = codePoint * 256 + low;
     }
 
@@ -5404,10 +5894,15 @@ public class QuercusParser {
 
     if (ch == '0') {
       ch = read();
-      if (ch == 'x' || ch == 'X')
+      if (ch == 'x' || ch == 'X') {
         return parseHex();
-      else if (ch == '0')
+      }
+      else if (ch == 'b' || ch == 'B') {
+        return parseBinary();
+      }
+      else if (ch == '0') {
         return parseNumberToken(ch);
+      }
       else {
         _peek = ch;
         ch = '0';
@@ -5466,10 +5961,10 @@ public class QuercusParser {
           break;
       }
 
-      _lexeme = String.valueOf(value);
+      _lexeme = createStringValue(String.valueOf(value));
     }
     else {
-      _lexeme = _sb.toString();
+      _lexeme = copyStringValue(_sb);
     }
 
     return token;
@@ -5506,12 +6001,45 @@ public class QuercusParser {
     }
 
     if (value == dValue) {
-      _lexeme = String.valueOf(value);
+      _lexeme = createStringValue(String.valueOf(value));
+
       return LONG;
     }
     else {
-      _lexeme = String.valueOf(dValue);
+      _lexeme = createStringValue(String.valueOf(dValue));
 
+      return DOUBLE;
+    }
+  }
+
+  /**
+   * Parses a binary number (0b010101111).
+   */
+  private int parseBinary()
+    throws IOException
+  {
+    long value = 0;
+    double dValue = 0;
+
+    while (true) {
+      int ch = read();
+
+      if (ch == '0' || ch == '1') {
+        value = (value << 1) + ch - '0';
+        dValue = dValue * 2 + ch - '0';
+      }
+      else {
+        _peek = ch;
+        break;
+      }
+    }
+
+    if (value == dValue) {
+      _lexeme = createStringValue(String.valueOf(value));
+      return LONG;
+    }
+    else {
+      _lexeme = createStringValue(String.valueOf(dValue));
       return DOUBLE;
     }
   }
@@ -5543,12 +6071,12 @@ public class QuercusParser {
     }
 
     if (value == dValue) {
-      _lexeme = String.valueOf(value);
+      _lexeme = createStringValue(String.valueOf(value));
 
       return LONG;
     }
     else {
-      _lexeme = String.valueOf(dValue);
+      _lexeme = createStringValue(String.valueOf(dValue));
 
       return DOUBLE;
     }
@@ -5559,10 +6087,11 @@ public class QuercusParser {
   {
     int token = parseToken();
 
-    if (token != expect)
+    if (token != expect) {
       throw error(L.l("expected {0} at {1}",
                       tokenName(expect),
                       tokenName(token)));
+    }
   }
 
   /**
@@ -5579,7 +6108,7 @@ public class QuercusParser {
     }
 
     try {
-      int ch = _is.readChar();
+      int ch = readInternal();
 
       if (ch == '\r') {
         _parserLocation.incrementLineNumber();
@@ -5592,53 +6121,26 @@ public class QuercusParser {
         _hasCr = false;
 
       return ch;
-    } catch (CharConversionException e) {
+    }
+    catch (CharConversionException e) {
       throw new QuercusParseException(getFileName() + ":" + getLine()
           + ": " + e
           + "\nCheck that the script-encoding setting matches the "
           + "source file's encoding", e);
-    } catch (IOException e) {
-      throw new IOExceptionWrapper(
-          getFileName() + ":" + getLine() + ":" + e, e);
+    }
+    catch (IOException e) {
+      throw new IOExceptionWrapper(getFileName() + ":" + getLine() + ":" + e, e);
     }
   }
 
-  /*
-   * Reads the next byte.
-   */
-  private int readByte()
+  private int readInternal()
     throws IOException
   {
-    int peek = _peek;
-
-    if (peek >= 0) {
-      _peek = -1;
-      return peek;
+    if (_reader != null) {
+      return _reader.read();
     }
-
-    try {
-      int ch;
-
-      // XXX: should really be handled by ReadStream
-      // php/001b
-      if (_encoding == null)
-        ch = _is.read();
-      else
-        ch = _is.readChar();
-
-      if (ch == '\r') {
-        _parserLocation.incrementLineNumber();
-        _hasCr = true;
-      }
-      else if (ch == '\n' && ! _hasCr)
-        _parserLocation.incrementLineNumber();
-      else
-        _hasCr = false;
-
-      return ch;
-    } catch (IOException e) {
-      throw new IOExceptionWrapper(
-          getFileName() + ":" + getLine() + ":" + e, e);
+    else {
+      return _is.readChar();
     }
   }
 
@@ -5659,7 +6161,7 @@ public class QuercusParser {
     int lines = 5;
     int first = lines / 2;
 
-    String []sourceLines = Env.getSourceLine(_sourceFile, 
+    String []sourceLines = Env.getSourceLine(_sourceFile,
                                              lineNumber - first + _sourceOffset,
                                              lines);
 
@@ -5679,7 +6181,7 @@ public class QuercusParser {
       for (int i = 0; i < sourceLines.length; i++) {
         if (sourceLines[i] == null)
           continue;
-        
+
         sb.append("\n");
         sb.append(shortFile)
           .append(":")
@@ -5745,6 +6247,9 @@ public class QuercusParser {
     case DEFAULT: return "'default'";
     case CLASS: return "'class'";
     case INTERFACE: return "'interface'";
+    case TRAIT: return "'trait'";
+    case INSTEADOF: return "'insteadof'";
+
     case EXTENDS: return "'extends'";
     case IMPLEMENTS: return "'implements'";
     case RETURN: return "'return'";
@@ -5799,10 +6304,10 @@ public class QuercusParser {
 
     case SCOPE:
       return "SCOPE (" + _lexeme +  ")";
-      
+
     case NAMESPACE:
       return "NAMESPACE";
-      
+
     case USE:
       return "USE";
 
@@ -5903,8 +6408,24 @@ public class QuercusParser {
     ReadStream is = _is;
     _is = null;
 
-    if (is != null)
-      is.close();
+    if (is != null) {
+      try {
+        is.close();
+      }
+      catch (Exception e) {
+      }
+    }
+
+    Reader reader = _reader;
+    _reader = null;
+
+    if (reader != null) {
+      try {
+        reader.close();
+      }
+      catch (Exception e) {
+      }
+    }
   }
 
   private class ParserLocation {
@@ -5962,10 +6483,11 @@ public class QuercusParser {
 
     public Location getLocation()
     {
-      String currentFunctionName
-        = (_function == null || _function.isPageMain()
-           ? null
-           : _function.getName());
+      String currentFunctionName = null;
+
+      if (_function != null && ! _function.isPageMain()) {
+        currentFunctionName = _function.getName();
+      }
 
       String currentClassName = _classDef == null ? null : _classDef.getName();
 
@@ -5976,9 +6498,10 @@ public class QuercusParser {
           _location = null;
       }
 
-      if (_location == null)
-        _location = new Location(_fileName, _lineNumber,
-            currentClassName, currentFunctionName);
+      if (_location == null) {
+        _location = new Location(_fileName, _userPath, _lineNumber,
+                                 currentClassName, currentFunctionName);
+      }
 
       _lastFunctionName = currentFunctionName;
       _lastClassName = currentClassName;
@@ -6029,6 +6552,7 @@ public class QuercusParser {
     _insensitiveReserved.put("include_once", INCLUDE_ONCE);
     _insensitiveReserved.put("require_once", REQUIRE_ONCE);
     _insensitiveReserved.put("unset", UNSET);
+    _insensitiveReserved.put("empty", EMPTY);
     _insensitiveReserved.put("foreach", FOREACH);
     _insensitiveReserved.put("as", AS);
     _insensitiveReserved.put("switch", SWITCH);
@@ -6056,6 +6580,9 @@ public class QuercusParser {
     _insensitiveReserved.put("try", TRY);
     _insensitiveReserved.put("catch", CATCH);
     _insensitiveReserved.put("interface", INTERFACE);
+    _insensitiveReserved.put("trait", TRAIT);
+    _insensitiveReserved.put("insteadof", INSTEADOF);
+
     _insensitiveReserved.put("implements", IMPLEMENTS);
 
     _insensitiveReserved.put("import", IMPORT);

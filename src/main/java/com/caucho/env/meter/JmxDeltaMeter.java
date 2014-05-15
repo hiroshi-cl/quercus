@@ -44,52 +44,62 @@ public final class JmxDeltaMeter extends AbstractMeter {
   private MBeanServer _server;
   private ObjectName _objectName;
   private String _attribute;
+  private boolean _isOptional;
 
   private double _lastValue;
-  private double _lastSample;
+  private double _value;
 
-  public JmxDeltaMeter(String name, String objectName, String attribute)
+  public JmxDeltaMeter(String name,
+                       String objectName,
+                       String attribute,
+                       boolean isOptional)
   {
     super(name);
 
     try {
-        _objectName = new ObjectName(objectName);
+      _objectName = new ObjectName(objectName);
     } catch (Exception e) {
         throw ConfigException.create(e);
     }
 
     _attribute = attribute;
     _server = Jmx.getGlobalMBeanServer();
+    _isOptional = isOptional;
   }
 
   /**
    * Polls the statistics attribute.
    */
   @Override
-  public double sample()
+  public void sample()
   {
     try {
       Object objValue = _server.getAttribute(_objectName, _attribute);
 
-      if (objValue == null)
-        return 0;
+      if (objValue == null) {
+        _value = 0;
+        return;
+      }
       
       double lastValue = _lastValue;
-      _lastValue = lastValue;
       double value = ((Number) objValue).doubleValue();
+      _lastValue = value;
       
-      _lastSample = value - lastValue;
-      
-      return _lastSample;
+      _value = value - lastValue;
     } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
+      if (_isOptional
+          && e instanceof javax.management.InstanceNotFoundException)
+        log.log(Level.FINEST, e.toString(), e);
+      else
+        log.log(Level.FINE, e.toString(), e);
 
-      return 0;
+      _value = 0;
     }
   }
   
-  public double peek()
+  @Override
+  public double calculate()
   {
-    return _lastSample;
+    return _value;
   }
 }

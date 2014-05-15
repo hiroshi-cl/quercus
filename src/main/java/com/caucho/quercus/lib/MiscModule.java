@@ -60,7 +60,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * PHP misc functiomn.
+ * PHP misc functions.
  */
 public class MiscModule extends AbstractQuercusModule {
   private static final L10N L = new L10N(MiscModule.class);
@@ -179,7 +179,7 @@ public class MiscModule extends AbstractQuercusModule {
    * Comples and evaluates an expression.
    */
   @UsesSymbolTable
-  public Value eval(Env env, String code)
+  public Value eval(Env env, StringValue code)
   {
     try {
       if (log.isLoggable(Level.FINER))
@@ -505,7 +505,7 @@ public class MiscModule extends AbstractQuercusModule {
   {
     try {
       ArrayList<PackSegment> segments = parsePackFormat(env, format, false);
-      
+
       if (segments == null)
         return BooleanValue.FALSE;
 
@@ -527,14 +527,16 @@ public class MiscModule extends AbstractQuercusModule {
    */
   public Value unpack(Env env, String format, StringValue s)
   {
-    if (format == null)
+    if (format == null) {
       return NullValue.NULL;
-    
+    }
+
     try {
       ArrayList<PackSegment> segments = parsePackFormat(env, format, true);
-      
-      if (segments == null)
+
+      if (segments == null) {
         return BooleanValue.FALSE;
+      }
 
       ArrayValue array = new ArrayValueImpl();
 
@@ -648,9 +650,9 @@ public class MiscModule extends AbstractQuercusModule {
       int status = process.waitFor();
 
       return sb;
-    } catch (Exception e) {
-
-      log.log(Level.FINE, e.getMessage(), e);
+    }
+    catch (Throwable e) {
+      // Throwables thrown by SecurityManager
       env.warning(e.getMessage(), e);
 
       return NullValue.NULL;
@@ -677,6 +679,10 @@ public class MiscModule extends AbstractQuercusModule {
 
       args[2] = command;
 
+      if (log.isLoggable(Level.FINER)) {
+        log.finer("Quercus: passthru " + args[0] + " " + args[1] + " " + args[2]);
+      }
+
       ProcessBuilder processBuilder = new ProcessBuilder(args);
       processBuilder.redirectErrorStream(true);
       // XXX: security issues?
@@ -692,19 +698,21 @@ public class MiscModule extends AbstractQuercusModule {
         is.close();
 
         int status = process.waitFor();
-        
+
         if (result != null)
           result.set(LongValue.create(status));
       }
       finally {
         process.destroy();
       }
-    } catch (Exception e) {
+    }
+    catch (Throwable e) {
+      // Throwables thrown by SecurityManager
       env.warning(e.getMessage(), e);
     }
   }
 
-  /*
+  /**
    * Basic implementation of proc_open.
    * XXX: options
    */
@@ -837,16 +845,16 @@ public class MiscModule extends AbstractQuercusModule {
 
       return new ProcOpenResource(env, process, in, out, es, command);
 
-    } catch (Exception e) {
-
-      log.log(Level.FINE, e.getMessage(), e);
+    }
+    catch (Throwable e) {
+      // Throwables thrown by SecurityManager
       env.warning(e);
 
       return null;
     }
   }
 
-  /*
+  /**
    * Closes the process opened by proc_open.
    */
   public static int proc_close(Env env,
@@ -861,7 +869,7 @@ public class MiscModule extends AbstractQuercusModule {
    return stream.pclose();
   }
 
-  /*
+  /**
    * Forcibly terminates the process opened by proc_open.
    */
   public static boolean proc_terminate(Env env,
@@ -1227,7 +1235,7 @@ public class MiscModule extends AbstractQuercusModule {
         i++;
       }
       else {
-        env.warning("a: not enough arguments");
+        env.warning(L.l("a: not enough arguments"));
 
         return i;
       }
@@ -1310,7 +1318,7 @@ public class MiscModule extends AbstractQuercusModule {
         i++;
       }
       else {
-        env.warning("a: not enough arguments");
+        env.warning(L.l("a: not enough arguments"));
 
         return i;
       }
@@ -1353,7 +1361,7 @@ public class MiscModule extends AbstractQuercusModule {
   }
 
   static class HexPackSegment extends PackSegment {
-    private final StringValue _name;
+    private final Value _name;
     private final int _length;
 
     HexPackSegment(Env env, int length)
@@ -1363,7 +1371,13 @@ public class MiscModule extends AbstractQuercusModule {
 
     HexPackSegment(Env env, String name, int length)
     {
-      _name = env.createString(name);
+      if (name.length() != 0) {
+        _name = env.createString(name);
+      }
+      else {
+        _name = LongValue.ONE;
+      }
+
       _length = length;
     }
 
@@ -1378,7 +1392,7 @@ public class MiscModule extends AbstractQuercusModule {
         i++;
       }
       else {
-        env.warning("a: not enough arguments");
+        env.warning(L.l("a: not enough arguments"));
 
         return i;
       }
@@ -1390,7 +1404,7 @@ public class MiscModule extends AbstractQuercusModule {
       if (_length == Integer.MAX_VALUE) {
       }
       else if (strlen < _length) {
-        env.warning("not enough characters in hex string");
+        env.warning(L.l("not enough characters in hex string"));
 
         return i;
       }
@@ -1425,15 +1439,30 @@ public class MiscModule extends AbstractQuercusModule {
     public int unpack(Env env, ArrayValue result,
                       StringValue s, int offset, int strLen)
     {
-      if (offset + (long) (_length / 2 - 1) >= strLen)
+      int len = _length;
+      int maxLen = (strLen - offset) * 2;
+
+      len = Math.min(len, maxLen);
+
+      if (len == 0) {
         return offset;
+      }
 
       StringValue sb = env.createStringBuilder();
-      for (int i = _length / 2 - 1; i >= 0; i--) {
+      while (offset < strLen) {
         char ch = s.charAt(offset++);
 
         sb.append(digitToHex(ch >> 4));
+
+        if (--len <= 0) {
+          break;
+        }
+
         sb.append(digitToHex(ch));
+
+        if (--len <= 0) {
+          break;
+        }
       }
 
       result.put(_name, sb);

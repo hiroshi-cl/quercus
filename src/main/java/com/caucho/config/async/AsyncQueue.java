@@ -30,21 +30,21 @@
 package com.caucho.config.async;
 
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.env.thread.TaskWorker;
-
+import com.caucho.env.thread.AbstractTaskWorker;
 
 /**
  * Represents the @Asynchronous interception
  */
-public class AsyncQueue extends TaskWorker {
+public class AsyncQueue extends AbstractTaskWorker {
   private static final Logger log = Logger.getLogger(AsyncQueue.class.getName());
   
-  private final ArrayBlockingQueue<Runnable> _queue
-    = new ArrayBlockingQueue<Runnable>(256);
+  private final LinkedBlockingQueue<Runnable> _queue
+    = new LinkedBlockingQueue<Runnable>(1024);
   
   public void offer(Runnable task)
   {

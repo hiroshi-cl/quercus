@@ -29,15 +29,14 @@
 
 package com.caucho.quercus.script;
 
-import com.caucho.quercus.QuercusContext;
-
 import javax.script.Bindings;
 import javax.script.ScriptEngine;
 import javax.script.ScriptEngineFactory;
 import javax.script.SimpleBindings;
+
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
-import java.lang.reflect.*;
 
 /**
  * Script engine factory
@@ -45,7 +44,7 @@ import java.lang.reflect.*;
 public class QuercusScriptEngineFactory implements ScriptEngineFactory
 {
   private Bindings _globalBindings = new SimpleBindings();
-  
+
   /**
    * Returns the full name of the ScriptEngine.
    */
@@ -60,16 +59,15 @@ public class QuercusScriptEngineFactory implements ScriptEngineFactory
   public String getEngineVersion()
   {
     try {
-      //return com.caucho.Version.VERSION;
-
-      Class cl = Class.forName("com.caucho.Version");
+      Class<?> cl = Class.forName("com.caucho.Version");
       Field version = cl.getField("VERSION");
 
       return (String) version.get(null);
-    } catch (Exception e) {
+    }
+    catch (Exception e) {
     }
 
-    return "Resin/3.1.0";
+    return "Resin/4.x";
   }
 
   /**
@@ -116,7 +114,7 @@ public class QuercusScriptEngineFactory implements ScriptEngineFactory
    */
   public String getLanguageVersion()
   {
-    return "5.3.2";
+    return "5.4.0";
   }
 
   /**
@@ -165,7 +163,7 @@ public class QuercusScriptEngineFactory implements ScriptEngineFactory
       sb.append(args[i]);
     }
     sb.append(");");
-    
+
     return sb.toString();
   }
 
@@ -190,36 +188,23 @@ public class QuercusScriptEngineFactory implements ScriptEngineFactory
       sb.append(statements[i]);
       sb.append(";\n");
     }
-    
+
     sb.append("?>\n");
-    
+
     return sb.toString();
   }
-  
+
   /**
    * Returns a ScriptEngine instance.
    */
   public ScriptEngine getScriptEngine()
   {
-    return new QuercusScriptEngine(this, createQuercus());
-  }
-
-  /**
-   * Creates a new Quercus, which can be overridden for security issues.
-   */
-  protected QuercusContext createQuercus()
-  {
-    QuercusContext quercus = new QuercusContext();
-    
-    quercus.init();
-    quercus.start();
-    
-    return quercus;
+    return new QuercusScriptEngine(this);
   }
 
   public String toString()
   {
-    return "QuercusScriptEngineFactory[]";
+    return getClass().getSimpleName() + "[]";
   }
 }
 

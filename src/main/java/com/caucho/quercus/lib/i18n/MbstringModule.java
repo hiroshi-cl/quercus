@@ -31,13 +31,21 @@ package com.caucho.quercus.lib.i18n;
 
 import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.UnimplementedException;
+import com.caucho.quercus.annotation.Hide;
 import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.annotation.VariableArguments;
-import com.caucho.quercus.env.*;
+import com.caucho.quercus.env.ArrayValue;
+import com.caucho.quercus.env.ArrayValueImpl;
+import com.caucho.quercus.env.BooleanValue;
+import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.LongValue;
+import com.caucho.quercus.env.ObjectValue;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.UnicodeBuilderValue;
+import com.caucho.quercus.env.Value;
+import com.caucho.quercus.env.Var;
 import com.caucho.quercus.lib.mail.MailModule;
-import com.caucho.quercus.lib.regexp.Ereg;
-import com.caucho.quercus.lib.regexp.Eregi;
 import com.caucho.quercus.lib.regexp.RegexpModule;
 import com.caucho.quercus.lib.regexp.UnicodeEreg;
 import com.caucho.quercus.lib.regexp.UnicodeEregi;
@@ -62,9 +70,9 @@ public class MbstringModule
 {
   private static final Logger log
     = Logger.getLogger(MbstringModule.class.getName());
-  
+
   private static final L10N L = new L10N(MbstringModule.class);
-  
+
   private static final IniDefinitions _iniDefinitions = new IniDefinitions();
 
   public static final int MB_CASE_UPPER = 0;
@@ -86,7 +94,7 @@ public class MbstringModule
   {
     return _iniDefinitions;
   }
-  
+
   /**
    * Checks if the string is correctly encoded.
    * XXX: no args
@@ -97,12 +105,12 @@ public class MbstringModule
   {
     if (encoding == null || encoding.length() == 0)
       encoding = getEncoding(env);
-   
+
     Decoder decoder = Decoder.create(encoding);
-    
+
     if (! var.isDefault())
       return decoder.isDecodable(env, var.toStringValue());
-   
+
     else
       throw new UnimplementedException("mb_check_encoding() with no args");
   }
@@ -111,17 +119,17 @@ public class MbstringModule
    * Upper-cases, lower-cases, or capitalizes first letter of words.
    */
   public static StringValue mb_convert_case(Env env,
-                              StringValue str,
-                              int mode,
-                              @Optional("") String encoding)
+                                            StringValue str,
+                                            int mode,
+                                            @Optional("") String encoding)
   {
     if (mode == MB_CASE_TITLE) {
       encoding = getEncoding(env, encoding);
-      
+
       CharSequence unicodeStr = decode(env, str, encoding);
 
       unicodeStr = toUpperCaseTitle(env, unicodeStr);
-      
+
       return encode(env, unicodeStr, encoding);
     }
     else if (mode == MB_CASE_LOWER)
@@ -141,7 +149,7 @@ public class MbstringModule
                                           @Optional Value fromEncodings)
   {
     ArrayList<String> charsetList = getEncodingList(env, fromEncodings);
-    
+
     CharSequence unicodeStr = null;
     for (int i = 0; i < charsetList.size(); i++) {
       String charset = charsetList.get(i);
@@ -154,14 +162,14 @@ public class MbstringModule
         continue;
       }
     }
-    
+
     if (unicodeStr == null) {
       log.log(Level.FINE,
           L.l("unsupported character encoding {0}", fromEncodings));
       env.warning(L.l("unsupported character encoding {0}", fromEncodings));
       return str;
     }
-    
+
     try {
       return encode(env, unicodeStr, destEncoding);
     } catch (UnsupportedCharsetException e) {
@@ -177,8 +185,8 @@ public class MbstringModule
    */
   public static StringValue mb_convert_kana(Env env,
                               StringValue str,
-                              @Optional("") String option,
-                              @Optional("") String encoding)
+                              @Optional String option,
+                              @Optional String encoding)
   {
     throw new UnimplementedException("mb_convert_kana");
   }
@@ -217,7 +225,7 @@ public class MbstringModule
    * Decodes mime field.
    */
   public static Value mb_decode_mimeheader(Env env,
-                              StringValue str)
+                                           StringValue str)
   {
     String encoding = getEncoding(env);
 
@@ -233,9 +241,9 @@ public class MbstringModule
    * Decodes HTML numeric entity.
    */
   public static StringValue mb_decode_numericentity(Env env,
-                              StringValue str,
-                              ArrayValue convmap,
-                              @Optional String encoding)
+                                                    StringValue str,
+                                                    ArrayValue convmap,
+                                                    @Optional String encoding)
   {
     throw new UnimplementedException("mb_decode_numericentity");
   }
@@ -249,19 +257,19 @@ public class MbstringModule
                                          @Optional boolean isStrict)
   {
     // XXX: strict
-    
-    ArrayList<String> encodingList = getDetectOrderList(env, encodingV);   
-    
+
+    ArrayList<String> encodingList = getDetectOrderList(env, encodingV);
+
     int len = encodingList.size();
     for (int i = 0; i < len; i++) {
       String charset = encodingList.get(i);
-      
+
       Decoder decoder = Decoder.create(charset);
-      
+
       if (decoder.isDecodable(env, str))
         return env.createString(charset);
     }
-    
+
     return BooleanValue.FALSE;
   }
 
@@ -273,45 +281,45 @@ public class MbstringModule
   {
     if (encodingV.isDefault()) {
       ArrayValue array = new ArrayValueImpl();
-      
+
       ArrayList<String> list = getDetectOrderList(env, encodingV);
-      
+
       for (String encoding : list) {
         array.put(encoding);
       }
-      
+
       return array;
     }
     else {
       ArrayList<String> list = new ArrayList<String>();
-      
+
       if (encodingV.isArray()) {
         Iterator<Value> iter = encodingV.getValueIterator(env);
-        
+
         while (iter.hasNext()) {
           list.add(iter.next().toString());
         }
       }
       else
         parseCommaSeparatedList(list, encodingV.toString());
-      
+
       env.setSpecialValue("mb.detect_order", list);
-      
+
       return BooleanValue.TRUE;
     }
   }
-  
+
   private static ArrayList<String> getDetectOrderList(Env env,
-                                                         Value encodingV)
+                                                      Value encodingV)
   {
     if (encodingV.isDefault() && env.getSpecialValue("mb.detect_order") != null)
       return (ArrayList<String>) env.getSpecialValue("mb.detect_order");
-    
+
     ArrayList<String> list = new ArrayList<String>();
-    
+
     if (encodingV.isDefault()) {
       String encodings = env.getIniString("mbstring.detect_order");
-      
+
       if (encodings != null)
         parseCommaSeparatedList(list, encodings);
       else {
@@ -321,14 +329,14 @@ public class MbstringModule
     }
     else if (encodingV.isArray()) {
       Iterator<Value> iter = encodingV.getValueIterator(env);
-      
+
       while (iter.hasNext()) {
         list.add(iter.next().toString());
       }
     }
     else {
       String encodings = encodingV.toString();
-      
+
       if (encodings.equalsIgnoreCase("auto")) {
         list.add("ASCII");
         list.add("JIS");
@@ -339,24 +347,24 @@ public class MbstringModule
       else
         parseCommaSeparatedList(list, encodingV.toString());
     }
-    
+
     return list;
   }
-  
+
   private static void parseCommaSeparatedList(ArrayList<String> list,
                                               String str)
   {
     int start = 0;
     int index;
-    
+
     while ((index = str.indexOf(",", start)) >= 0) {
       String charset = str.substring(start, index).trim();
-      
+
       start = index + 1;
-      
+
       list.add(charset);
     }
-    
+
     list.add(str.substring(start).trim());
   }
 
@@ -365,16 +373,16 @@ public class MbstringModule
    */
   public static StringValue mb_encode_mimeheader(Env env,
                               StringValue str,
-                              @Optional("") String charset,
-                              @Optional("B") String transfer_encoding,
-                              @Optional("") String linefeed)
+                              @Optional String charset,
+                              @Optional("'B'") String transferEncoding,
+                              @Optional("'\r\n'") String linefeed)
   {
     charset = getEncoding(env, charset);
 
     try {
       String mime = QuercusMimeUtility.encodeMimeWord(str.toString(),
                                                       charset,
-                                                      transfer_encoding,
+                                                      transferEncoding,
                                                       linefeed,
                                                       76);
       return env.createString(mime);
@@ -389,9 +397,9 @@ public class MbstringModule
    * Encodes HTML numeric string entity.
    */
   public static StringValue mb_encode_numericentity(Env env,
-                              StringValue str,
-                              ArrayValue convmap,
-                              @Optional String encoding)
+                                                    StringValue str,
+                                                    ArrayValue convmap,
+                                                    @Optional String encoding)
   {
     throw new UnimplementedException();
   }
@@ -430,17 +438,17 @@ public class MbstringModule
     String encoding = getEncoding(env);
 
     StringValue eregStr;
-    
+
     if (eregValue.isLong())
       eregStr = UnicodeBuilderValue.create((char) eregValue.toInt());
     else
       eregStr = eregValue.toStringValue(env).convertToUnicode(env, encoding);
-    
+
     replacement = replacement.convertToUnicode(env, encoding);
     subject = subject.convertToUnicode(env, encoding);
 
     //XXX: option
-    
+
     Value val = RegexpModule.ereg_replace(env,
                                           eregStr,
                                           replacement,
@@ -472,12 +480,12 @@ public class MbstringModule
     String encoding = getEncoding(env);
 
     StringValue eregStr;
-    
+
     if (pattern.isLong())
       eregStr = UnicodeBuilderValue.create((char) pattern.toInt());
     else
       eregStr = pattern.toStringValue(env).convertToUnicode(env, encoding);
-    
+
     replacement = replacement.convertToUnicode(env, encoding);
     subject = subject.convertToUnicode(env, encoding);
 
@@ -516,7 +524,7 @@ public class MbstringModule
     Var regVar = new Var();
 
     val = RegexpModule.eregImpl(env, ereg, string, regVar);
-    
+
     if (regVar.isset()) {
       regs.clear();
       ArrayValue results = regVar.toArrayValue(env);
@@ -527,8 +535,7 @@ public class MbstringModule
         regs.put(entry.getKey(), bytes);
       }
 
-      val = LongValue.create(
-              regs.get(LongValue.ZERO).toStringValue().length());
+      val = LongValue.create(regs.get(LongValue.ZERO).toStringValue().length());
     }
 
     return val;
@@ -569,12 +576,12 @@ public class MbstringModule
                                                  @Optional Value option)
   {
     UnicodeEregi regexp = null;
-    
+
     if (! rawRegexp.isDefault()) {
       regexp
         = RegexpModule.createUnicodeEregi(env, rawRegexp.toStringValue(env));
     }
-    
+
     EregSearch ereg = new EregSearch(env, string, regexp, option);
     env.setSpecialValue("mb.search", ereg);
 
@@ -589,12 +596,12 @@ public class MbstringModule
                                          @Optional Value option)
   {
     UnicodeEregi regexp = null;
-    
+
     if (! rawRegexp.isDefault()) {
       regexp
         = RegexpModule.createUnicodeEregi(env, rawRegexp.toStringValue(env));
     }
-    
+
     EregSearch ereg = getEreg(env, regexp, option);
 
     if (ereg == null) {
@@ -613,12 +620,12 @@ public class MbstringModule
                                           @Optional Value option)
   {
     UnicodeEregi regexp = null;
-    
+
     if (! rawRegexp.isDefault()) {
       regexp
         = RegexpModule.createUnicodeEregi(env, rawRegexp.toStringValue(env));
     }
-    
+
     EregSearch ereg = getEreg(env, regexp, option);
 
     if (ereg == null) {
@@ -655,12 +662,12 @@ public class MbstringModule
                                             @Optional Value option)
   {
     UnicodeEregi regexp = null;
-    
+
     if (! rawRegexp.isDefault()) {
       regexp
         = RegexpModule.createUnicodeEregi(env, rawRegexp.toStringValue(env));
     }
-    
+
     EregSearch ereg = getEreg(env, regexp, option);
 
     if (ereg == null) {
@@ -715,14 +722,14 @@ public class MbstringModule
    * Returns current mb settings.
    */
   public static Value mb_get_info(Env env,
-                              @Optional("") String type)
+                                  @Optional String type)
   {
-    if (type.length() == 0) {
+    if (type == null) {
       ArrayValue array = new ArrayValueImpl();
 
       array.put(env.createString("internal_encoding"),
                 env.createString(getEncoding(env)));
-      
+
       array.put(env.createString("http_output"),
                 env.createString(getOutputEncoding(env)));
 
@@ -736,7 +743,7 @@ public class MbstringModule
     }
     else {
       env.warning(L.l("unsupported option: {0}", type));
-      
+
       return BooleanValue.FALSE;
     }
   }
@@ -745,23 +752,23 @@ public class MbstringModule
    * Returns and/or sets the http input encoding
    */
   public static Value mb_http_input(Env env,
-                              @Optional String type)
+                                    @Optional String type)
   {
     throw new UnimplementedException("mb_http_input");
   }
- 
+
   /**
    * Returns and/or sets the http output encoding
    */
   public static Value mb_http_output(Env env,
                                      @Optional String encoding)
   {
-    if (encoding.length() == 0) {
+    if (encoding == null) {
       return env.createString(getOutputEncoding(env));
     }
     else {
       env.setIni("mbstring.http_output", encoding);
-      
+
       return BooleanValue.TRUE;
     }
   }
@@ -770,10 +777,11 @@ public class MbstringModule
    * Returns and/or sets the internal encoding.
    */
   public static Value mb_internal_encoding(Env env,
-                              @Optional String encoding)
+                                           @Optional String encoding)
   {
-    if (encoding.length() == 0)
+    if (encoding == null) {
       return env.createString(getEncoding(env));
+    }
     else {
       setEncoding(env, encoding);
       return BooleanValue.TRUE;
@@ -809,17 +817,17 @@ public class MbstringModule
 
     return BooleanValue.TRUE;
   }
-  
+
   private static String getEncodingLanguage(Env env)
   {
     String encoding = (String) env.getSpecialValue("mb.internal_encoding");
-    
+
     if (encoding == null)
       return "ISO-8859-1";
-    
+
     return encoding;
   }
-  
+
   private static void setEncodingLanguage(Env env, String encoding)
   {
     env.setSpecialValue("mb.internal_encoding", encoding);
@@ -854,22 +862,24 @@ public class MbstringModule
 
     if (toEncoding.equals("pass"))
       return contents;
-    
+
     String fromEncoding = getEncoding(env);
-    
+
     Decoder decoder = getDecoder(env, fromEncoding);
     CharSequence contentsUnicode = decoder.decode(env, contents);
 
     Encoder encoder = getEncoder(env, toEncoding);
-    return encoder.encode(env, contentsUnicode);
+
+    StringValue sb = env.createBinaryBuilder();
+    return encoder.encode(sb, contentsUnicode);
   }
 
   /**
    * Multibyte version of parse_str.
    */
   public static BooleanValue mb_parse_str(Env env,
-                              StringValue strValue,
-                              @Optional @Reference Value result)
+                                          StringValue strValue,
+                                          @Optional @Reference Value result)
   {
     String encoding = getEncoding(env);
     StringModule.parse_str(env, strValue, result);
@@ -890,7 +900,7 @@ public class MbstringModule
    * Returns the preferred mime name of this encoding.
    */
   public static StringValue mb_preferred_mime_name(Env env,
-                              StringValue encoding)
+                                                   StringValue encoding)
   {
     String mimeName = Encoding.getMimeName(encoding.toString());
 
@@ -901,7 +911,7 @@ public class MbstringModule
    * Returns and/or sets encoding for mb regular expressions.
    */
   public static Value mb_regex_encoding(Env env,
-                              @Optional("") String encoding)
+                                        @Optional String encoding)
   {
     return mb_internal_encoding(env, encoding);
   }
@@ -910,7 +920,7 @@ public class MbstringModule
    * XXX: what does this actually do?
    */
   public static StringValue mb_regex_set_options(Env env,
-                              @Optional String options)
+                                                 @Optional String options)
   {
     throw new UnimplementedException("mb_regex_set_options");
   }
@@ -919,14 +929,14 @@ public class MbstringModule
    * Multibyte version of mail.
    */
   public static BooleanValue mb_send_mail(Env env,
-                              StringValue to,
-                              StringValue subject,
-                              StringValue message,
-                              @Optional StringValue additionalHeaders,
-                              @Optional StringValue additionalParameters)
+                                          StringValue to,
+                                          StringValue subject,
+                                          StringValue message,
+                                          @Optional StringValue additionalHeaders,
+                                          @Optional StringValue additionalParameters)
   {
     //XXX: not correct
-    
+
     String encoding = getEncoding(env);
 
     subject = subject.toBinaryValue(encoding);
@@ -948,13 +958,13 @@ public class MbstringModule
    */
   public static Value mb_split(Env env,
                                UnicodeEreg ereg,
-                              StringValue string,
-                              @Optional("-1") long limit)
+                               StringValue string,
+                               @Optional("-1") long limit)
   {
     String encoding = getEncoding(env);
 
     string = string.convertToUnicode(env, encoding);
-    
+
     Value val = RegexpModule.split(env, ereg, string, limit);
 
     return encodeAll(env, val, encoding);
@@ -965,13 +975,13 @@ public class MbstringModule
    * boundaries.
    */
   public static StringValue mb_strcut(Env env,
-                              final StringValue str,
-                              int start,
-                              @Optional("7fffffff") int length,
-                              @Optional String encoding)
+                                      final StringValue str,
+                                      int start,
+                                      @Optional("7fffffff") int length,
+                                      @Optional String encoding)
   {
     encoding = getEncoding(env, encoding);
-    
+
     CharSequence unicodeStr = decode(env, str, encoding);
 
     int len = unicodeStr.length();
@@ -984,11 +994,12 @@ public class MbstringModule
       return str.EMPTY;
 
     // XXX: not quite exactly the same behavior as PHP
-    if (start < len && Character.isHighSurrogate(unicodeStr.charAt(start)))
+    if (start < len && Character.isHighSurrogate(unicodeStr.charAt(start))) {
       start--;
+    }
 
     StringBuilder sb = new StringBuilder();
-    
+
     sb.append(unicodeStr, start, end);
 
     return encode(env, sb, encoding);
@@ -998,14 +1009,14 @@ public class MbstringModule
    * Truncates the string.
    */
   public static StringValue mb_strimwidth(Env env,
-                              final StringValue str,
-                              int start,
-                              int width,
-                              @Optional() StringValue trimmarker,
-                              @Optional("") String encoding)
+                                          final StringValue str,
+                                          int start,
+                                          int width,
+                                          @Optional StringValue trimmarker,
+                                          @Optional String encoding)
   {
     encoding = getEncoding(env, encoding);
-    
+
     CharSequence unicodeStr = decode(env, str, encoding);
 
     int len = unicodeStr.length();
@@ -1035,8 +1046,8 @@ public class MbstringModule
    * Multibyte version of strlen.
    */
   public static LongValue mb_strlen(Env env,
-                              StringValue str,
-                              @Optional("") String encoding)
+                                    StringValue str,
+                                    @Optional("") String encoding)
   {
     encoding = getEncoding(env, encoding);
 
@@ -1052,7 +1063,7 @@ public class MbstringModule
                                 StringValue haystack,
                                 StringValue needle,
                                 @Optional("0") int offset,
-                                @Optional("") String encoding)
+                                @Optional String encoding)
   {
     encoding = getEncoding(env, encoding);
 
@@ -1113,8 +1124,8 @@ public class MbstringModule
    * Returns the width of this multibyte string.
    */
   public static LongValue mb_strwidth(Env env,
-                              StringValue str,
-                              @Optional("") String encoding)
+                                      StringValue str,
+                                      @Optional("") String encoding)
   {
     encoding = getEncoding(env, encoding);
 
@@ -1155,9 +1166,9 @@ public class MbstringModule
   }
 
   public static LongValue mb_substr_count(Env env,
-                              StringValue haystack,
-                              StringValue needle,
-                              @Optional("") String encoding)
+                                          StringValue haystack,
+                                          StringValue needle,
+                                          @Optional String encoding)
   {
     encoding = getEncoding(env, encoding);
 
@@ -1194,7 +1205,7 @@ public class MbstringModule
 
     if (val == BooleanValue.FALSE)
       return str.EMPTY;
-    
+
     return encode(env, val.toStringValue(), encoding);
   }
 
@@ -1233,25 +1244,25 @@ public class MbstringModule
 
     return sb;
   }
-  
+
   private static CharSequence decode(Env env,
                                      StringValue str,
                                      String encoding)
   {
     if (str.isUnicode())
       return str;
-    
+
     Decoder decoder = getDecoder(env, encoding);
-    
+
     return decoder.decode(env, str);
   }
-  
+
   private static Decoder getDecoder(Env env, String encoding)
   {
     Decoder decoder = Decoder.create(encoding);
-    
+
     String ini = env.getIniString("mbstring.substitute_character");
-    
+
     if (ini == null) {
       decoder.setReplacement("?");
     }
@@ -1263,40 +1274,41 @@ public class MbstringModule
     }
     else {
       int len = ini.length();
-      
+
       int value = 0;
-      
+
       for (int i = 0; i < len; i++) {
         char ch = ini.charAt(i);
-        
+
         if ('0' <= ch && ch <= '9')
           value = value * 10 + ini.charAt(i) - '0';
         else
           break;
       }
-      
+
       // XXX: surrogate pairs
       decoder.setReplacement("" + (char) value);
     }
-    
+
     return decoder;
   }
-  
+
   private static StringValue encode(Env env,
                                     CharSequence str,
                                     String encoding)
   {
     Encoder encoder = getEncoder(env, encoding);
 
-    return encoder.encode(env, str);
+    StringValue sb = env.createBinaryBuilder();
+    return encoder.encode(sb, str);
   }
-  
+
   private static Encoder getEncoder(Env env, String encoding)
   {
     Encoder encoder = Encoder.create(encoding);
-    
+
     String ini = env.getIniString("mbstring.substitute_character");
-    
+
     if (ini == null) {
       encoder.setReplacement("?");
     }
@@ -1308,29 +1320,30 @@ public class MbstringModule
     }
     else {
       int len = ini.length();
-      
+
       int value = 0;
-      
+
       for (int i = 0; i < len; i++) {
         char ch = ini.charAt(i);
-        
+
         if ('0' <= ch && ch <= '9')
           value = value * 10 + ini.charAt(i) - '0';
         else
           break;
       }
-      
+
       // XXX: surrogate pairs
       encoder.setReplacement("" + (char) value);
     }
-    
+
     return encoder;
   }
 
+  @Hide
   public static String getEncoding(Env env)
   {
     Value encoding = env.getIni("mbstring.internal_encoding");
-    
+
     if (encoding.length() > 0)
       return encoding.toString();
     else
@@ -1349,34 +1362,34 @@ public class MbstringModule
   {
     env.setIni("mbstring.internal_encoding", encoding);
   }
-  
+
   private static String getOutputEncoding(Env env)
   {
     Value encoding = env.getIni("mbstring.http_output");
-    
+
     if (encoding.length() != 0)
       return encoding.toString();
     else
       return env.getOutputEncoding();
   }
-  
+
   private static ArrayList<String> getEncodingList(Env env, Value encodingV)
   {
     ArrayList<String> list = new ArrayList<String>();
-    
+
     if (encodingV.isDefault()) {
       list.add(getEncoding(env));
     }
     else if (encodingV.isArray()) {
       Iterator<Value> iter = encodingV.getValueIterator(env);
-      
+
       while (iter.hasNext()) {
         list.add(iter.next().toString());
       }
     }
     else {
       String encodings = encodingV.toString();
-      
+
       if (encodings.equals("auto")) {
         list.add("ASCII");
         list.add("JIS");
@@ -1387,19 +1400,19 @@ public class MbstringModule
       else {
         int start = 0;
         int index;
-        
+
         while ((index = encodings.indexOf(",", start)) >= 0) {
           String charset = encodings.substring(start, index).trim();
-          
+
           start = index + 1;
-          
+
           list.add(charset);
         }
-        
+
         list.add(encodings.substring(start).trim());
       }
     }
-    
+
     return list;
   }
 
@@ -1411,10 +1424,10 @@ public class MbstringModule
                                  String encoding)
   {
     Decoder decoder = getDecoder(env, encoding);
-    
+
     return decodeAll(env, val, decoder);
   }
-  
+
   /**
    * Recursively decodes objects and arrays.
    */
@@ -1423,11 +1436,11 @@ public class MbstringModule
                                  Decoder decoder)
   {
     decoder.reset();
-    
+
     val = val.toValue();
 
     if (val.isString()) {
-      return decoder.decodeUnicode(env, val.toStringValue());
+      return decoder.decodeUnicode(val.toStringValue());
     }
 
     else if (val.isArray()) {
@@ -1462,10 +1475,10 @@ public class MbstringModule
                                  String encoding)
   {
     Encoder encoder = getEncoder(env, encoding);
-    
+
     return encodeAll(env, val, encoder);
   }
-  
+
   /**
    * Recursively encodes objects and arrays.
    */
@@ -1476,7 +1489,9 @@ public class MbstringModule
     val = val.toValue();
 
     if (val.isString()) {
-      return encoder.encode(env, val.toStringValue(), true);
+      StringValue sb = env.createBinaryBuilder();
+
+      return encoder.encode(sb, val.toStringValue(), true);
     }
     else if (val.isArray()) {
       ArrayValue array = new ArrayValueImpl();
@@ -1525,18 +1540,18 @@ public class MbstringModule
       _string = string.convertToUnicode(env, getEncoding(env));
       _position = 0;
       _length = _string.length();
-      
+
       _ereg = ereg;
       _isValidRegexp = ereg != null;
-      
+
       _option = option;
     }
-    
+
     void init(UnicodeEregi ereg, Value option)
     {
       _ereg = ereg;
       _isValidRegexp = ereg != null;
-      
+
       _option = option;
     }
 
@@ -1554,7 +1569,7 @@ public class MbstringModule
     {
       if (_position < 0)
         return BooleanValue.FALSE;
-      
+
       StringValue string = getString(env);
 
       ArrayValue regs = new ArrayValueImpl();

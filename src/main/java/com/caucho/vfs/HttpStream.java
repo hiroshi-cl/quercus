@@ -31,11 +31,14 @@ package com.caucho.vfs;
 
 import com.caucho.util.Alarm;
 import com.caucho.util.CharBuffer;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.util.Log;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
+
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -150,7 +153,17 @@ class HttpStream extends StreamImpl {
     HttpStream stream = createStream(path);
     stream._isPost = false;
 
-    return new HttpStreamWrapper(stream);
+    HttpStreamWrapper wrapper = new HttpStreamWrapper(stream);
+    
+    String status = (String) wrapper.getAttribute("status");
+    
+    // ioc/23p0
+    if ("404".equals(status)) {
+      throw new FileNotFoundException(L.l("'{0}' returns a HTTP 404.",
+                                          path.getURL()));
+    }
+    
+    return wrapper;
   }
 
   public static void setAllowKeepalive(boolean isAllowKeepalive)
@@ -201,7 +214,7 @@ class HttpStream extends StreamImpl {
     if (stream != null) {
       long now;
       
-      now = Alarm.getCurrentTime();
+      now = CurrentTime.getCurrentTime();
       
       if (now < streamTime + 5000) {
         // if the stream is still valid, use it
@@ -377,10 +390,12 @@ class HttpStream extends StreamImpl {
   /**
    * Sets a header for the request.
    */
+  @Override
   public void setAttribute(String name, Object value)
   {
-    if (name.equals("method"))
+    if (name.equals("method")) {
       setMethod((String) value);
+    }
     else if (name.equals("socket-timeout")) {
       if (value instanceof Integer) {
         int socketTimeout = ((Integer) value).intValue();
@@ -447,14 +462,17 @@ class HttpStream extends StreamImpl {
    * @param length the number of bytes to write.
    * @param isEnd true when the write is flushing a close.
    */
+  @Override
   public void write(byte []buf, int offset, int length, boolean isEnd)
     throws IOException
   {
-    if (! _isPost)
+    if (! _isPost) {
       return;
+    }
 
-    if (_tempStream == null)
+    if (_tempStream == null) {
       _tempStream = new MemoryStream();
+    }
 
     _tempStream.write(buf, offset, length, isEnd);
   }
@@ -490,11 +508,13 @@ class HttpStream extends StreamImpl {
    */
   public int readInt(byte []buf, int offset, int length) throws IOException
   {
-    if (! _didGet)
+    if (! _didGet) {
       getConnInput();
+    }
 
-    if (_isRequestDone)
+    if (_isRequestDone) {
       return -1;
+    }
 
     try {
       int len = length;
@@ -838,8 +858,9 @@ class HttpStream extends StreamImpl {
 
       if (oldValue != null) {
         value = oldValue + '\n' + value;
-        _attributes.put(keyString, value);
       }
+      
+      _attributes.put(keyString, value);
     }
   }
 
@@ -859,6 +880,16 @@ class HttpStream extends StreamImpl {
     else
       return _rs.getAvailable();
   }
+  
+  @Override
+  public void closeWrite()
+    throws IOException
+  {
+    if (! _didGet) {
+      getConnInput();
+    }
+  }
+
 
   /**
    * Close the connection.
@@ -888,7 +919,7 @@ class HttpStream extends StreamImpl {
       
       long now;
       
-      now = Alarm.getCurrentTime();
+      now = CurrentTime.getCurrentTime();
       
       synchronized (LOCK) {
         oldSaved = _savedStream;

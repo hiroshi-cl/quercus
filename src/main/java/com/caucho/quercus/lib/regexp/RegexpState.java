@@ -29,7 +29,6 @@
 
 package com.caucho.quercus.lib.regexp;
 
-import java.util.*;
 import java.util.logging.*;
 
 import com.caucho.quercus.QuercusException;
@@ -47,7 +46,7 @@ public class RegexpState {
   public static final int FAIL = -1;
   public static final int SUCCESS = 0;
 
-  private Regexp _regexp;
+  public Regexp _regexp;
 
   private StringValue _subject;
   private int _subjectLength;
@@ -70,6 +69,7 @@ public class RegexpState {
   int _groupLength;
   int []_groupBegin;
   int []_groupEnd;
+  boolean []_isGroupFinalized;
 
   int []_loopCount;
   int []_loopOffset;
@@ -80,6 +80,7 @@ public class RegexpState {
 
     _groupBegin = new int[size];
     _groupEnd = new int[size];
+    _isGroupFinalized = new boolean[size];
 
     _loopCount = new int[size];
     _loopOffset = new int[size];
@@ -94,6 +95,15 @@ public class RegexpState {
     if (_groupBegin.length < nGroup) {
       _groupBegin = new int[nGroup];
       _groupEnd = new int[nGroup];
+
+      _isGroupFinalized = new boolean[nGroup];
+    }
+    else {
+      for (int i = 0; i < nGroup; i++) {
+        _groupBegin[i] = 0;
+        _groupEnd[i] = 0;
+        _isGroupFinalized[i] = false;
+      }
     }
 
     int nLoop = regexp._nLoop;
@@ -101,6 +111,12 @@ public class RegexpState {
     if (_loopCount.length < nLoop) {
       _loopCount = new int[nLoop];
       _loopOffset = new int[nLoop];
+    }
+    else {
+      for (int i = 0; i < nLoop; i++) {
+        _loopCount[i] = 0;
+        _loopOffset[i] = 0;
+      }
     }
 
     _subject = null;
@@ -214,7 +230,8 @@ public class RegexpState {
       _first = length + 1;
 
       return false;
-    } catch (StackOverflowError e) {
+    }
+    catch (StackOverflowError e) {
       log.warning(L.l("regexp '{0}' produces a StackOverflowError for\n{1}",
                       _regexp, _subject));
 
@@ -358,6 +375,16 @@ public class RegexpState {
   public void setBegin(int i, int v)
   {
     _groupBegin[i] = v;
+  }
+
+  public boolean isFinalized(int i)
+  {
+    return _isGroupFinalized[i];
+  }
+
+  public void setFinalized(int i, boolean isFinalized)
+  {
+    _isGroupFinalized[i] = isFinalized;
   }
 
   public void setEnd(int i, int v)

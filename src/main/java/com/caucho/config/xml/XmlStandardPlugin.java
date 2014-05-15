@@ -86,6 +86,8 @@ public class XmlStandardPlugin implements Extension {
   private ArrayList<Path> _pendingRoots = new ArrayList<Path>();
   
   private ArrayList<Path> _pendingXml = new ArrayList<Path>();
+  
+  private HashSet<Path> _xmlSet = new HashSet<Path>();
 
   private ArrayList<BeansConfig> _pendingBeans = new ArrayList<BeansConfig>();
 
@@ -96,8 +98,6 @@ public class XmlStandardPlugin implements Extension {
   public XmlStandardPlugin(InjectManager manager)
   {
     _cdiManager = manager;
-
-    Thread.currentThread().getContextClassLoader();
   }
 
   public void addRoot(Path root)
@@ -109,11 +109,23 @@ public class XmlStandardPlugin implements Extension {
   
   public void addXmlPath(Path xmlPath)
   {
-    if (! _pendingXml.contains(xmlPath))
+    if (! _xmlSet.contains(xmlPath)) {
+      _xmlSet.add(xmlPath);
       _pendingXml.add(xmlPath);
+    }
   }
 
   public void beforeDiscovery(@Observes BeforeBeanDiscovery event)
+  {
+    processRoots();
+  }
+  
+  public boolean isPending()
+  {
+    return _pendingRoots.size() > 0 || _pendingXml.size() > 0;
+  }
+  
+  public void processRoots()
   {
     try {
       ArrayList<Path> paths = new ArrayList<Path>(_pendingRoots);
@@ -129,7 +141,6 @@ public class XmlStandardPlugin implements Extension {
       for (Path xml : xmlPaths) {
         configurePath(xml);
       }
-      
 
       for (int i = 0; i < _pendingBeans.size(); i++) {
         BeansConfig config = _pendingBeans.get(i);
@@ -175,9 +186,8 @@ public class XmlStandardPlugin implements Extension {
   private void addPath(Path beansPath)
   {
     if (beansPath.canRead()
-        && beansPath.getLength() > 0
-        && ! _pendingXml.contains(beansPath)) {
-      _pendingXml.add(beansPath);
+        && beansPath.getLength() > 0) {
+      addXmlPath(beansPath);
     }
   }
 
@@ -332,7 +342,7 @@ public class XmlStandardPlugin implements Extension {
   private boolean isStarted(ArrayList<Bean<?>> runningBeans, DependsOn depends)
   {
     for (String dep : depends.value()) {
-      if (!isStarted(runningBeans, dep))
+      if (! isStarted(runningBeans, dep))
         return false;
     }
 

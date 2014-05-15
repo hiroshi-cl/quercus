@@ -292,12 +292,14 @@ public class SocketStream extends StreamImpl {
       _os.write(buf, offset, length);
       _totalWriteBytes += length;
     } catch (IOException e) {
+      IOException exn = ClientDisconnectException.create(this + ":" + e, e);
+      
       try {
         close();
       } catch (IOException e1) {
       }
 
-      throw ClientDisconnectException.create(e);
+      throw exn;
     }
   }
 
@@ -353,14 +355,17 @@ public class SocketStream extends StreamImpl {
     if (_s != null) {
       try {
         _s.shutdownOutput();
+      } catch (UnsupportedOperationException e) {
+        log.log(Level.FINEST, e.toString(), e);
       } catch (Exception e) {
         log.log(Level.FINER, e.toString(), e);
       }
     }
 
     // SSLSocket doesn't support shutdownOutput()
-    if (os != null)
+    if (os != null) {
       os.close();
+    }
   }
 
   /**

@@ -29,10 +29,10 @@
 
 package com.caucho.vfs;
 
-import com.caucho.util.FreeList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import java.io.IOException;
-import java.util.logging.*;
+import com.caucho.util.FreeRing;
 
 /**
  * Pooled temporary byte buffer.
@@ -40,14 +40,14 @@ import java.util.logging.*;
 public class TempBuffer implements java.io.Serializable {
   private static Logger _log;
   
-  private static final FreeList<TempBuffer> _freeList
-    = new FreeList<TempBuffer>(32);
+  private static final FreeRing<TempBuffer> _freeList
+    = new FreeRing<TempBuffer>(64);
   
-  private static final FreeList<TempBuffer> _smallFreeList
-    = new FreeList<TempBuffer>(32);
+  private static final FreeRing<TempBuffer> _smallFreeList
+    = new FreeRing<TempBuffer>(256);
   
-  private static final FreeList<TempBuffer> _largeFreeList
-    = new FreeList<TempBuffer>(32);
+  private static final FreeRing<TempBuffer> _largeFreeList
+    = new FreeRing<TempBuffer>(32);
 
   private static final boolean _isSmallmem;
   
@@ -215,6 +215,19 @@ public class TempBuffer implements java.io.Serializable {
 
     return length;
   }
+  
+  public void freeSelf()
+  {
+    if (_buf.length == SIZE) {
+      free(this);
+    }
+    else if (_buf.length == SMALL_SIZE) {
+      freeSmall(this);
+    }
+    else if (_buf.length == LARGE_SIZE) {
+      freeLarge(this);
+    }
+  }
 
   /**
    * Frees a single buffer.
@@ -345,6 +358,21 @@ public class TempBuffer implements java.io.Serializable {
       }
       
       buf = next;
+    }
+  }
+  
+  /**
+   * Called on OOM to free buffers.
+   */
+  public static void clearFreeLists()
+  {
+    while (_freeList.allocate() != null) {
+    }
+    
+    while (_largeFreeList.allocate() != null) {
+    }
+    
+    while (_smallFreeList.allocate() != null) {
     }
   }
 

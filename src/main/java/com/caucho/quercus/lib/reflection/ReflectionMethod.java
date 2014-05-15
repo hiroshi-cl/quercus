@@ -29,62 +29,61 @@
 
 package com.caucho.quercus.lib.reflection;
 
+import com.caucho.quercus.Location;
 import com.caucho.quercus.QuercusException;
-import com.caucho.quercus.UnimplementedException;
 import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.ObjectValue;
-import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.expr.CallExpr;
+import com.caucho.quercus.expr.Expr;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.quercus.program.Arg;
-import com.caucho.quercus.program.ClassDef;
 import com.caucho.util.L10N;
 
 public class ReflectionMethod extends ReflectionFunctionAbstract
   implements Reflector
 {
   private static final L10N L = new L10N(ReflectionMethod.class);
-  
+
   public static final int IS_STATIC = 1;
   public static final int IS_ABSTRACT = 2;
   public static final int IS_FINAL = 4;
-  
+
   public static final int IS_PUBLIC = 256;
   public static final int IS_PROTECTED = 512;
   public static final int IS_PRIVATE = 1024;
-  
+
   private String _clsName;
-  
+
   protected ReflectionMethod(AbstractFunction method)
   {
     super(method);
   }
-  
+
   protected ReflectionMethod(String clsName, AbstractFunction method)
   {
     super(method);
-    
+
     _clsName = clsName;
   }
-  
+
   public static ReflectionMethod __construct(
       Env env, Value obj, StringValue name)
   {
     String clsName;
-    
+
     if (obj.isObject())
       clsName = obj.getClassName();
     else
       clsName = obj.toString();
-    
-    return new ReflectionMethod(
-        clsName, env.getClass(clsName).getFunction(name));
+
+    return new ReflectionMethod(clsName, env.getClass(clsName).getFunction(name));
   }
-  
+
   public static String export(Env env,
                               Value cls,
                               String name,
@@ -92,63 +91,74 @@ public class ReflectionMethod extends ReflectionFunctionAbstract
   {
     return null;
   }
-  
+
   public Value invoke(Env env, ObjectValue object, Value []args)
   {
-    return getFunction().callMethod(
-        env, object.getQuercusClass(), object, args);
+    return getFunction().callMethod(env, object.getQuercusClass(), object, args);
   }
-  
+
   public Value invokeArgs(Env env, ObjectValue object, ArrayValue args)
   {
-    return getFunction().callMethod(env, object.getQuercusClass(), object, 
-                                    args.getValueArray(env));
+    AbstractFunction fun = getFunction();
+
+    Expr expr = new CallExpr(Location.UNKNOWN, env.createString(getName()), (Expr[]) null);
+    env.pushCall(expr, object, args.getValueArray(env));
+
+    try {
+      return fun.callMethod(env, object.getQuercusClass(), object,
+                            args.getValueArray(env));
+    }
+    finally {
+      env.popCall();
+    }
+
+
   }
-  
+
   public boolean isFinal()
   {
     return getFunction().isFinal();
   }
-  
+
   public boolean isAbstract()
   {
     return getFunction().isAbstract();
   }
-  
+
   public boolean isPublic()
   {
     return getFunction().isPublic();
   }
-  
+
   public boolean isPrivate()
   {
-    throw new UnimplementedException("isPrivate()");
+    return getFunction().isPrivate();
   }
-  
+
   public boolean isProtected()
   {
     return getFunction().isProtected();
   }
-  
+
   public boolean isStatic()
   {
     return getFunction().isStatic();
   }
-  
+
   public boolean isConstructor()
   {
     return false;
   }
-  
+
   public boolean isDestructor()
   {
     return false;
   }
-  
+
   public int getModifiers()
   {
     int flag = 1024 * 64; //2^6, some out-of-the-blue number?
-    
+
     if (isProtected())
       flag |= IS_PROTECTED;
     //else if (isPrivate())
@@ -162,14 +172,14 @@ public class ReflectionMethod extends ReflectionFunctionAbstract
       flag |= IS_ABSTRACT;
     if (isStatic())
       flag |= IS_STATIC;
-    
+
     return flag;
   }
-  
+
   public ReflectionClass getDeclaringClass(Env env)
   {
     String clsName = getFunction().getDeclaringClassName();
-    
+
     if (clsName == null)
       throw new QuercusException(
           L.l("class name is null {0}: {1}",
@@ -177,31 +187,41 @@ public class ReflectionMethod extends ReflectionFunctionAbstract
 
     return new ReflectionClass(env, clsName);
   }
-  
+
   @Override
   public ArrayValue getParameters(Env env)
   {
     ArrayValue array = new ArrayValueImpl();
-    
+
     AbstractFunction fun = getFunction();
-    Arg []args = fun.getArgs();
-    
+    Arg []args = fun.getArgs(env);
+
     for (int i = 0; i < args.length; i++) {
       array.put(env.wrapJava(new ReflectionParameter(_clsName, fun, args[i])));
     }
-    
+
     return array;
   }
-  
+
+  public void setAccessible(boolean isAccessible)
+  {
+    // XXX: always accessible from Reflection for quercus
+  }
+
+  private AbstractFunction getFunction()
+  {
+    return (AbstractFunction) getCallable();
+  }
+
   public String toString()
   {
     String name;
-    
+
     if (_clsName != null)
       name = _clsName + "->" + getName();
     else
       name = getName();
 
-    return "ReflectionMethod[" + name + "]";
+    return getClass().getSimpleName() + "[" + name + "]";
   }
 }

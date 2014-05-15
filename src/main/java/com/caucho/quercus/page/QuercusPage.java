@@ -31,10 +31,10 @@ package com.caucho.quercus.page;
 
 import com.caucho.quercus.Location;
 import com.caucho.quercus.QuercusContext;
-import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.NullValue;
 import com.caucho.quercus.env.QuercusLanguageException;
+import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.quercus.program.ClassDef;
@@ -51,13 +51,13 @@ import java.util.Map;
 abstract public class QuercusPage
 {
   private static final L10N L = new L10N(QuercusPage.class);
-  
-  private HashMap<String,AbstractFunction> _funMap
-    = new HashMap<String,AbstractFunction>();
-  
-  private HashMap<String,AbstractFunction> _funMapLowerCase
-    = new HashMap<String,AbstractFunction>();
-  
+
+  private HashMap<StringValue,AbstractFunction> _funMap
+    = new HashMap<StringValue,AbstractFunction>();
+
+  private HashMap<StringValue,AbstractFunction> _funMapLowerCase
+    = new HashMap<StringValue,AbstractFunction>();
+
   private HashMap<String,ClassDef> _classMap
     = new HashMap<String,ClassDef>();
 
@@ -107,11 +107,11 @@ abstract public class QuercusPage
    * Returns the page's path.
    */
   abstract public Path getSelfPath(Env env);
-  
+
   /**
    * Finds a function.
    */
-  public AbstractFunction findFunction(String name)
+  public AbstractFunction findFunction(StringValue name)
   {
     AbstractFunction fun = _funMap.get(name);
 
@@ -156,7 +156,7 @@ abstract public class QuercusPage
     try {
       if (compile != null)
         return compile.executeTop(env);
-      
+
       return execute(env);
     } catch (QuercusLanguageException e) {
       if (env.getExceptionHandler() != null) {
@@ -170,14 +170,14 @@ abstract public class QuercusPage
       else {
         uncaughtExceptionError(env, e);
       }
-      
+
       return NullValue.NULL;
     } finally {
       env.setPwd(oldPwd);
     }
   }
 
-  /*
+  /**
    * Throws an error for this uncaught exception.
    */
   private void uncaughtExceptionError(Env env, QuercusLanguageException e)
@@ -185,14 +185,11 @@ abstract public class QuercusPage
     Location location = e.getLocation(env);
     String type = e.getValue().getClassName();
     String message = e.getMessage(env);
-    
-    env.error(location,
-              L.l(
-                "Uncaught exception of type '{0}' with message '{1}'",
-                type,
-                message));
+
+    env.error(L.l("Uncaught exception of type '{0}' with message '{1}'", type, message),
+              location);
   }
-  
+
   /**
    * Returns the pwd according to the source page.
    */
@@ -232,13 +229,13 @@ abstract public class QuercusPage
    */
   public void importDefinitions(Env env)
   {
-    for (Map.Entry<String,AbstractFunction> entry : _funMap.entrySet()) {
+    for (Map.Entry<StringValue,AbstractFunction> entry : _funMap.entrySet()) {
       AbstractFunction fun = entry.getValue();
 
       if (fun.isGlobal())
         env.addFunction(entry.getKey(), entry.getValue());
     }
-    
+
     for (Map.Entry<String,ClassDef> entry : _classMap.entrySet()) {
       env.addClassDef(entry.getKey(), entry.getValue());
     }
@@ -247,10 +244,10 @@ abstract public class QuercusPage
   /**
    * Adds a function.
    */
-  protected void addFunction(String name, AbstractFunction fun)
+  protected void addFunction(StringValue name, AbstractFunction fun)
   {
     AbstractFunction oldFun = _funMap.put(name, fun);
-    
+
     _funMapLowerCase.put(name.toLowerCase(Locale.ENGLISH), fun);
   }
 
@@ -269,7 +266,7 @@ abstract public class QuercusPage
   {
     return false;
   }
-  
+
   public String toString()
   {
     return getClass().getSimpleName() + "[]";

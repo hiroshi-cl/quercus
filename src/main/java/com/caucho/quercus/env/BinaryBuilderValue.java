@@ -255,7 +255,7 @@ public class BinaryBuilderValue
   @Override
   public Value charValueAt(long index)
   {
-    int len = getOffset();
+    int len = length();
 
     if (index < 0 || len <= index)
       return UnsetBinaryValue.UNSET;
@@ -279,9 +279,9 @@ public class BinaryBuilderValue
    * Convert to lower case.
    */
   @Override
-  public StringValue toLowerCase()
+  public StringValue toLowerCase(Locale locale)
   {
-    int length = getOffset();
+    int length = length();
 
     BinaryBuilderValue string = new BinaryBuilderValue(length);
 
@@ -297,7 +297,7 @@ public class BinaryBuilderValue
         dstBuffer[i] = ch;
     }
 
-    string.setOffset(length);
+    string.setLength(length);
 
     return string;
   }
@@ -308,9 +308,9 @@ public class BinaryBuilderValue
   @Override
   public StringValue toUpperCase()
   {
-    int length = getOffset();
+    int length = length();
 
-    BinaryBuilderValue string = new BinaryBuilderValue(getOffset());
+    BinaryBuilderValue string = new BinaryBuilderValue(length);
 
     byte []srcBuffer = getBuffer();
     byte []dstBuffer = string.getBuffer();
@@ -324,7 +324,7 @@ public class BinaryBuilderValue
         dstBuffer[i] = ch;
     }
 
-    string.setOffset(length);
+    string.setLength(length);
 
     return string;
   }
@@ -367,7 +367,7 @@ public class BinaryBuilderValue
   @Override
   public StringValue toStringBuilder(Env env)
   {
-    return new BinaryBuilderValue(getBuffer(), 0, getOffset());
+    return new BinaryBuilderValue(getBuffer(), 0, length());
   }
 
   /**
@@ -420,18 +420,18 @@ public class BinaryBuilderValue
   public final StringValue append(BinaryBuilderValue sb, int head, int tail)
   {
     int length = tail - head;
-    
+
     byte []buffer = getBuffer();
     byte []sbBuffer = sb.getBuffer();
-    
-    int offset = getOffset();
+
+    int offset = length();
 
     if (buffer.length < offset + length)
       ensureCapacity(offset + length);
 
     System.arraycopy(sbBuffer, head, buffer, offset, tail - head);
 
-    setOffset(offset + tail - head);
+    setLength(offset + tail - head);
 
     return this;
   }
@@ -583,121 +583,6 @@ public class BinaryBuilderValue
     }
   }
 
-  /**
-   * Returns true for equality
-   */
-  @Override
-  public boolean eq(Value rValue)
-  {
-    ValueType typeA = getValueType();
-    ValueType typeB = rValue.getValueType();
-
-    if (typeB.isNumber()) {
-      double l = toDouble();
-      double r = rValue.toDouble();
-
-      return l == r;
-    }
-    else if (typeB.isBoolean()) {
-      return toBoolean() == rValue.toBoolean();
-    }
-    else if (typeA.isNumberCmp() && typeB.isNumberCmp()) {
-      double l = toDouble();
-      double r = rValue.toDouble();
-
-      return l == r;
-    }
-
-    rValue = rValue.toValue();
-
-    if (rValue instanceof BinaryBuilderValue) {
-      BinaryBuilderValue value = (BinaryBuilderValue) rValue;
-
-      int length = getOffset();
-
-      if (length != value.getOffset())
-        return false;
-
-      byte []bufferA = getBuffer();
-      byte []bufferB = value.getBuffer();
-
-      for (int i = length - 1; i >= 0; i--) {
-        if (bufferA[i] != bufferB[i])
-          return false;
-      }
-
-      return true;
-    }
-    else {
-      return toString().equals(rValue.toString());
-    }
-  }
-
-  @Override
-  public boolean equals(Object o)
-  {
-    if (o == this)
-      return true;
-
-    if (o instanceof BinaryBuilderValue) {
-      BinaryBuilderValue value = (BinaryBuilderValue) o;
-
-      int length = getOffset();
-
-      if (length != value.getOffset())
-        return false;
-
-      byte []bufferA = getBuffer();
-      byte []bufferB = value.getBuffer();
-
-      for (int i = length - 1; i >= 0; i--) {
-        if (bufferA[i] != bufferB[i])
-          return false;
-      }
-
-      return true;
-    }
-    /*
-    else if (o instanceof UnicodeValue) {
-      UnicodeValue value = (UnicodeValue)o;
-
-      return value.equals(this);
-    }
-    */
-    else
-      return false;
-  }
-
-  @Override
-  public boolean eql(Value o)
-  {
-    o = o.toValue();
-
-    if (o == this)
-      return true;
-
-    if (o instanceof BinaryBuilderValue) {
-      BinaryBuilderValue value = (BinaryBuilderValue) o;
-
-      int length = getOffset();
-
-      if (length != value.getOffset())
-        return false;
-
-      byte []bufferA = getBuffer();
-      byte []bufferB = value.getBuffer();
-
-      for (int i = length - 1; i >= 0; i--) {
-        if (bufferA[i] != bufferB[i])
-          return false;
-      }
-
-      return true;
-    }
-    else
-      return false;
-  }
-
   @Override
   public String toDebugString()
   {
@@ -735,7 +620,7 @@ public class BinaryBuilderValue
         length = 0;
 
     // QA needs to distinguish php5 string from php6 binary
-    if (Alarm.isTest())
+    if (CurrentTime.isTest())
       out.print("binary");
     else
       out.print("string");

@@ -31,85 +31,76 @@ package com.caucho.quercus;
 
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.GoogleEnv;
+import com.caucho.quercus.lib.db.JdbcDriverContext;
 import com.caucho.quercus.page.QuercusPage;
-import com.caucho.quercus.module.ModuleContext;
-import com.caucho.util.*;
-import com.caucho.vfs.*;
-
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import java.util.logging.Logger;
+import com.caucho.quercus.servlet.api.QuercusHttpServletRequest;
+import com.caucho.quercus.servlet.api.QuercusHttpServletResponse;
+import com.caucho.vfs.GoogleMergePath;
+import com.caucho.vfs.MergePath;
+import com.caucho.vfs.Path;
+import com.caucho.vfs.WriteStream;
 
 /**
  * Facade for the PHP language.
  */
 public class GoogleQuercus extends QuercusContext
 {
-  private static L10N L = new L10N(GoogleQuercus.class);
-  private static final Logger log
-    = Logger.getLogger(GoogleQuercus.class.getName());
-  
-  private ModuleContext _localModuleContext;
-
-  private long _dependencyCheckInterval = 2000L;
-  
   /**
    * Constructor.
    */
   public GoogleQuercus()
   {
-    super();
-
-    setPwd(Vfs.lookup());
-    // setWorkDir(WorkDir.getLocalWorkDir());
   }
 
-  /*
   @Override
-  public ModuleContext getLocalContext(ClassLoader loader)
+  public void init()
   {
-    Thread thread = Thread.currentThread();
-    ClassLoader currentLoader = thread.getContextClassLoader();
-    
-    synchronized (this) {
-      if (_localModuleContext == null) {
-        _localModuleContext = createModuleContext(null, currentLoader);
+    String mode
+      = System.getProperty("com.google.appengine.tools.development.ApplicationPreparationMode");
 
-        _localModuleContext.init();
+    boolean isGsDisabled = "true".equals(mode);
+
+    if (! isGsDisabled) {
+      String gsBucket = getIniString("google.cloud_storage_bucket");
+
+      if (gsBucket != null) {
+        Path stdPwd = getPwd();
+
+        GoogleMergePath mergePwd = new GoogleMergePath(stdPwd, gsBucket, true);
+        setPwd(mergePwd);
+
+        Path webInfDir = getWebInfDir();
+        Path gsWebInfDir = mergePwd.getGooglePath().lookup("WEB-INF");
+        MergePath mergeWebInf = new MergePath(gsWebInfDir, webInfDir);
+
+        setWebInfDir(mergeWebInf);
       }
     }
 
-    return _localModuleContext;
+    super.init();
+
+    JdbcDriverContext jdbcDriverContext = getJdbcDriverContext();
+
+    String driver = getIniString("google.jdbc_driver");
+
+    if (driver == null) {
+      driver = "com.google.appengine.api.rdbms.AppEngineDriver";
+    }
+
+    jdbcDriverContext.setDefaultDriver(driver);
+    jdbcDriverContext.setDefaultUrlPrefix("jdbc:google:rdbms://");
+    jdbcDriverContext.setDefaultEncoding(null);
+    jdbcDriverContext.setProtocol("mysql", driver);
+    jdbcDriverContext.setProtocol("google:rdbms", driver);
   }
-  */
 
   @Override
-  protected ModuleContext createModuleContext(ModuleContext parent,
-                                              ClassLoader loader)
-  {
-    return new ModuleContext(parent, loader);
-  }
-
   public Env createEnv(QuercusPage page,
                        WriteStream out,
-                       HttpServletRequest request,
-                       HttpServletResponse response)
+                       QuercusHttpServletRequest request,
+                       QuercusHttpServletResponse response)
   {
     return new GoogleEnv(this, page, out, request, response);
   }
-
-  /*
-  @Override
-  public String getVersion()
-  {
-    return com.caucho.Version.VERSION;
-  }
-
-  @Override
-  public String getVersionDate()
-  {
-    return com.caucho.Version.VERSION_DATE;
-  }
-  */
 }
 

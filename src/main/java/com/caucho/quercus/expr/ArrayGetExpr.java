@@ -101,9 +101,9 @@ public class ArrayGetExpr extends AbstractVarExpr {
 
     return array.get(index).copy();
   }
-  
+
   /**
-   * Evaluates the expression, creating an array if the value is unset..
+   * Evaluates the expression, creating an array if the value is unset.
    *
    * @param env the calling environment.
    *
@@ -146,7 +146,7 @@ public class ArrayGetExpr extends AbstractVarExpr {
   {
     Value array = _expr.evalArray(env);
     Value index = _index.eval(env);
-    
+
     return array.getObject(env, index);
   }
 
@@ -160,9 +160,14 @@ public class ArrayGetExpr extends AbstractVarExpr {
   @Override
   public Value evalArg(Env env, boolean isTop)
   {
-    Value value = _expr.evalArg(env, false); // php/0d2t
+    // php/0d2t
+    // php/0d1c
+    Value array = _expr.evalArg(env, false);
+    Value index = _index.eval(env);
 
-    return value.getArg(_index.eval(env), isTop);
+    Value result = array.getArg(index, isTop);
+
+    return result;
   }
 
   /**
@@ -175,9 +180,10 @@ public class ArrayGetExpr extends AbstractVarExpr {
   @Override
   public Var evalVar(Env env)
   {
-    Value value = _expr.evalArray(env);
+    Value array = _expr.evalArray(env);
+    Value index = _index.eval(env);
 
-    return value.getVar(_index.eval(env));
+    return array.getVar(index);
   }
 
   /**
@@ -188,17 +194,13 @@ public class ArrayGetExpr extends AbstractVarExpr {
    * @return the expression value.
    */
   @Override
-  public Value evalAssignValue(Env env, Value value)
+  public Value evalAssignValue(Env env, Expr valueExpr)
   {
-    // php/03mk, php/04b3
-    Value array = _expr.evalArray(env);
+    // php/03mk, php/03mm, php/03mn, php/04b3
+    // php/04ah
+    Value array = _expr.evalArrayAssign(env, _index, valueExpr);
 
-    /*
-    array.put(_index.eval(env), value);
-    return array.get(_index.eval(env)); // php/03mm php/03mn
-    */
-    
-    return array.put(_index.eval(env), value);
+    return array;
   }
 
   /**
@@ -208,24 +210,29 @@ public class ArrayGetExpr extends AbstractVarExpr {
    *
    * @return the expression value.
    */
+  @Override
+  public Value evalAssignRef(Env env, Expr valueExpr)
+  {
+    // php/03mk
+    // php/04ai
+    return _expr.evalArrayAssignRef(env, _index, valueExpr);
+  }
+
   @Override
   public Value evalAssignRef(Env env, Value value)
   {
-    // php/03mk
-    Value array = _expr.evalArray(env);
-    
-    return array.put(_index.eval(env), value);
+    return _expr.evalArrayAssignRef(env, _index, value);
   }
- 
+
   /**
    * Evaluates the expression as an isset().
    */
   @Override
   public boolean evalIsset(Env env)
   {
-    Value array = _expr.eval(env);
-    Value index = _index.eval(env);
-    
+    Value array = _expr.evalIssetValue(env);
+    Value index = _index.evalIssetValue(env);
+
     return array.isset(index);
   }
 
@@ -239,8 +246,19 @@ public class ArrayGetExpr extends AbstractVarExpr {
   @Override
   public void evalUnset(Env env)
   {
-    Value index = _index.eval(env);
-    _expr.evalUnsetArray(env, index);
+    _expr.evalUnsetArray(env, _index);
+  }
+
+  /**
+   * Evaluates as an empty() expression.
+   */
+  @Override
+  public boolean evalEmpty(Env env)
+  {
+    Value array = _expr.evalIssetValue(env);
+    Value index = _index.evalIssetValue(env);
+
+    return array.isEmpty(env, index);
   }
 
   @Override

@@ -29,9 +29,7 @@
 
 package com.caucho.quercus.env;
 
-import com.caucho.quercus.Location;
-import com.caucho.quercus.expr.Expr;
-import com.caucho.quercus.function.AbstractFunction;
+import com.caucho.quercus.program.ClassField;
 import com.caucho.vfs.WriteStream;
 
 import java.io.IOException;
@@ -59,12 +57,12 @@ public class JavaAdapterVar extends Value
   {
     return _adapter.get(_key);
   }
-  
+
   public void setValue(Value value)
   {
     _adapter.putImpl(_key, value);
   }
-  
+
   /**
    * Sets the value.
    */
@@ -72,11 +70,11 @@ public class JavaAdapterVar extends Value
   public Value set(Value value)
   {
     setRaw(getValue());
-    
+
     value = super.set(value);
-    
+
     setValue(getRawValue());
-    
+
     return value;
   }
 
@@ -88,7 +86,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().getType();
   }
-  
+
   /**
    * Returns the type of the resource.
    */
@@ -115,7 +113,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().getClassName();
   }
-  
+
   /**
    * Returns true for an object.
    */
@@ -124,7 +122,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().isObject();
   }
-  
+
   /**
    * Returns true for an object.
    */
@@ -147,9 +145,9 @@ public class JavaAdapterVar extends Value
    * Returns true for an implementation of a class
    */
   @Override
-  public boolean isA(String name)
+  public boolean isA(Env env, String name)
   {
-    return getValue().isA(name);
+    return getValue().isA(env, name);
   }
 
   /**
@@ -195,7 +193,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().isLong();
   }
-  
+
   /**
    * Returns true for a long-value.
    */
@@ -203,7 +201,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().isDouble();
   }
-  
+
   /**
    * Returns true for is_numeric
    */
@@ -258,7 +256,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().isBoolean();
   }
-  
+
   /**
    * Returns true for a DefaultValue
    */
@@ -267,7 +265,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().isDefault();
   }
-  
+
   //
   // Conversions
   //
@@ -350,7 +348,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().toJavaCollection(env, type);
   }
-  
+
   /**
    * Converts to a java List object.
    */
@@ -359,7 +357,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().toJavaList(env, type);
   }
-  
+
   /**
    * Converts to a java Map object.
    */
@@ -374,7 +372,7 @@ public class JavaAdapterVar extends Value
    * Converts to an array
    */
   @Override
-  public Value toArray()
+  public ArrayValue toArray()
   {
     return getValue().toArray();
   }
@@ -395,11 +393,11 @@ public class JavaAdapterVar extends Value
   public Value toAutoArray()
   {
     setRaw(getValue());
-    
+
     Value value = super.toAutoArray();
-    
+
     setValue(getRawValue());
-    
+
     return value;
   }
 
@@ -420,7 +418,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().toJavaCalendar();
   }
-  
+
   /**
    * Converts to a Java Date.
    */
@@ -429,7 +427,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().toJavaDate();
   }
-  
+
   /**
    * Converts to a Java URL.
    */
@@ -438,7 +436,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().toJavaURL(env);
   }
-  
+
   /**
    * Converts to a Java BigDecimal.
    */
@@ -446,7 +444,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().toBigDecimal();
   }
-  
+
   /**
    * Converts to a Java BigInteger.
    */
@@ -454,7 +452,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().toBigInteger();
   }
-  
+
   /**
    * Append to a string builder.
    */
@@ -481,7 +479,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().appendTo(sb);
   }
-  
+
   /**
    * Append to a string builder.
    */
@@ -526,11 +524,11 @@ public class JavaAdapterVar extends Value
   public Value toRefValue()
   {
     setRaw(getValue());
-    
+
     Value value = super.toRefValue();
-    
+
     setValue(getRawValue());
-    
+
     return value;
   }
 
@@ -541,11 +539,11 @@ public class JavaAdapterVar extends Value
   public Var toVar()
   {
     setRaw(getValue());
-    
+
     Var value = super.toVar();
-    
+
     setValue(getRawValue());
-    
+
     return value;
   }
 
@@ -602,11 +600,11 @@ public class JavaAdapterVar extends Value
   public Value copy()
   {
     setRaw(getValue());
-    
+
     Value value = super.copy();
-    
+
     setValue(getRawValue());
-    
+
     return value;
   }
 
@@ -617,11 +615,11 @@ public class JavaAdapterVar extends Value
   public Value copyReturn()
   {
     setRaw(getValue());
-    
+
     Value value = super.copyReturn();
-    
+
     setValue(getRawValue());
-    
+
     return value;
   }
 
@@ -632,11 +630,11 @@ public class JavaAdapterVar extends Value
   public Value toRef()
   {
     setRaw(getValue());
-    
+
     Value value = super.toRef();
-    
+
     setValue(getRawValue());
-    
+
     return value;
   }
 
@@ -683,11 +681,11 @@ public class JavaAdapterVar extends Value
   public Value preincr(int incr)
   {
     setRaw(getValue());
-    
+
     Value value = increment(incr);
-    
+
     setValue(getRawValue());
-    
+
     return value;
   }
 
@@ -698,11 +696,11 @@ public class JavaAdapterVar extends Value
   public Value postincr(int incr)
   {
     setRaw(getValue());
-    
+
     Value value = increment(incr);
-    
+
     setValue(getRawValue());
-    
+
     return value;
   }
 
@@ -723,7 +721,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().sub(rValue);
   }
-  
+
   /**
    * Multiplies to the following value.
    */
@@ -768,7 +766,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().rshift(rValue);
   }
-  
+
   /**
    * Binary And.
    */
@@ -776,7 +774,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().bitAnd(rValue);
   }
-  
+
   /**
    * Binary or.
    */
@@ -784,7 +782,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().bitOr(rValue);
   }
-  
+
   /**
    * Binary xor.
    */
@@ -793,7 +791,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().bitXor(rValue);
   }
-  
+
   /**
    * Absolute value.
    */
@@ -837,7 +835,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().length();
   }
-  
+
   /**
    * Returns the array/object size
    */
@@ -872,11 +870,11 @@ public class JavaAdapterVar extends Value
   public Value getArray()
   {
     setRaw(getValue());
-    
+
     Value value = super.getArray();
-    
+
     setValue(getRawValue());
-    
+
     return value;
   }
 
@@ -887,11 +885,11 @@ public class JavaAdapterVar extends Value
   public Value getObject(Env env)
   {
     setRaw(getValue());
-    
+
     Value value = super.getObject(env);
-    
+
     setValue(getRawValue());
-    
+
     return value;
   }
 
@@ -911,11 +909,11 @@ public class JavaAdapterVar extends Value
   public Var getVar(Value index)
   {
     setRaw(getValue());
-    
+
     Var value = super.getVar(index);
-    
+
     setValue(getRawValue());
-    
+
     return value;
   }
 
@@ -926,11 +924,11 @@ public class JavaAdapterVar extends Value
   public Value getArg(Value index, boolean isTop)
   {
     setRaw(getValue());
-    
+
     Value value = super.getArg(index, isTop);
-    
+
     setValue(getRawValue());
-    
+
     return value;
   }
 
@@ -941,11 +939,11 @@ public class JavaAdapterVar extends Value
   public Value getArray(Value index)
   {
     setRaw(getValue());
-    
+
     Value value = super.getArray(index);
-    
+
     setValue(getRawValue());
-    
+
     return value;
   }
 
@@ -965,11 +963,11 @@ public class JavaAdapterVar extends Value
   public Value getObject(Env env, Value index)
   {
     setRaw(getValue());
-    
+
     Value value = super.getObject(env, index);
-    
+
     setValue(getRawValue());
-    
+
     return value;
   }
 
@@ -980,11 +978,11 @@ public class JavaAdapterVar extends Value
   public Value put(Value index, Value value)
   {
     setRaw(getValue());
-    
+
     Value retValue = super.put(index, value);
-    
+
     setValue(getRawValue());
-    
+
     return retValue;
   }
 
@@ -995,11 +993,11 @@ public class JavaAdapterVar extends Value
   public Value put(Value value)
   {
     setRaw(getValue());
-    
+
     Value retValue = super.put(value);
-    
+
     setValue(getRawValue());
-    
+
     return retValue;
   }
 
@@ -1010,14 +1008,14 @@ public class JavaAdapterVar extends Value
   public Var putVar()
   {
     setRaw(getValue());
-    
+
     Var retValue = super.putVar();
-    
+
     setValue(getRawValue());
-    
+
     return retValue;
   }
-  
+
   /**
    * Sets the array value, returning the new array, e.g. to handle
    * string update ($a[0] = 'A').
@@ -1026,11 +1024,11 @@ public class JavaAdapterVar extends Value
   public Value append(Value index, Value value)
   {
     setRaw(getValue());
-    
+
     Value retValue = super.append(index, value);
-    
+
     setValue(getRawValue());
-    
+
     return retValue;
   }
 
@@ -1059,9 +1057,9 @@ public class JavaAdapterVar extends Value
   public Var getFieldVar(Env env, StringValue index)
   {
     setRaw(getValue());
-    
+
     Var retValue = super.getFieldVar(env, index);
-    
+
     setValue(getRawValue());
 
     return retValue;
@@ -1074,11 +1072,11 @@ public class JavaAdapterVar extends Value
   public Value getFieldArg(Env env, StringValue index, boolean isTop)
   {
     setRaw(getValue());
-    
+
     Value retValue = super.getFieldArg(env, index, isTop);
-    
+
     setValue(getRawValue());
-    
+
     return retValue;
   }
 
@@ -1089,11 +1087,11 @@ public class JavaAdapterVar extends Value
   public Value getFieldArray(Env env, StringValue index)
   {
     setRaw(getValue());
-    
+
     Value retValue = super.getFieldArray(env, index);
-    
+
     setValue(getRawValue());
-    
+
     return retValue;
   }
 
@@ -1104,11 +1102,11 @@ public class JavaAdapterVar extends Value
   public Value getFieldObject(Env env, StringValue index)
   {
     setRaw(getValue());
-    
+
     Value retValue = super.getFieldObject(env, index);
-    
+
     setValue(getRawValue());
-    
+
     return retValue;
   }
 
@@ -1119,28 +1117,30 @@ public class JavaAdapterVar extends Value
   public Value putField(Env env, StringValue index, Value value)
   {
     setRaw(getValue());
-    
+
     Value retValue = super.putField(env, index, value);
-    
+
     setValue(getRawValue());
-    
+
     return retValue;
   }
 
   /**
    * Initializes a new field, does not call __set if it is defined.
    */
-  public void initField(StringValue key,
-                        Value value,
-                        FieldVisibility visibility)
+  @Override
+  public void initField(Env env,
+                        StringValue name,
+                        StringValue canonicalName,
+                        Value value)
   {
     setRaw(getValue());
-    
-    super.initField(key, value, visibility);
-    
+
+    super.initField(env, name, canonicalName, value);
+
     setValue(getRawValue());
   }
-  
+
   /**
    * Sets the field.
    */
@@ -1148,14 +1148,14 @@ public class JavaAdapterVar extends Value
   public Value putThisField(Env env, StringValue index, Value value)
   {
     setRaw(getValue());
-    
+
     Value retValue = super.putThisField(env, index, value);
-    
+
     setValue(getRawValue());
 
     return retValue;
   }
-  
+
   /**
    * Unsets the field.
    */
@@ -1174,7 +1174,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().valuesToArray(env, elementType);
   }
-  
+
   /**
    * Returns the character at an index
    */
@@ -1228,7 +1228,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().next();
   }
-  
+
   /**
    * Returns the previous value
    */
@@ -1237,7 +1237,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().prev();
   }
-  
+
   /**
    * Returns the end value.
    */
@@ -1246,7 +1246,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().end();
   }
-  
+
   /**
    * Returns the array pointer.
    */
@@ -1255,7 +1255,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().reset();
   }
-  
+
   /**
    * Shuffles the array.
    */
@@ -1264,7 +1264,7 @@ public class JavaAdapterVar extends Value
   {
     return getValue().shuffle();
   }
-  
+
   /**
    * Pops the top array element.
    */
@@ -1468,7 +1468,7 @@ public class JavaAdapterVar extends Value
   {
     return _value;
   }
-  
+
   //
   // Java Serialization
   //

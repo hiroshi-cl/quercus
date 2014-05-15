@@ -37,6 +37,7 @@ import com.caucho.quercus.QuercusRuntimeException;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.NullValue;
 import com.caucho.quercus.env.QuercusLanguageException;
+import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.expr.AbstractVarExpr;
 
@@ -58,10 +59,10 @@ public class TryStatement extends Statement {
     block.setParent(this);
   }
 
-  public void addCatch(String id, AbstractVarExpr lhs, Statement block)
+  public void addCatch(StringValue id, AbstractVarExpr lhs, Statement block)
   {
     _catchList.add(new Catch(id, lhs, block));
-    
+
     block.setParent(this);
   }
 
@@ -69,73 +70,77 @@ public class TryStatement extends Statement {
   {
     try {
       return _block.execute(env);
-    } catch (QuercusLanguageException e) {
+    }
+    catch (QuercusLanguageException e) {
       Value value = null;
-      
+
       try {
         value = e.toValue(env);
-      } catch (Throwable e1) {
+      }
+      catch (Throwable e1) {
         throw new QuercusRuntimeException(e1);
       }
 
       for (int i = 0; i < _catchList.size(); i++) {
         Catch item = _catchList.get(i);
-        
-        if (value != null && value.isA(item.getId())
-            || item.getId().equals("Exception")) {
-          if (value != null)
+
+        if (value != null && value.isA(env, item.getId())
+            || item.getId().equalsString("Exception")) {
+          if (value != null) {
             item.getExpr().evalAssignValue(env, value);
-          else
+          }
+          else {
             item.getExpr().evalAssignValue(env, NullValue.NULL);
-              
+          }
+
           return item.getBlock().execute(env);
         }
       }
 
       throw e;
-      
+
     } catch (QuercusDieException e) {
       for (int i = 0; i < _catchList.size(); i++) {
         Catch item = _catchList.get(i);
 
-        if (item.getId().equals("QuercusDieException")) {
+        if (item.getId().equalsString("QuercusDieException")) {
           item.getExpr().evalAssignValue(env, env.createException(e));
 
           return item.getBlock().execute(env);
         }
       }
-      
+
       throw e;
-      
+
     } catch (QuercusExitException e) {
       for (int i = 0; i < _catchList.size(); i++) {
         Catch item = _catchList.get(i);
 
-        if (item.getId().equals("QuercusExitException")) {
+        if (item.getId().equalsString("QuercusExitException")) {
           item.getExpr().evalAssignValue(env, env.createException(e));
 
           return item.getBlock().execute(env);
         }
       }
-      
+
       throw e;
 
     } catch (Exception e) {
       for (int i = 0; i < _catchList.size(); i++) {
         Catch item = _catchList.get(i);
 
-        if (item.getId().equals("Exception")) {
+        if (item.getId().equalsString("Exception")) {
           Throwable cause = e;
-          
+
           //if (e instanceof QuercusException && e.getCause() != null)
             //cause = e.getCause();
-          
+
           item.getExpr().evalAssignValue(env, env.createException(cause));
 
           return item.getBlock().execute(env);
         }
       }
-      
+
       if (e instanceof QuercusException)
         throw (QuercusException) e;
       else
@@ -144,11 +149,11 @@ public class TryStatement extends Statement {
   }
 
   public static class Catch {
-    private final String _id;
+    private final StringValue _id;
     private final AbstractVarExpr _lhs;
     private final Statement _block;
 
-    Catch(String id, AbstractVarExpr lhs, Statement block)
+    Catch(StringValue id, AbstractVarExpr lhs, Statement block)
     {
       _id = id;
       _lhs = lhs;
@@ -158,7 +163,7 @@ public class TryStatement extends Statement {
         throw new NullPointerException();
     }
 
-    public String getId()
+    public StringValue getId()
     {
       return _id;
     }

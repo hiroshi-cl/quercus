@@ -32,17 +32,30 @@ package com.caucho.quercus.lib.xml;
 import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.annotation.Reference;
-import com.caucho.quercus.env.*;
+import com.caucho.quercus.annotation.ResourceType;
+import com.caucho.quercus.env.ArrayValueImpl;
+import com.caucho.quercus.env.BooleanValue;
+import com.caucho.quercus.env.Callable;
+import com.caucho.quercus.env.CallbackObjectMethod;
+import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.LongValue;
+import com.caucho.quercus.env.ObjectValue;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.Value;
 import com.caucho.util.L10N;
 
-import org.xml.sax.*;
+import org.xml.sax.Attributes;
+import org.xml.sax.InputSource;
+import org.xml.sax.Locator;
+import org.xml.sax.SAXException;
+import org.xml.sax.SAXParseException;
 import org.xml.sax.helpers.DefaultHandler;
 
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
+
 import java.io.IOException;
-import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -53,6 +66,7 @@ import java.util.logging.Logger;
 /**
  * XML object oriented API facade
  */
+@ResourceType("xml")
 public class Xml {
   private static final Logger log = Logger.getLogger(Xml.class.getName());
   private static final L10N L = new L10N(Xml.class);
@@ -65,7 +79,7 @@ public class Xml {
    */
   private boolean _xmlOptionCaseFolding = true;
 
-  private String _xmlOptionTargetEncoding;
+  private String _outputEncoding;
 
   /**
    *  XML_OPTION_SKIP_TAGSTART specifies how many chars
@@ -101,10 +115,10 @@ public class Xml {
   private Callable _unparsedEntityDeclHandler;
 
   private Value _parser;
-  private Value _obj;
+  private ObjectValue _obj;
 
   SAXParserFactory _factory = SAXParserFactory.newInstance();
-  
+
   private StringValue _xmlString;
   private XmlHandler _xmlHandler;
 
@@ -112,7 +126,7 @@ public class Xml {
              String outputEncoding,
              String separator)
   {
-    _xmlOptionTargetEncoding = outputEncoding;
+    _outputEncoding = outputEncoding;
     _parser = env.wrapJava(this);
     _separator = separator;
   }
@@ -162,29 +176,29 @@ public class Xml {
   {
     if (_obj == null) {
       if (! startElementHandler.isEmpty()) {
-        _startElementHandler = startElementHandler.toCallable(env);
-      }
-      
-      if (! endElementHandler.isEmpty()) {
-        _endElementHandler = endElementHandler.toCallable(env);
-      }
-    } 
-    else {
-      if (! startElementHandler.isEmpty()) {
-        Value value = new ArrayValueImpl();
-        value.put(_obj);
-        value.put(startElementHandler);
-        _startElementHandler = value.toCallable(env);
+        _startElementHandler = startElementHandler.toCallable(env, false);
       }
 
-      if (! endElementHandler.isEmpty() && ! endElementHandler.toBoolean()) {
-        Value value = new ArrayValueImpl();
-        value.put(_obj);
-        value.put(endElementHandler);
-        _endElementHandler = value.toCallable(env);
+      if (! endElementHandler.isEmpty()) {
+        _endElementHandler = endElementHandler.toCallable(env, false);
       }
     }
-    
+    else {
+      if (! startElementHandler.isEmpty()) {
+        StringValue name = startElementHandler.toStringValue(env);
+        CallbackObjectMethod callback = new CallbackObjectMethod(_obj, name);
+
+        _startElementHandler = callback;
+      }
+
+      if (! endElementHandler.isEmpty()) {
+        StringValue name = endElementHandler.toStringValue(env);
+        CallbackObjectMethod callback = new CallbackObjectMethod(_obj, name);
+
+        _endElementHandler = callback;
+      }
+    }
+
     return true;
   }
 
@@ -197,12 +211,12 @@ public class Xml {
   public boolean xml_set_character_data_handler(Env env, Value handler)
   {
     if (_obj == null) {
-      _characterDataHandler = handler.toCallable(env);
+      _characterDataHandler = handler.toCallable(env, false);
     } else {
       Value value = new ArrayValueImpl();
       value.put(_obj);
       value.put(handler);
-      _characterDataHandler = value.toCallable(env);
+      _characterDataHandler = value.toCallable(env, false);
     }
 
     return true;
@@ -226,12 +240,13 @@ public class Xml {
   public boolean xml_set_default_handler(Env env, Value handler)
   {
     if (_obj == null) {
-      _defaultHandler = handler.toCallable(env);
-    } else {
+      _defaultHandler = handler.toCallable(env, false);
+    }
+    else {
       Value value = new ArrayValueImpl();
       value.put(_obj);
       value.put(handler);
-      _defaultHandler = value.toCallable(env);
+      _defaultHandler = value.toCallable(env, false);
     }
     return true;
   }
@@ -248,12 +263,12 @@ public class Xml {
   {
     if (_obj == null) {
       _processingInstructionHandler
-        = processingInstructionHandler.toCallable(env);
+        = processingInstructionHandler.toCallable(env, false);
     } else {
       Value value = new ArrayValueImpl();
       value.put(_obj);
       value.put(processingInstructionHandler);
-      _processingInstructionHandler = value.toCallable(env);
+      _processingInstructionHandler = value.toCallable(env, false);
     }
     return true;
   }
@@ -269,12 +284,12 @@ public class Xml {
       Value startNamespaceDeclHandler)
   {
     if (_obj == null) {
-      _startNamespaceDeclHandler = startNamespaceDeclHandler.toCallable(env);
+      _startNamespaceDeclHandler = startNamespaceDeclHandler.toCallable(env, false);
     } else {
       Value value = new ArrayValueImpl();
       value.put(_obj);
       value.put(startNamespaceDeclHandler);
-      _startNamespaceDeclHandler = value.toCallable(env);
+      _startNamespaceDeclHandler = value.toCallable(env, false);
     }
     return true;
   }
@@ -288,12 +303,12 @@ public class Xml {
   public boolean xml_set_unparsed_entity_decl_handler(Env env, Value handler)
   {
     if (_obj == null) {
-      _unparsedEntityDeclHandler = handler.toCallable(env);
+      _unparsedEntityDeclHandler = handler.toCallable(env, false);
     } else {
       Value value = new ArrayValueImpl();
       value.put(_obj);
       value.put(handler);
-      _unparsedEntityDeclHandler = value.toCallable(env);
+      _unparsedEntityDeclHandler = value.toCallable(env, false);
     }
     return true;
   }
@@ -309,12 +324,12 @@ public class Xml {
       Value endNamespaceDeclHandler)
   {
     if (_obj == null) {
-      _endNamespaceDeclHandler = endNamespaceDeclHandler.toCallable(env);
+      _endNamespaceDeclHandler = endNamespaceDeclHandler.toCallable(env, false);
     } else {
       Value value = new ArrayValueImpl();
       value.put(_obj);
       value.put(endNamespaceDeclHandler);
-      _endNamespaceDeclHandler = value.toCallable(env);
+      _endNamespaceDeclHandler = value.toCallable(env, false);
     }
     return true;
   }
@@ -328,12 +343,12 @@ public class Xml {
   public boolean xml_set_notation_decl_handler(Env env, Value handler)
   {
     if (_obj == null) {
-      _notationDeclHandler = handler.toCallable(env);
+      _notationDeclHandler = handler.toCallable(env, false);
     } else {
       Value value = new ArrayValueImpl();
       value.put(_obj);
       value.put(handler);
-      _notationDeclHandler = value.toCallable(env);
+      _notationDeclHandler = value.toCallable(env, false);
     }
     return true;
   }
@@ -344,10 +359,11 @@ public class Xml {
    * @param obj
    * @return returns true unless obj == null
    */
-  public boolean xml_set_object(Value obj)
+  public boolean xml_set_object(ObjectValue obj)
   {
-    if (obj == null)
+    if (obj == null) {
       return false;
+    }
 
     _obj = obj;
 
@@ -372,26 +388,21 @@ public class Xml {
   {
     if (_xmlString == null)
       _xmlString = data.createStringBuilder();
-    
+
     _xmlString.append(data);
 
     if (isFinal) {
       InputSource is;
-      
+
       if (_xmlString.isUnicode()) {
+        // since it's unicode, doesn't matter what encoding we pass in
         is = new InputSource(_xmlString.toReader("utf-8"));
-        
-        _xmlOptionTargetEncoding = is.getEncoding();
       }
-      else if (_xmlOptionTargetEncoding != null
-               && _xmlOptionTargetEncoding.length() > 0)
-        is = new InputSource(_xmlString.toReader(_xmlOptionTargetEncoding));
       else {
+        // php/1h0t
         is = new InputSource(_xmlString.toInputStream());
-        
-        _xmlOptionTargetEncoding = is.getEncoding();
       }
-      
+
       try {
         _errorCode = XmlModule.XML_ERROR_NONE;
         _errorString = null;
@@ -400,28 +411,31 @@ public class Xml {
 
         SAXParser saxParser = _factory.newSAXParser();
         saxParser.parse(is, _xmlHandler);
-      } catch (SAXException e) {
+      }
+      catch (SAXParseException e) {
+        XmlModule.recordError(env, XmlModule.LIBXML_ERR_FATAL, 0,
+                              e.getColumnNumber(), e.toString(), "",
+                              e.getLineNumber());
+
         _errorCode = XmlModule.XML_ERROR_SYNTAX;
         _errorString = e.toString();
 
         log.log(Level.FINE, e.getMessage(), e);
         return 0;
-      } catch (IOException e) {
+      }
+      catch (Exception e) {
+        XmlModule.recordError(env, XmlModule.LIBXML_ERR_FATAL, 0,
+                              0, e.toString(), "", 0);
+
         _errorCode = XmlModule.XML_ERROR_SYNTAX;
         _errorString = e.toString();
 
-        log.log(Level.FINE, e.getMessage(), e);
-        return 0;
-      } catch (Exception e) {
-        _errorCode = XmlModule.XML_ERROR_SYNTAX;
-        _errorString = e.toString();
-        
         log.log(Level.FINE, e.toString(), e);
         return 0;
-      } finally {
+      }
+      finally {
         _xmlHandler = null;
       }
-      
     }
 
     return 1;
@@ -443,10 +457,10 @@ public class Xml {
   {
     ArrayValueImpl valueArray = new ArrayValueImpl();
     ArrayValueImpl indexArray = new ArrayValueImpl();
-    
+
     valsV.set(valueArray);
     indexV.set(indexArray);
-    
+
     if (data == null || data.length() == 0)
       return 0;
 
@@ -454,7 +468,7 @@ public class Xml {
       _xmlString = data.toStringBuilder(env);
 
     InputSource is;
-    
+
     if (_xmlString.isUnicode())
       is = new InputSource(_xmlString.toReader("utf-8"));
     else
@@ -466,23 +480,23 @@ public class Xml {
     } catch (SAXException e) {
       _errorCode = XmlModule.XML_ERROR_SYNTAX;
       _errorString = e.toString();
-      
+
       log.log(Level.FINE, e.toString(), e);
-      
+
       return 0;
     } catch (IOException e) {
       _errorCode = XmlModule.XML_ERROR_SYNTAX;
       _errorString = e.toString();
-      
+
       log.log(Level.FINE, e.toString(), e);
-      
+
       return 0;
     } catch (Exception e) {
       _errorCode = XmlModule.XML_ERROR_SYNTAX;
       _errorString = e.toString();
-      
+
       log.log(Level.FINE, e.toString(), e);
-      
+
       return 0;
     }
 
@@ -516,7 +530,7 @@ public class Xml {
         _xmlOptionSkipWhite = value.toBoolean();
         return true;
       case XmlModule.XML_OPTION_TARGET_ENCODING:
-        _xmlOptionTargetEncoding = value.toString();
+        _outputEncoding = value.toString();
         return true;
       default:
         return false;
@@ -538,7 +552,7 @@ public class Xml {
     case XmlModule.XML_OPTION_SKIP_WHITE:
       return (_xmlOptionSkipWhite ? LongValue.ONE : LongValue.ZERO);
     case XmlModule.XML_OPTION_TARGET_ENCODING:
-      return env.createString(_xmlOptionTargetEncoding);
+      return env.createString(_outputEncoding);
     default:
       return BooleanValue.FALSE;
     }
@@ -574,7 +588,7 @@ public class Xml {
     private int _valueArrayIndex = 0;
 
     private Locator _locator;
-    
+
     private Env _env;
 
     public StructHandler(Env env,
@@ -582,7 +596,7 @@ public class Xml {
                          ArrayValueImpl indexArray)
     {
       _env = env;
-      
+
       _valueArray = valueArray;
       _indexArray = indexArray;
     }
@@ -620,10 +634,16 @@ public class Xml {
       // turn attrs into an array of name, value pairs
       for (int i = 0; i < attrs.getLength(); i++) {
         String aName = attrs.getLocalName(i); // Attr name
-        if ("".equals(aName)) aName = attrs.getQName(i);
-        if (_xmlOptionCaseFolding) aName = aName.toUpperCase(Locale.ENGLISH);
-        result.put(
-            env.createString(aName), env.createString(attrs.getValue(i)));
+        if ("".equals(aName)) {
+          aName = attrs.getQName(i);
+        }
+
+        if (_xmlOptionCaseFolding) {
+          aName = aName.toUpperCase(Locale.ENGLISH);
+        }
+
+        result.put(env.createString(aName),
+                   env.createString(attrs.getValue(i)));
       }
 
       return result;
@@ -655,7 +675,7 @@ public class Xml {
       _paramHashMap.put(_level, eName);
 
       if (attrs.getLength() > 0) {
-        elementArray.put(_env.createString("attributes"), 
+        elementArray.put(_env.createString("attributes"),
                          createAttributeArray(_env, attrs));
       }
 
@@ -680,8 +700,9 @@ public class Xml {
 
       if (_isComplete) {
         elementArray = _valueArray.get(LongValue.create(_valueArrayIndex - 1));
-        elementArray.put(
-            _env.createString("type"), _env.createString("complete"));
+
+        elementArray.put(_env.createString("type"),
+                         _env.createString("complete"));
       } else {
         elementArray = new ArrayValueImpl();
         String eName = sName; // element name
@@ -719,39 +740,54 @@ public class Xml {
                            int length)
       throws SAXException
     {
-      String s = new String(ch, start, length);
-
       if (_isOutside) {
+        StringValue s = _env.createString(ch, start, length);
+
         Value elementArray = new ArrayValueImpl();
-        elementArray.put(
-            _env.createString("tag"),
-            _env.createString(_paramHashMap.get(_level - 1)));
-        elementArray.put(
-            _env.createString("value"), _env.createString(s));
-        elementArray.put(
-            _env.createString("type"), _env.createString("cdata"));
-        elementArray.put(
-            _env.createString("level"), LongValue.create(_level - 1));
+        elementArray.put(_env.createString("tag"),
+                         _env.createString(_paramHashMap.get(_level - 1)));
+
+        elementArray.put(_env.createString("value"), s);
+
+        elementArray.put(_env.createString("type"), _env.createString("cdata"));
+
+        elementArray.put(_env.createString("level"),
+                         LongValue.create(_level - 1));
+
         _valueArray.put(LongValue.create(_valueArrayIndex), elementArray);
 
-        Value indexArray = _indexArray.get(
-            _env.createString(_paramHashMap.get(_level - 1)));
+        StringValue key = _env.createString(_paramHashMap.get(_level - 1));
+        Value indexArray = _indexArray.get(key);
         indexArray.put(LongValue.create(_valueArrayIndex));
 
         _valueArrayIndex++;
       } else {
-        Value elementArray = _valueArray.get(
-            LongValue.create(_valueArrayIndex - 1));
-        elementArray.put(_env.createString("value"), _env.createString(s));
+        Value elementArray = _valueArray.get(_valueArrayIndex - 1);
+
+        StringValue key = _env.createString("value");
+
+        Value value = elementArray.get(key);
+        if (value.isString()) {
+          // php/1h0l
+          StringValue sb = _env.createStringBuilder();
+
+          sb.append(value);
+          sb.append(ch, start, length);
+
+          elementArray.put(key, sb);
+        }
+        else {
+          elementArray.put(key, _env.createString(ch, start, length));
+        }
       }
     }
   }
 
   class XmlHandler extends DefaultHandler {
     private Locator _locator;
-    
+
     private Env _env;
-    
+
     XmlHandler(Env env)
     {
       _env = env;
@@ -807,12 +843,40 @@ public class Xml {
       args[0] = _parser;
 
       String eName = lName; // element name
-      if ("".equals(eName))
+      if (eName.length() == 0)
         eName = qName;
-      
+
+      if (_startElementHandler == null && _defaultHandler != null) {
+        StringValue sb = _env.createStringBuilder();
+
+        sb.append("<");
+        sb.append(eName);
+
+        for (int i = 0; i < attrs.getLength(); i++) {
+          String aName = attrs.getLocalName(i); // Attr name
+
+          if (aName.length() == 0) {
+            aName = attrs.getQName(i);
+          }
+
+          sb.append(' ');
+          sb.append(aName);
+          sb.append('=');
+          sb.append('"');
+          sb.append(attrs.getValue(i));
+          sb.append('"');
+        }
+
+        sb.append(">");
+
+        _defaultHandler.call(_env, _parser, sb);
+
+        return;
+      }
+
       if (_xmlOptionCaseFolding)
         eName = eName.toUpperCase(Locale.ENGLISH);
-      
+
       args[1] = _env.createString(eName);
 
       // turn attrs into an array of name, value pairs
@@ -826,14 +890,14 @@ public class Xml {
         if (_xmlOptionCaseFolding)
           aName = aName.toUpperCase(Locale.ENGLISH);
 
-        args[2].put(
-            _env.createString(aName),
-            _env.createString(attrs.getValue(i)));
+        args[2].put(_env.createString(aName),
+                    _env.createString(attrs.getValue(i)));
       }
 
       try {
-        if (_startElementHandler != null)
+        if (_startElementHandler != null) {
           _startElementHandler.call(_env, args);
+        }
         else {
           if (log.isLoggable(Level.FINER))
             log.finer(this + " startElement " + qName);
@@ -859,15 +923,26 @@ public class Xml {
     {
       try {
         String eName = sName; // element name
-        
-        if ("".equals(eName))
-          eName = qName;
-        
-        if (_xmlOptionCaseFolding)
-            eName = eName.toUpperCase(Locale.ENGLISH);
 
-        if (_endElementHandler != null)
+        if (eName.length() == 0)
+          eName = qName;
+
+        if (_endElementHandler != null) {
+          if (_xmlOptionCaseFolding) {
+            eName = eName.toUpperCase(Locale.ENGLISH);
+          }
+
           _endElementHandler.call(_env, _parser, _env.createString(eName));
+        }
+        else if (_defaultHandler != null) {
+          StringValue sb = _env.createStringBuilder();
+
+          sb.append("</");
+          sb.append(eName);
+          sb.append(">");
+
+          _defaultHandler.call(_env, _parser, sb);
+        }
         else {
           if (log.isLoggable(Level.FINER))
             log.finer(this + " endElement " + sName);
@@ -892,20 +967,20 @@ public class Xml {
       throws SAXException
     {
       StringValue value;
-      
+
       if (_env.isUnicodeSemantics()) {
         value = _env.createString(buf, start, length);
       }
       else {
-        String encoding = _xmlOptionTargetEncoding;
-        
+        String encoding = _outputEncoding;
+
         if (encoding == null)
           encoding = "UTF-8";
-        
+
         String s = new String(buf, start, length);
-        
+
         byte[] bytes;
-        
+
         try {
           bytes = s.getBytes(encoding);
         } catch (UnsupportedEncodingException e) {
@@ -913,7 +988,7 @@ public class Xml {
         }
 
         value = _env.createStringBuilder();
-        
+
         value.append(bytes);
       }
 

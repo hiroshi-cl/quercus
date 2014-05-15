@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,46 +31,35 @@ package com.caucho.quercus;
 
 import java.io.IOException;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
 import com.caucho.quercus.env.CgiEnv;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.page.QuercusPage;
+import com.caucho.quercus.servlet.api.QuercusHttpServletRequest;
+import com.caucho.quercus.servlet.api.QuercusHttpServletResponse;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.StdoutStream;
 import com.caucho.vfs.WriteStream;
 
 public class CgiQuercus
-  extends CliQuercus
+  extends Quercus
 {
   @Override
   public Env createEnv(QuercusPage page,
                        WriteStream out,
-                       HttpServletRequest request,
-                       HttpServletResponse response)
+                       QuercusHttpServletRequest request,
+                       QuercusHttpServletResponse response)
   {
     return new CgiEnv(this, page, out, request, response);
   }
-  
+
   public static void main(String []args)
     throws IOException
   {
     CgiQuercus quercus = new CgiQuercus();
-    
-    quercus.parseArgs(args);
-    
-    quercus.init();
-    quercus.start();
-    
-    if (quercus.getFileName() != null) {
-      quercus.execute();
-    }
-    else {
-      throw new RuntimeException("input file not specified");
-    }
+
+    startMain(args, quercus);
   }
-  
+
   /**
    * Returns the SAPI (Server API) name.
    */
@@ -85,25 +74,25 @@ public class CgiQuercus
     throws IOException
   {
     Path path = getPwd().lookup(getFileName());
-    
+
     QuercusPage page = parse(path);
-    
+
     WriteStream os = new WriteStream(StdoutStream.create());
-      
+
     os.setNewlineString("\n");
     os.setEncoding("iso-8859-1");
-    
+
     Env env = createEnv(page, os, null, null);
     env.start();
-    
+
     try {
       env.execute();
     } catch (QuercusDieException e) {
     } catch (QuercusExitException e) {
     }
-    
+
     env.close();
-    
+
     os.flush();
   }
 }

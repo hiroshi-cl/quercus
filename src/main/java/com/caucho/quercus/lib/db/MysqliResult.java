@@ -44,7 +44,6 @@ import java.sql.Types;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-
 /**
  * mysqli object oriented API facade
  */
@@ -57,6 +56,11 @@ public class MysqliResult extends JdbcResultResource {
 
   private int _resultSetSize;
 
+  // nam 2013-10-03: box, hack for now
+  public int num_rows;
+
+  private final Mysqli _conn;
+
   /**
    * Constructor for MysqliResult
    *
@@ -64,15 +68,17 @@ public class MysqliResult extends JdbcResultResource {
    * @param rs the corresponding result set
    * @param conn the corresponding connection
    */
-  public MysqliResult(Env env,
-                      Statement stmt,
+  public MysqliResult(Statement stmt,
                       ResultSet rs,
                       Mysqli conn)
   {
-    super(env, stmt, rs, conn);
+    super(rs);
+
+    _conn = conn;
 
     // getNumRows() is efficient for MySQL
     _resultSetSize = getNumRows();
+    this.num_rows = _resultSetSize;
   }
 
   /**
@@ -81,11 +87,12 @@ public class MysqliResult extends JdbcResultResource {
    * @param metaData the corresponding result set meta data
    * @param conn the corresponding connection
    */
-  public MysqliResult(Env env,
-                      ResultSetMetaData metaData,
+  public MysqliResult(ResultSetMetaData metaData,
                       Mysqli conn)
   {
-    super(env, metaData, conn);
+    super(metaData);
+
+    _conn = conn;
   }
 
   public String getResourceType()
@@ -96,7 +103,7 @@ public class MysqliResult extends JdbcResultResource {
 
   public boolean isLastSqlDescribe()
   {
-    return ((Mysqli) getConnection()).isLastSqlDescribe();
+    return _conn.isLastSqlDescribe();
   }
 
   /**
@@ -129,15 +136,14 @@ public class MysqliResult extends JdbcResultResource {
    * @return a result row as an associative, a numeric array, or both
    * or null if there are no more rows in the result set
    */
-  @ReturnNullAsFalse
-  public ArrayValue fetch_array(Env env,
-                                @Optional("MYSQLI_BOTH") int type)
+  public Value fetch_array(Env env,
+                           @Optional("MYSQLI_BOTH") int type)
   {
     if (type != MysqliModule.MYSQLI_ASSOC
             && type != MysqliModule.MYSQLI_BOTH
             && type != MysqliModule.MYSQLI_NUM) {
       env.warning(L.l("invalid result_type"));
-      return null;
+      return BooleanValue.FALSE;
     }
 
     return fetchArray(env, type);
@@ -149,7 +155,7 @@ public class MysqliResult extends JdbcResultResource {
    * @return an associative array representing the row
    * or null if there are no more rows in the result set
    */
-  public ArrayValue fetch_assoc(Env env)
+  public Value fetch_assoc(Env env)
   {
     return fetchArray(env, JdbcResultResource.FETCH_ASSOC);
   }
@@ -215,9 +221,11 @@ public class MysqliResult extends JdbcResultResource {
    * fetched row or NULL if there are no more
    * rows in resultset
    */
-  public Value fetch_object(Env env)
+  public Value fetch_object(Env env,
+                            @Optional String className,
+                            @Optional Value[] args)
   {
-    return fetchObject(env);
+    return fetchObject(env, className, args);
   }
 
   /**
@@ -227,7 +235,7 @@ public class MysqliResult extends JdbcResultResource {
    * fetched row or NULL if there are no more
    * rows in result set
    */
-  public ArrayValue fetch_row(Env env)
+  public Value fetch_row(Env env)
   {
     return fetchArray(env, JdbcResultResource.FETCH_NUM);
   }
@@ -299,9 +307,7 @@ public class MysqliResult extends JdbcResultResource {
 
       MysqliResult metaResult;
 
-      metaResult = ((Mysqli) getConnection()).metaQuery(env,
-                                                        sql,
-                                                        catalogName);
+      metaResult = _conn.metaQuery(env, sql, catalogName);
 
       if (metaResult == null) {
         return fetchFieldImproved(env, md, offset);
@@ -340,7 +346,7 @@ public class MysqliResult extends JdbcResultResource {
       int scale = md.getScale(offset);
 
       if ((fieldTable == null || "".equals(fieldTable))
-          && ((Mysqli) getConnection()).isLastSqlDescribe())
+          && _conn.isLastSqlDescribe())
         fieldTable = "COLUMNS";
 
       result.putField(env, "name", env.createString(fieldAlias));
@@ -942,8 +948,6 @@ public class MysqliResult extends JdbcResultResource {
     // The "SET NAMES 'latin1'" in Mysqli is important to make the default
     // encoding sane
 
-    Mysqli mysqli = getMysqli();
-
     if (rs instanceof QuercusResultSet) {
       QuercusResultSet qRs = (QuercusResultSet) rs;
 
@@ -956,14 +960,14 @@ public class MysqliResult extends JdbcResultResource {
       StringBuilderValue sb = new StringBuilderValue();
       sb.ensureAppendCapacity(length);
 
-      qRs.getString(column, sb.getBuffer(), sb.getOffset());
-      sb.setOffset(sb.getOffset() + length);
+      qRs.getString(column, sb.getBuffer(), sb.length());
+      sb.setLength(sb.length() + length);
 
       return sb;
     }
 
     Method getColumnCharacterSetMethod
-      = mysqli.getColumnCharacterSetMethod(md.getClass());
+      = _conn.getColumnCharacterSetMethod(md.getClass());
 
     String encoding = null;
 
@@ -1045,10 +1049,5 @@ public class MysqliResult extends JdbcResultResource {
       else
         return NullValue.NULL;
     }
-  }
-
-  protected Mysqli getMysqli()
-  {
-    return (Mysqli) getConnection();
   }
 }

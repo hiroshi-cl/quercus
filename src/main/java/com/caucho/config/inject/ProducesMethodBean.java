@@ -57,6 +57,7 @@ import javax.inject.Qualifier;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.bytecode.ScopeAdapter;
+import com.caucho.config.bytecode.ScopeProxy;
 import com.caucho.config.program.Arg;
 import com.caucho.config.reflect.AnnotatedElementImpl;
 import com.caucho.config.reflect.AnnotatedTypeUtil;
@@ -195,6 +196,7 @@ public class ProducesMethodBean<X,T> extends AbstractIntrospectedBean<T>
     bean.introspect();
     bean.introspect(producesMethod);
     
+    /* #5522
     BaseType type = manager.createSourceBaseType(producesMethod.getBaseType());
     
     if (type.isGeneric()) {
@@ -203,6 +205,7 @@ public class ProducesMethodBean<X,T> extends AbstractIntrospectedBean<T>
                                        producesMethod.getJavaMember(),
                                        type));
     }
+    */
 
     return bean;
   }
@@ -466,7 +469,7 @@ public class ProducesMethodBean<X,T> extends AbstractIntrospectedBean<T>
     /**
      * Produces a new bean instance
      */
-    private T produce(X bean, CreationalContextImpl<T> env)
+    private T produce(X factory, CreationalContextImpl<T> env)
     
     {
       try {
@@ -486,8 +489,18 @@ public class ProducesMethodBean<X,T> extends AbstractIntrospectedBean<T>
         }
         else
           args = NULL_ARGS;
+        
+        Method method = _producesMethod.getJavaMember();
+        
+        if (factory instanceof ScopeProxy
+            && ! Modifier.isPublic(method.getModifiers())) {
+          // ioc/0714
+          ScopeProxy proxy = (ScopeProxy) factory;
+          
+          factory = (X) proxy.__caucho_getDelegate();
+        }
 
-        T value = (T) _producesMethod.getJavaMember().invoke(bean, args);
+        T value = (T) method.invoke(factory, args);
         
         env.push(value);
         

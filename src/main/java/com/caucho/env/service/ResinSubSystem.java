@@ -37,6 +37,8 @@ public interface ResinSubSystem
   // the start priority of an environment service with no network dependencies
   public static final int START_PRIORITY_ENV_SYSTEM = 30;
   
+  public static final int START_PRIORITY_DATABASE_SYSTEM = 35;
+  
   // the start priority of the cluster network service
   public static final int START_PRIORITY_NETWORK_CLUSTER = 40;
   
@@ -47,6 +49,8 @@ public interface ResinSubSystem
   public static final int START_PRIORITY_CLUSTER_SERVICE = 50;
   
   public static final int START_PRIORITY_CLASSLOADER = 70;
+  public static final int STOP_PRIORITY_CLASSLOADER = 10;
+  
   public static final int START_PRIORITY_DEFAULT = 80;
 
   /**

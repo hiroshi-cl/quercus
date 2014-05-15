@@ -35,7 +35,6 @@ import com.caucho.quercus.env.*;
 import com.caucho.quercus.module.AbstractQuercusModule;
 import com.caucho.quercus.module.IniDefinitions;
 import com.caucho.quercus.module.IniDefinition;
-import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
 import com.caucho.vfs.Path;
@@ -57,7 +56,7 @@ public class ApcModule extends AbstractQuercusModule
   private static final IniDefinitions _iniDefinitions = new IniDefinitions();
 
   private static final int _defaultSize = 4096;
-  
+
   private LruCache<String,Entry> _cache;
 
   private HashMap<String,Value> _constMap = new HashMap<String,Value>();
@@ -114,7 +113,7 @@ public class ApcModule extends AbstractQuercusModule
 
         while (iter.hasNext()) {
           LruCache.Entry<String,Entry> lruEntry = iter.next();
-          
+
           keys.add(lruEntry.getKey());
           values.add(lruEntry.getValue());
         }
@@ -151,7 +150,7 @@ public class ApcModule extends AbstractQuercusModule
 
     return true;
   }
-  
+
   /**
    * Preloads the specified file.
    */
@@ -159,16 +158,16 @@ public class ApcModule extends AbstractQuercusModule
   {
     try {
       Path path = env.lookup(name);
-      
+
       if (path != null && path.canRead()) {
         env.getQuercus().parse(path);
-      
+
         return true;
       }
     } catch (IOException e) {
       log.log(Level.FINE, e.getMessage(), e);
     }
-    
+
     return false;
   }
 
@@ -192,29 +191,29 @@ public class ApcModule extends AbstractQuercusModule
   {
     if (_cache == null)
       return false;
-    
+
     return _cache.remove(key) != null;
   }
 
   /**
    * Returns a value.
    */
-  public Value apc_fetch(Env env, 
+  public Value apc_fetch(Env env,
                          String key,
                          @Optional @Reference Value isSuccessful)
   {
     isSuccessful.set(BooleanValue.FALSE);
-    
+
     if (_cache == null)
       return BooleanValue.FALSE;
-    
+
     Entry entry = _cache.get(key);
 
     if (entry == null)
       return BooleanValue.FALSE;
 
     Value value = entry.getValue(env);
-    
+
     if (value != null)
       initObject(env, new IdentityHashMap<Value,Value>(), value);
 
@@ -225,7 +224,7 @@ public class ApcModule extends AbstractQuercusModule
     else
       return BooleanValue.FALSE;
   }
-  
+
   /**
    * Updates the value's class with a currently available one.
    */
@@ -236,20 +235,20 @@ public class ApcModule extends AbstractQuercusModule
     if (value.isObject()) {
       if (valueMap.containsKey(value))
         return;
-      
+
       valueMap.put(value, value);
-      
+
       ObjectValue obj = (ObjectValue) value.toValue().toObject(env);
 
       String className;
-      
+
       if (obj.isIncompleteObject())
         className = obj.getIncompleteObjectName();
       else
         className = obj.getName();
-      
+
       QuercusClass cls = env.findClass(className);
-        
+
       if (cls != null) {
         obj.initObject(env, cls);
       }
@@ -257,11 +256,11 @@ public class ApcModule extends AbstractQuercusModule
     else if (value.isArray()) {
       if (valueMap.containsKey(value))
         return;
-      
+
       valueMap.put(value, value);
-      
+
       Iterator<Value> iter = value.getValueIterator(env);
-      
+
       while (iter.hasNext()) {
         initObject(env, valueMap, iter.next());
       }
@@ -281,7 +280,7 @@ public class ApcModule extends AbstractQuercusModule
       return false;
 
     for (Map.Entry<Value,Value> entry : array.entrySet()) {
-      env.addConstant(entry.getKey().toString(),
+      env.addConstant(entry.getKey().toStringValue(env),
                       entry.getValue().copy(env),
                       ! caseSensitive);
     }
@@ -304,30 +303,56 @@ public class ApcModule extends AbstractQuercusModule
     return value;
   }
 
+  public Value apc_add(Env env,
+                       String key,
+                       Value value,
+                       @Optional("0") int ttl) {
+    LruCache<String,Entry> cache = getCache(env);
+
+    if (cache.get(key) == null) {
+      cache.put(key, new Entry(env, value, ttl));
+
+      return BooleanValue.TRUE;
+    }
+    else {
+      return BooleanValue.FALSE;
+    }
+  }
+
   /**
    * Returns a value.
    */
   public Value apc_store(Env env, String key, Value value,
                          @Optional("0") int ttl)
   {
+    LruCache<String,Entry> cache = getCache(env);
+
+    cache.put(key, new Entry(env, value, ttl));
+
+    return BooleanValue.TRUE;
+  }
+
+  private LruCache<String,Entry> getCache(Env env) {
     if (_cache == null) {
       long size = env.getIniLong("apc.user_entries_hint");
 
       if (size <= 0)
         size = _defaultSize;
 
-      _cache = new LruCache<String,Entry>((int) size);
+      synchronized (this) {
+        if (_cache == null) {
+          _cache = new LruCache<String,Entry>((int) size);
+        }
+      }
     }
-    
-    _cache.put(key, new Entry(env, value, ttl));
 
-    return BooleanValue.TRUE;
+    return _cache;
   }
 
   static class Entry extends UnserializeCacheEntry {
     private long _createTime;
     private long _accessTime;
-    
+
     private long _expire;
     private int _hitCount;
 
@@ -372,7 +397,7 @@ public class ApcModule extends AbstractQuercusModule
       if (env.getCurrentTime() <= _expire) {
         _accessTime = env.getCurrentTime();
         _hitCount++;
-        
+
         return super.getValue(env);
       }
       else {

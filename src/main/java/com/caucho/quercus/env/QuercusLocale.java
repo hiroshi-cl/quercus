@@ -29,12 +29,18 @@
 
 package com.caucho.quercus.env;
 
+import java.text.DecimalFormatSymbols;
 import java.util.Locale;
 
 public class QuercusLocale
 {
+  private final static QuercusLocale DEFAULT_US
+    = new QuercusLocale(Locale.US, "utf-8");
+
   private final Locale _locale;
   private final String _charset;
+
+  private DecimalFormatSymbols _format;
 
   public QuercusLocale(Locale locale, String charset)
   {
@@ -46,12 +52,26 @@ public class QuercusLocale
   {
     return _locale;
   }
-  
+
   public String getCharset()
   {
     return _charset;
   }
-  
+
+  public char getDecimalSeparator()
+  {
+    if (_format == null) {
+      _format = DecimalFormatSymbols.getInstance(_locale);
+    }
+
+    return _format.getDecimalSeparator();
+  }
+
+  public static QuercusLocale getDefault()
+  {
+    return DEFAULT_US;
+  }
+
   public String toString()
   {
     return _locale.toString();

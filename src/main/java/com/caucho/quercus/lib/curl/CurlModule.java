@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -38,7 +38,6 @@ import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.lib.file.BinaryInput;
 import com.caucho.quercus.lib.file.BinaryOutput;
-import com.caucho.quercus.lib.file.FileModule;
 import com.caucho.quercus.module.AbstractQuercusModule;
 import com.caucho.util.L10N;
 import com.caucho.util.QDate;
@@ -46,9 +45,7 @@ import com.caucho.vfs.Path;
 import com.caucho.vfs.ReadStream;
 
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.Map;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class CurlModule
@@ -58,235 +55,235 @@ public class CurlModule
     = Logger.getLogger(CurlModule.class.getName());
   private static final L10N L = new L10N(CurlModule.class);
 
-  public static final int CURLAUTH_ANY		                    =	-17;
-  public static final int CURLAUTH_ANYSAFE		                =	-18;
-  public static final int CURLAUTH_BASIC		                =	1;
-  public static final int CURLAUTH_DIGEST		                =	2;
-  public static final int CURLAUTH_GSSNEGOTIATE	                =	4;
-  public static final int CURLAUTH_NTLM		                    =	8;
-  public static final int CURLCLOSEPOLICY_CALLBACK		        =	5;
-  public static final int CURLCLOSEPOLICY_LEAST_RECENTLY_USED	=	2;
-  public static final int CURLCLOSEPOLICY_LEAST_TRAFFIC		    =	3;
-  public static final int CURLCLOSEPOLICY_OLDEST		        =	1;
-  public static final int CURLCLOSEPOLICY_SLOWEST		        =	4;
-  public static final int CURLE_ABORTED_BY_CALLBACK		        =	42;
-  public static final int CURLE_BAD_CALLING_ORDER		        =	44;
-  public static final int CURLE_BAD_CONTENT_ENCODING		    =	61;
-  public static final int CURLE_BAD_FUNCTION_ARGUMENT		    =	43;
-  public static final int CURLE_BAD_PASSWORD_ENTERED		    =	46;
-  public static final int CURLE_COULDNT_CONNECT		            =	7;
-  public static final int CURLE_COULDNT_RESOLVE_HOST		    =	6;
-  public static final int CURLE_COULDNT_RESOLVE_PROXY		    =	5;
-  public static final int CURLE_FAILED_INIT		                =	2;
-  public static final int CURLE_FILE_COULDNT_READ_FILE		    =	37;
-  public static final int CURLE_FILESIZE_EXCEEDED		        =	63;
-  public static final int CURLE_FTP_ACCESS_DENIED		        =	9;
-  public static final int CURLE_FTP_BAD_DOWNLOAD_RESUME		    =	36;
-  public static final int CURLE_FTP_CANT_GET_HOST		        =	15;
-  public static final int CURLE_FTP_CANT_RECONNECT		        =	16;
-  public static final int CURLE_FTP_COULDNT_GET_SIZE		    =	32;
-  public static final int CURLE_FTP_COULDNT_RETR_FILE		    =	19;
-  public static final int CURLE_FTP_COULDNT_SET_ASCII		    =	29;
-  public static final int CURLE_FTP_COULDNT_SET_BINARY		    =	17;
-  public static final int CURLE_FTP_COULDNT_STOR_FILE		    =	25;
-  public static final int CURLE_FTP_COULDNT_USE_REST		    =	31;
-  public static final int CURLE_FTP_PORT_FAILED		            =	30;
-  public static final int CURLE_FTP_QUOTE_ERROR		            =	21;
-  public static final int CURLE_FTP_SSL_FAILED		            =	64;
-  public static final int CURLE_FTP_USER_PASSWORD_INCORRECT	    =	10;
-  public static final int CURLE_FTP_WEIRD_227_FORMAT		    =	14;
-  public static final int CURLE_FTP_WEIRD_PASS_REPLY		    =	11;
-  public static final int CURLE_FTP_WEIRD_PASV_REPLY		    =	13;
-  public static final int CURLE_FTP_WEIRD_SERVER_REPLY		    =	8;
-  public static final int CURLE_FTP_WEIRD_USER_REPLY		    =	12;
-  public static final int CURLE_FTP_WRITE_ERROR		            =	20;
-  public static final int CURLE_FUNCTION_NOT_FOUND	    	    =	41;
-  public static final int CURLE_GOT_NOTHING		                =	52;
-  public static final int CURLE_HTTP_NOT_FOUND		            =	22;
-  public static final int CURLE_HTTP_PORT_FAILED	    	    =	45;
-  public static final int CURLE_HTTP_POST_ERROR		            =	34;
-  public static final int CURLE_HTTP_RANGE_ERROR		        =	33;
-  public static final int CURLE_LDAP_CANNOT_BIND		        =	38;
-  public static final int CURLE_LDAP_INVALID_URL		        =	62;
-  public static final int CURLE_LDAP_SEARCH_FAILED		        =	39;
-  public static final int CURLE_LIBRARY_NOT_FOUND		        =	40;
-  public static final int CURLE_MALFORMAT_USER		            =	24;
-  public static final int CURLE_OBSOLETE		                =	50;
-  public static final int CURLE_OK		                        =	0;
-  public static final int CURLE_OPERATION_TIMEOUTED		        =	28;
-  public static final int CURLE_OUT_OF_MEMORY		            =	27;
-  public static final int CURLE_PARTIAL_FILE		            =	18;
-  public static final int CURLE_READ_ERROR		                =	26;
-  public static final int CURLE_RECV_ERROR		                =	56;
-  public static final int CURLE_SEND_ERROR		                =	55;
-  public static final int CURLE_SHARE_IN_USE	                =	57;
-  public static final int CURLE_SSL_CACERT		                =	60;
-  public static final int CURLE_SSL_CERTPROBLEM	                =	58;
-  public static final int CURLE_SSL_CIPHER		                =	59;
-  public static final int CURLE_SSL_CONNECT_ERROR		        =	35;
-  public static final int CURLE_SSL_ENGINE_NOTFOUND		        =	53;
-  public static final int CURLE_SSL_ENGINE_SETFAILED		    =	54;
-  public static final int CURLE_SSL_PEER_CERTIFICATE		    =	51;
-  public static final int CURLE_TELNET_OPTION_SYNTAX		    =	49;
-  public static final int CURLE_TOO_MANY_REDIRECTS		        =	47;
-  public static final int CURLE_UNKNOWN_TELNET_OPTION		    =	48;
-  public static final int CURLE_UNSUPPORTED_PROTOCOL		    =	1;
-  public static final int CURLE_URL_MALFORMAT		            =	3;
-  public static final int CURLE_URL_MALFORMAT_USER		        =	4;
-  public static final int CURLE_WRITE_ERROR		                =	23;
-  public static final int CURLFTPAUTH_DEFAULT	        	    =	0;
-  public static final int CURLFTPAUTH_SSL		                =	1;
-  public static final int CURLFTPAUTH_TLS		                =	2;
-  public static final int CURLFTPSSL_ALL		                =	3;
-  public static final int CURLFTPSSL_CONTROL	        	    =	2;
-  public static final int CURLFTPSSL_NONE		                =	0;
-  public static final int CURLFTPSSL_TRY		                =	1;
-  public static final int CURL_HTTP_VERSION_1_0		            =	1;
-  public static final int CURL_HTTP_VERSION_1_1		            =	2;
-  public static final int CURL_HTTP_VERSION_NONE		        =	0;
-  public static final int CURLINFO_CONNECT_TIME		            =	3145733;
-  public static final int CURLINFO_CONTENT_LENGTH_DOWNLOAD	    =	3145743;
-  public static final int CURLINFO_CONTENT_LENGTH_UPLOAD	    =	3145744;
-  public static final int CURLINFO_CONTENT_TYPE		            =	1048594;
-  public static final int CURLINFO_EFFECTIVE_URL		        =	1048577;
-  public static final int CURLINFO_FILETIME		                =	2097166;
-  public static final int CURLINFO_HEADER_OUT		            =	2;
-  public static final int CURLINFO_HEADER_SIZE		            =	2097163;
-  public static final int CURLINFO_HTTP_CODE		            =	2097154;
-  public static final int CURLINFO_NAMELOOKUP_TIME		        =	3145732;
-  public static final int CURLINFO_PRETRANSFER_TIME		        =	3145734;
-  public static final int CURLINFO_PRIVATE		                =	1048597;
-  public static final int CURLINFO_REDIRECT_COUNT		        =	2097172;
-  public static final int CURLINFO_REDIRECT_TIME		        =	3145747;
-  public static final int CURLINFO_REQUEST_SIZE		            =	2097164;
-  public static final int CURLINFO_SIZE_DOWNLOAD		        =	3145736;
-  public static final int CURLINFO_SIZE_UPLOAD		            =	3145735;
-  public static final int CURLINFO_SPEED_DOWNLOAD		        =	3145737;
-  public static final int CURLINFO_SPEED_UPLOAD		            =	3145738;
-  public static final int CURLINFO_SSL_VERIFYRESULT		        =	2097165;
-  public static final int CURLINFO_STARTTRANSFER_TIME	        =	3145745;
-  public static final int CURLINFO_TOTAL_TIME		            =	3145731;
-  public static final int CURLM_BAD_EASY_HANDLE		            =	2;
-  public static final int CURLM_BAD_HANDLE		                =	1;
-  public static final int CURLM_CALL_MULTI_PERFORM		        =	-1;
-  public static final int CURLM_INTERNAL_ERROR		            =	4;
-  public static final int CURLM_OK		                        =	0;
-  public static final int CURLM_OUT_OF_MEMORY		            =	3;
-  public static final int CURLMSG_DONE		                    =	1;
-  public static final int CURL_NETRC_IGNORED		            =	0;
-  public static final int CURL_NETRC_OPTIONAL		            =	1;
-  public static final int CURL_NETRC_REQUIRED		            =	2;
-  public static final int CURLOPT_AUTOREFERER		            =	58;
-  public static final int CURLOPT_BINARYTRANSFER	            =	19914;
-  public static final int CURLOPT_BUFFERSIZE		            =	98;
-  public static final int CURLOPT_CAINFO		                =	10065;
-  public static final int CURLOPT_CAPATH		                =	10097;
-  public static final int CURLOPT_CLOSEPOLICY		            =	72;
-  public static final int CURLOPT_CONNECTTIMEOUT		        =	78;
-  public static final int CURLOPT_CONNECTTIMEOUT_MS		        =	156;
-  public static final int CURLOPT_COOKIE		                =	10022;
-  public static final int CURLOPT_COOKIEFILE		            =	10031;
-  public static final int CURLOPT_COOKIEJAR		                =	10082;
-  public static final int CURLOPT_COOKIESESSION		            =	96;
-  public static final int CURLOPT_CRLF		                    =	27;
-  public static final int CURLOPT_CUSTOMREQUEST		            =	10036;
-  public static final int CURLOPT_DNS_CACHE_TIMEOUT		        =	92;
-  public static final int CURLOPT_DNS_USE_GLOBAL_CACHE		    =	91;
-  public static final int CURLOPT_EGDSOCKET		                =	10077;
-  public static final int CURLOPT_ENCODING		                =	10102;
-  public static final int CURLOPT_FAILONERROR		            =	45;
-  public static final int CURLOPT_FILE		                    =	10001;
-  public static final int CURLOPT_FILETIME		                =	69;
-  public static final int CURLOPT_FOLLOWLOCATION	            =	52;
-  public static final int CURLOPT_FORBID_REUSE		            =	75;
-  public static final int CURLOPT_FRESH_CONNECT		            =	74;
-  public static final int CURLOPT_FTPAPPEND		                =	50;
-  public static final int CURLOPT_FTPASCII		                =	24;
-  public static final int CURLOPT_FTP_CREATE_MISSING_DIRS	    =	110;
-  public static final int CURLOPT_FTPLISTONLY		            =	48;
-  public static final int CURLOPT_FTPPORT		                =	10017;
-  public static final int CURLOPT_FTP_SSL		                =	119;
-  public static final int CURLOPT_FTPSSLAUTH		            =	129;
-  public static final int CURLOPT_FTP_USE_EPRT		            =	106;
-  public static final int CURLOPT_FTP_USE_EPSV		            =	85;
-  public static final int CURLOPT_HEADER		                =	42;
-  public static final int CURLOPT_HEADERFUNCTION	            =	20079;
-  public static final int CURLOPT_HTTP200ALIASES	            =	10104;
-  public static final int CURLOPT_HTTPAUTH		                =	107;
-  public static final int CURLOPT_HTTPGET		                =	80;
-  public static final int CURLOPT_HTTPHEADER		            =	10023;
-  public static final int CURLOPT_HTTPPROXYTUNNEL	            =	61;
-  public static final int CURLOPT_HTTP_VERSION		            =	84;
-  public static final int CURLOPT_INFILE		                =	10009;
-  public static final int CURLOPT_INFILESIZE		            =	14;
-  public static final int CURLOPT_INTERFACE		                =	10062;
-  public static final int CURLOPT_KRB4LEVEL		                =	10063;
-  public static final int CURLOPT_LOW_SPEED_LIMIT	            =	19;
-  public static final int CURLOPT_LOW_SPEED_TIME	            =	20;
-  public static final int CURLOPT_MAXCONNECTS		            =	71;
-  public static final int CURLOPT_MAXREDIRS		                =	68;
-  public static final int CURLOPT_MUTE		                    =	26;
-  public static final int CURLOPT_NETRC		                    =	51;
-  public static final int CURLOPT_NOBODY		                =	44;
-  public static final int CURLOPT_NOPROGRESS		            =	43;
-  public static final int CURLOPT_NOSIGNAL		                =	99;
-  public static final int CURLOPT_PASSWDFUNCTION		        =	60;
-  public static final int CURLOPT_PORT		                    =	3;
-  public static final int CURLOPT_POST		                    =	47;
-  public static final int CURLOPT_POSTFIELDS		            =	10015;
-  public static final int CURLOPT_POSTQUOTE		                =	10039;
-  public static final int CURLOPT_PRIVATE		                =	10103;
-  public static final int CURLOPT_PROGRESSFUNCTION		        =	20056;
-  public static final int CURLOPT_PROXY		                    =	10004;
-  public static final int CURLOPT_PROXYAUTH		                =	111;
-  public static final int CURLOPT_PROXYPORT		                =	59;
-  public static final int CURLOPT_PROXYTYPE		                =	101;
-  public static final int CURLOPT_PROXYUSERPWD		            =	10006;
-  public static final int CURLOPT_PUT		                    =	54;
-  public static final int CURLOPT_QUOTE		                    =	10028;
-  public static final int CURLOPT_RANDOM_FILE		            =	10076;
-  public static final int CURLOPT_RANGE		                    =	10007;
-  public static final int CURLOPT_READFUNCTION		            =	20012;
-  public static final int CURLOPT_REFERER		                =	10016;
-  public static final int CURLOPT_RESUME_FROM		            =	21;
-  public static final int CURLOPT_RETURNTRANSFER		        =	19913;
-  public static final int CURLOPT_SSLCERT		                =	10025;
-  public static final int CURLOPT_SSLCERTPASSWD		            =	10026;
-  public static final int CURLOPT_SSLCERTTYPE		            =	10086;
-  public static final int CURLOPT_SSL_CIPHER_LIST		        =	10083;
-  public static final int CURLOPT_SSLENGINE		                =	10089;
-  public static final int CURLOPT_SSLENGINE_DEFAULT		        =	90;
-  public static final int CURLOPT_SSLKEY		                =	10087;
-  public static final int CURLOPT_SSLKEYPASSWD		            =	10026;
-  public static final int CURLOPT_SSLKEYTYPE		            =	10088;
-  public static final int CURLOPT_SSL_VERIFYHOST		        =	81;
-  public static final int CURLOPT_SSL_VERIFYPEER		        =	64;
-  public static final int CURLOPT_SSLVERSION		            =	32;
-  public static final int CURLOPT_STDERR		                =	10037;
-  public static final int CURLOPT_TCP_NODELAY		            =	121;
-  public static final int CURLOPT_TIMECONDITION		            =	33;
-  public static final int CURLOPT_TIMEOUT		                =	13;
-  public static final int CURLOPT_TIMEOUT_MS		            =	155;
-  public static final int CURLOPT_TIMEVALUE		                =	34;
-  public static final int CURLOPT_TRANSFERTEXT		            =	53;
-  public static final int CURLOPT_UNRESTRICTED_AUTH		        =	105;
-  public static final int CURLOPT_UPLOAD		                =	46;
-  public static final int CURLOPT_URL		                    =	10002;
-  public static final int CURLOPT_USERAGENT		                =	10018;
-  public static final int CURLOPT_USERPWD		                =	10005;
-  public static final int CURLOPT_VERBOSE		                =	41;
-  public static final int CURLOPT_WRITEFUNCTION		            =	20011;
-  public static final int CURLOPT_WRITEHEADER		            =	10029;
-  public static final int CURLPROXY_HTTP		                =	0;
-  public static final int CURLPROXY_SOCKS5		                =	5;
-  public static final int CURL_TIMECOND_IFMODSINCE		        =	1;
-  public static final int CURL_TIMECOND_IFUNMODSINCE		    =	2;
-  public static final int CURL_TIMECOND_LASTMOD		            =	3;
-  public static final int CURL_VERSION_IPV6		                =	1;
-  public static final int CURL_VERSION_KERBEROS4		        =	2;
-  public static final int CURL_VERSION_LIBZ		                =	8;
-  public static final int CURLVERSION_NOW		                =	3;
-  public static final int CURL_VERSION_SSL		                =	4;
+  public static final int CURLAUTH_ANY                        = -17;
+  public static final int CURLAUTH_ANYSAFE                    = -18;
+  public static final int CURLAUTH_BASIC                      = 1;
+  public static final int CURLAUTH_DIGEST                     = 2;
+  public static final int CURLAUTH_GSSNEGOTIATE               = 4;
+  public static final int CURLAUTH_NTLM                       = 8;
+  public static final int CURLCLOSEPOLICY_CALLBACK            = 5;
+  public static final int CURLCLOSEPOLICY_LEAST_RECENTLY_USED = 2;
+  public static final int CURLCLOSEPOLICY_LEAST_TRAFFIC       = 3;
+  public static final int CURLCLOSEPOLICY_OLDEST              = 1;
+  public static final int CURLCLOSEPOLICY_SLOWEST             = 4;
+  public static final int CURLE_ABORTED_BY_CALLBACK           = 42;
+  public static final int CURLE_BAD_CALLING_ORDER             = 44;
+  public static final int CURLE_BAD_CONTENT_ENCODING          = 61;
+  public static final int CURLE_BAD_FUNCTION_ARGUMENT         = 43;
+  public static final int CURLE_BAD_PASSWORD_ENTERED          = 46;
+  public static final int CURLE_COULDNT_CONNECT               = 7;
+  public static final int CURLE_COULDNT_RESOLVE_HOST          = 6;
+  public static final int CURLE_COULDNT_RESOLVE_PROXY         = 5;
+  public static final int CURLE_FAILED_INIT                   = 2;
+  public static final int CURLE_FILE_COULDNT_READ_FILE        = 37;
+  public static final int CURLE_FILESIZE_EXCEEDED             = 63;
+  public static final int CURLE_FTP_ACCESS_DENIED             = 9;
+  public static final int CURLE_FTP_BAD_DOWNLOAD_RESUME       = 36;
+  public static final int CURLE_FTP_CANT_GET_HOST             = 15;
+  public static final int CURLE_FTP_CANT_RECONNECT            = 16;
+  public static final int CURLE_FTP_COULDNT_GET_SIZE          = 32;
+  public static final int CURLE_FTP_COULDNT_RETR_FILE         = 19;
+  public static final int CURLE_FTP_COULDNT_SET_ASCII         = 29;
+  public static final int CURLE_FTP_COULDNT_SET_BINARY        = 17;
+  public static final int CURLE_FTP_COULDNT_STOR_FILE         = 25;
+  public static final int CURLE_FTP_COULDNT_USE_REST          = 31;
+  public static final int CURLE_FTP_PORT_FAILED               = 30;
+  public static final int CURLE_FTP_QUOTE_ERROR               = 21;
+  public static final int CURLE_FTP_SSL_FAILED                = 64;
+  public static final int CURLE_FTP_USER_PASSWORD_INCORRECT   = 10;
+  public static final int CURLE_FTP_WEIRD_227_FORMAT          = 14;
+  public static final int CURLE_FTP_WEIRD_PASS_REPLY          = 11;
+  public static final int CURLE_FTP_WEIRD_PASV_REPLY          = 13;
+  public static final int CURLE_FTP_WEIRD_SERVER_REPLY        = 8;
+  public static final int CURLE_FTP_WEIRD_USER_REPLY          = 12;
+  public static final int CURLE_FTP_WRITE_ERROR               = 20;
+  public static final int CURLE_FUNCTION_NOT_FOUND            = 41;
+  public static final int CURLE_GOT_NOTHING                   = 52;
+  public static final int CURLE_HTTP_NOT_FOUND                = 22;
+  public static final int CURLE_HTTP_PORT_FAILED              = 45;
+  public static final int CURLE_HTTP_POST_ERROR               = 34;
+  public static final int CURLE_HTTP_RANGE_ERROR              = 33;
+  public static final int CURLE_LDAP_CANNOT_BIND              = 38;
+  public static final int CURLE_LDAP_INVALID_URL              = 62;
+  public static final int CURLE_LDAP_SEARCH_FAILED            = 39;
+  public static final int CURLE_LIBRARY_NOT_FOUND             = 40;
+  public static final int CURLE_MALFORMAT_USER                = 24;
+  public static final int CURLE_OBSOLETE                      = 50;
+  public static final int CURLE_OK                            = 0;
+  public static final int CURLE_OPERATION_TIMEOUTED           = 28;
+  public static final int CURLE_OUT_OF_MEMORY                 = 27;
+  public static final int CURLE_PARTIAL_FILE                  = 18;
+  public static final int CURLE_READ_ERROR                    = 26;
+  public static final int CURLE_RECV_ERROR                    = 56;
+  public static final int CURLE_SEND_ERROR                    = 55;
+  public static final int CURLE_SHARE_IN_USE                  = 57;
+  public static final int CURLE_SSL_CACERT                    = 60;
+  public static final int CURLE_SSL_CERTPROBLEM               = 58;
+  public static final int CURLE_SSL_CIPHER                    = 59;
+  public static final int CURLE_SSL_CONNECT_ERROR             = 35;
+  public static final int CURLE_SSL_ENGINE_NOTFOUND           = 53;
+  public static final int CURLE_SSL_ENGINE_SETFAILED          = 54;
+  public static final int CURLE_SSL_PEER_CERTIFICATE          = 51;
+  public static final int CURLE_TELNET_OPTION_SYNTAX          = 49;
+  public static final int CURLE_TOO_MANY_REDIRECTS            = 47;
+  public static final int CURLE_UNKNOWN_TELNET_OPTION         = 48;
+  public static final int CURLE_UNSUPPORTED_PROTOCOL          = 1;
+  public static final int CURLE_URL_MALFORMAT                 = 3;
+  public static final int CURLE_URL_MALFORMAT_USER            = 4;
+  public static final int CURLE_WRITE_ERROR                   = 23;
+  public static final int CURLFTPAUTH_DEFAULT                 = 0;
+  public static final int CURLFTPAUTH_SSL                     = 1;
+  public static final int CURLFTPAUTH_TLS                     = 2;
+  public static final int CURLFTPSSL_ALL                      = 3;
+  public static final int CURLFTPSSL_CONTROL                  = 2;
+  public static final int CURLFTPSSL_NONE                     = 0;
+  public static final int CURLFTPSSL_TRY                      = 1;
+  public static final int CURL_HTTP_VERSION_1_0               = 1;
+  public static final int CURL_HTTP_VERSION_1_1               = 2;
+  public static final int CURL_HTTP_VERSION_NONE              = 0;
+  public static final int CURLINFO_CONNECT_TIME               = 3145733;
+  public static final int CURLINFO_CONTENT_LENGTH_DOWNLOAD    = 3145743;
+  public static final int CURLINFO_CONTENT_LENGTH_UPLOAD      = 3145744;
+  public static final int CURLINFO_CONTENT_TYPE               = 1048594;
+  public static final int CURLINFO_EFFECTIVE_URL              = 1048577;
+  public static final int CURLINFO_FILETIME                   = 2097166;
+  public static final int CURLINFO_HEADER_OUT                 = 2;
+  public static final int CURLINFO_HEADER_SIZE                = 2097163;
+  public static final int CURLINFO_HTTP_CODE                  = 2097154;
+  public static final int CURLINFO_NAMELOOKUP_TIME            = 3145732;
+  public static final int CURLINFO_PRETRANSFER_TIME           = 3145734;
+  public static final int CURLINFO_PRIVATE                    = 1048597;
+  public static final int CURLINFO_REDIRECT_COUNT             = 2097172;
+  public static final int CURLINFO_REDIRECT_TIME              = 3145747;
+  public static final int CURLINFO_REQUEST_SIZE               = 2097164;
+  public static final int CURLINFO_SIZE_DOWNLOAD              = 3145736;
+  public static final int CURLINFO_SIZE_UPLOAD                = 3145735;
+  public static final int CURLINFO_SPEED_DOWNLOAD             = 3145737;
+  public static final int CURLINFO_SPEED_UPLOAD               = 3145738;
+  public static final int CURLINFO_SSL_VERIFYRESULT           = 2097165;
+  public static final int CURLINFO_STARTTRANSFER_TIME         = 3145745;
+  public static final int CURLINFO_TOTAL_TIME                 = 3145731;
+  public static final int CURLM_BAD_EASY_HANDLE               = 2;
+  public static final int CURLM_BAD_HANDLE                    = 1;
+  public static final int CURLM_CALL_MULTI_PERFORM            = -1;
+  public static final int CURLM_INTERNAL_ERROR                = 4;
+  public static final int CURLM_OK                            = 0;
+  public static final int CURLM_OUT_OF_MEMORY                 = 3;
+  public static final int CURLMSG_DONE                        = 1;
+  public static final int CURL_NETRC_IGNORED                  = 0;
+  public static final int CURL_NETRC_OPTIONAL                 = 1;
+  public static final int CURL_NETRC_REQUIRED                 = 2;
+  public static final int CURLOPT_AUTOREFERER                 = 58;
+  public static final int CURLOPT_BINARYTRANSFER              = 19914;
+  public static final int CURLOPT_BUFFERSIZE                  = 98;
+  public static final int CURLOPT_CAINFO                      = 10065;
+  public static final int CURLOPT_CAPATH                      = 10097;
+  public static final int CURLOPT_CLOSEPOLICY                 = 72;
+  public static final int CURLOPT_CONNECTTIMEOUT              = 78;
+  public static final int CURLOPT_CONNECTTIMEOUT_MS           = 156;
+  public static final int CURLOPT_COOKIE                      = 10022;
+  public static final int CURLOPT_COOKIEFILE                  = 10031;
+  public static final int CURLOPT_COOKIEJAR                   = 10082;
+  public static final int CURLOPT_COOKIESESSION               = 96;
+  public static final int CURLOPT_CRLF                        = 27;
+  public static final int CURLOPT_CUSTOMREQUEST               = 10036;
+  public static final int CURLOPT_DNS_CACHE_TIMEOUT           = 92;
+  public static final int CURLOPT_DNS_USE_GLOBAL_CACHE        = 91;
+  public static final int CURLOPT_EGDSOCKET                   = 10077;
+  public static final int CURLOPT_ENCODING                    = 10102;
+  public static final int CURLOPT_FAILONERROR                 = 45;
+  public static final int CURLOPT_FILE                        = 10001;
+  public static final int CURLOPT_FILETIME                    = 69;
+  public static final int CURLOPT_FOLLOWLOCATION              = 52;
+  public static final int CURLOPT_FORBID_REUSE                = 75;
+  public static final int CURLOPT_FRESH_CONNECT               = 74;
+  public static final int CURLOPT_FTPAPPEND                   = 50;
+  public static final int CURLOPT_FTPASCII                    = 24;
+  public static final int CURLOPT_FTP_CREATE_MISSING_DIRS     = 110;
+  public static final int CURLOPT_FTPLISTONLY                 = 48;
+  public static final int CURLOPT_FTPPORT                     = 10017;
+  public static final int CURLOPT_FTP_SSL                     = 119;
+  public static final int CURLOPT_FTPSSLAUTH                  = 129;
+  public static final int CURLOPT_FTP_USE_EPRT                = 106;
+  public static final int CURLOPT_FTP_USE_EPSV                = 85;
+  public static final int CURLOPT_HEADER                      = 42;
+  public static final int CURLOPT_HEADERFUNCTION              = 20079;
+  public static final int CURLOPT_HTTP200ALIASES              = 10104;
+  public static final int CURLOPT_HTTPAUTH                    = 107;
+  public static final int CURLOPT_HTTPGET                     = 80;
+  public static final int CURLOPT_HTTPHEADER                  = 10023;
+  public static final int CURLOPT_HTTPPROXYTUNNEL             = 61;
+  public static final int CURLOPT_HTTP_VERSION                = 84;
+  public static final int CURLOPT_INFILE                      = 10009;
+  public static final int CURLOPT_INFILESIZE                  = 14;
+  public static final int CURLOPT_INTERFACE                   = 10062;
+  public static final int CURLOPT_KRB4LEVEL                   = 10063;
+  public static final int CURLOPT_LOW_SPEED_LIMIT             = 19;
+  public static final int CURLOPT_LOW_SPEED_TIME              = 20;
+  public static final int CURLOPT_MAXCONNECTS                 = 71;
+  public static final int CURLOPT_MAXREDIRS                   = 68;
+  public static final int CURLOPT_MUTE                        = 26;
+  public static final int CURLOPT_NETRC                       = 51;
+  public static final int CURLOPT_NOBODY                      = 44;
+  public static final int CURLOPT_NOPROGRESS                  = 43;
+  public static final int CURLOPT_NOSIGNAL                    = 99;
+  public static final int CURLOPT_PASSWDFUNCTION              = 60;
+  public static final int CURLOPT_PORT                        = 3;
+  public static final int CURLOPT_POST                        = 47;
+  public static final int CURLOPT_POSTFIELDS                  = 10015;
+  public static final int CURLOPT_POSTQUOTE                   = 10039;
+  public static final int CURLOPT_PRIVATE                     = 10103;
+  public static final int CURLOPT_PROGRESSFUNCTION            = 20056;
+  public static final int CURLOPT_PROXY                       = 10004;
+  public static final int CURLOPT_PROXYAUTH                   = 111;
+  public static final int CURLOPT_PROXYPORT                   = 59;
+  public static final int CURLOPT_PROXYTYPE                   = 101;
+  public static final int CURLOPT_PROXYUSERPWD                = 10006;
+  public static final int CURLOPT_PUT                         = 54;
+  public static final int CURLOPT_QUOTE                       = 10028;
+  public static final int CURLOPT_RANDOM_FILE                 = 10076;
+  public static final int CURLOPT_RANGE                       = 10007;
+  public static final int CURLOPT_READFUNCTION                = 20012;
+  public static final int CURLOPT_REFERER                     = 10016;
+  public static final int CURLOPT_RESUME_FROM                 = 21;
+  public static final int CURLOPT_RETURNTRANSFER              = 19913;
+  public static final int CURLOPT_SSLCERT                     = 10025;
+  public static final int CURLOPT_SSLCERTPASSWD               = 10026;
+  public static final int CURLOPT_SSLCERTTYPE                 = 10086;
+  public static final int CURLOPT_SSL_CIPHER_LIST             = 10083;
+  public static final int CURLOPT_SSLENGINE                   = 10089;
+  public static final int CURLOPT_SSLENGINE_DEFAULT           = 90;
+  public static final int CURLOPT_SSLKEY                      = 10087;
+  public static final int CURLOPT_SSLKEYPASSWD                = 10026;
+  public static final int CURLOPT_SSLKEYTYPE                  = 10088;
+  public static final int CURLOPT_SSL_VERIFYHOST              = 81;
+  public static final int CURLOPT_SSL_VERIFYPEER              = 64;
+  public static final int CURLOPT_SSLVERSION                  = 32;
+  public static final int CURLOPT_STDERR                      = 10037;
+  public static final int CURLOPT_TCP_NODELAY                 = 121;
+  public static final int CURLOPT_TIMECONDITION               = 33;
+  public static final int CURLOPT_TIMEOUT                     = 13;
+  public static final int CURLOPT_TIMEOUT_MS                  = 155;
+  public static final int CURLOPT_TIMEVALUE                   = 34;
+  public static final int CURLOPT_TRANSFERTEXT                = 53;
+  public static final int CURLOPT_UNRESTRICTED_AUTH           = 105;
+  public static final int CURLOPT_UPLOAD                      = 46;
+  public static final int CURLOPT_URL                         = 10002;
+  public static final int CURLOPT_USERAGENT                   = 10018;
+  public static final int CURLOPT_USERPWD                     = 10005;
+  public static final int CURLOPT_VERBOSE                     = 41;
+  public static final int CURLOPT_WRITEFUNCTION               = 20011;
+  public static final int CURLOPT_WRITEHEADER                 = 10029;
+  public static final int CURLPROXY_HTTP                      = 0;
+  public static final int CURLPROXY_SOCKS5                    = 5;
+  public static final int CURL_TIMECOND_IFMODSINCE            = 1;
+  public static final int CURL_TIMECOND_IFUNMODSINCE          = 2;
+  public static final int CURL_TIMECOND_LASTMOD               = 3;
+  public static final int CURL_VERSION_IPV6                   = 1;
+  public static final int CURL_VERSION_KERBEROS4              = 2;
+  public static final int CURL_VERSION_LIBZ                   = 8;
+  public static final int CURLVERSION_NOW                     = 3;
+  public static final int CURL_VERSION_SSL                    = 4;
 
   public String []getLoadedExtensions()
   {
@@ -300,7 +297,7 @@ public class CurlModule
    * @param curl
    */
   public static void curl_close(Env env,
-                              @NotNull CurlResource curl)
+                                @NotNull CurlResource curl)
   {
     if (curl == null)
       return;
@@ -316,7 +313,7 @@ public class CurlModule
    */
   @ReturnNullAsFalse
   public static CurlResource curl_copy_handle(Env env,
-                              @NotNull CurlResource curl)
+                                              @NotNull CurlResource curl)
   {
     if (curl == null)
       return null;
@@ -331,7 +328,7 @@ public class CurlModule
    * @param curl
    */
   public static Value curl_errno(Env env,
-                              @NotNull CurlResource curl)
+                                 @NotNull CurlResource curl)
   {
     if (curl == null)
       return BooleanValue.FALSE;
@@ -346,7 +343,7 @@ public class CurlModule
    * @param curl
    */
   public static Value curl_error(Env env,
-                              @NotNull CurlResource curl)
+                                 @NotNull CurlResource curl)
   {
     if (curl == null)
       return BooleanValue.FALSE;
@@ -361,8 +358,9 @@ public class CurlModule
   public static Value curl_exec(Env env,
                                 @NotNull CurlResource curl)
   {
-    if (curl == null)
+    if (curl == null) {
       return BooleanValue.FALSE;
+    }
 
     return curl.execute(env);
   }
@@ -383,10 +381,10 @@ public class CurlModule
 
     if (curl == null)
       return BooleanValue.FALSE;
-    
+
     if (option.isDefault()) {
       ArrayValue array = new ArrayValueImpl();
-      
+
       putInfo(env, curl, array, "url", CURLINFO_EFFECTIVE_URL);
       putInfo(env, curl, array, "http_code", CURLINFO_HTTP_CODE);
       putInfo(env, curl, array, "header_size", CURLINFO_HEADER_SIZE);
@@ -410,13 +408,13 @@ public class CurlModule
       putInfo(env, curl, array,
               "starttransfer_time", CURLINFO_STARTTRANSFER_TIME);
       putInfo(env, curl, array, "redirect_time", CURLINFO_REDIRECT_TIME);
-      
+
       return array;
     }
 
     return getInfo(env, curl, option.toInt());
   }
-  
+
   private static void putInfo(Env env,
                               CurlResource curl,
                               ArrayValue array,
@@ -427,8 +425,8 @@ public class CurlModule
   }
 
   private static Value getInfo(Env env,
-                              CurlResource curl,
-                              int option)
+                               CurlResource curl,
+                               int option)
   {
     switch (option) {
       case CURLINFO_EFFECTIVE_URL:
@@ -472,7 +470,7 @@ public class CurlModule
         break;
       case CURLINFO_REDIRECT_TIME:
         break;
-      
+
       case CURLINFO_HEADER_OUT:
         return curl.getHeader();
       case CURLINFO_CONTENT_TYPE:
@@ -496,13 +494,12 @@ public class CurlModule
    * @param url
    */
   public static CurlResource curl_init(Env env,
-                                       @Optional("") String url)
+                                       @Optional String url)
   {
     CurlResource curl = new CurlResource();
 
-    if (url != null && url.length() > 0) {
+    if (url != null) {
       setURL(curl, url);
-      //curl.setURL(url);
     }
 
     return curl;
@@ -526,15 +523,15 @@ public class CurlModule
       curl.setURL("http://" + url);
       return;
     }
-    
+
     int slashIndex = url.indexOf('/', j + 3);
     if (0 < slashIndex && slashIndex < atSignIndex) {
       curl.setURL(url);
       return;
     }
-    
+
     j += 3;
-    
+
     String protocol = url.substring(0, j);
     int colonIndex = url.indexOf(':', j);
 
@@ -542,24 +539,59 @@ public class CurlModule
       curl.setURL(url);
       return;
     }
-    
+
     curl.setUsername(url.substring(j, colonIndex++));
     curl.setPassword(url.substring(colonIndex, atSignIndex++));
     curl.setURL(protocol + url.substring(atSignIndex));
   }
 
   /**
-   * XXX: not documented by PHP
-   *
-   * @param env
-   * @param curls
-   * @param curl
+   *  int curl_multi_add_handle ( resource $mh , resource $ch )
    */
-  public static LongValue curl_multi_add_handle(Env env,
-                              Value curls,
-                              Value curl)
+  public static int curl_multi_add_handle(Env env,
+                                          CurlMultiResource multi,
+                                          CurlResource curl)
   {
-    throw new UnimplementedException("curl_multi_add_handle");
+    multi.addCurl(curl);
+
+    return 0;
+  }
+
+  /**
+   * void curl_multi_close ( resource $mh )
+   */
+  public static void curl_multi_close(Env env,
+                                      CurlMultiResource multi)
+  {
+    for (CurlResource curl : multi.getCurlList()) {
+      curl_close(env, curl);
+    }
+  }
+
+  /**
+   * int curl_multi_exec ( resource $mh , int &$still_running )
+   */
+  public static int curl_multi_exec(Env env,
+                                    CurlMultiResource multi,
+                                    @Reference Value stillRunning)
+  {
+    return multi.execute(env, stillRunning);
+  }
+
+  /**
+   * string curl_multi_getcontent ( resource $ch )
+   */
+  public static Value curl_multi_getcontent(Env env,
+                                            CurlResource curl)
+  {
+    StringValue data = curl.getReturnTransfer();
+
+    if (data != null) {
+      return data;
+    }
+    else {
+      return NullValue.NULL;
+    }
   }
 
   /**
@@ -568,86 +600,41 @@ public class CurlModule
    * @param env
    * @param curls
    */
-  public static LongValue curl_multi_close(Env env,
-                              Value curls)
+  public static Value curl_multi_info_read(Env env,
+                                           CurlMultiResource multi,
+                                           @Optional @Reference Value msgsInQueue)
   {
-    throw new UnimplementedException("curl_multi_close");
+    return multi.readInfo(env, msgsInQueue);
   }
 
   /**
-   * XXX: not documented by PHP
-   *
-   * @param env
-   * @param curls
-   * @param stillRunning
+   * resource curl_multi_init ( void )
    */
-  public static LongValue curl_multi_exec(Env env,
-                              Value curls,
-                              @Reference Value stillRunning)
+  public static CurlMultiResource curl_multi_init(Env env)
   {
-    throw new UnimplementedException("curl_multi_exec");
+    return new CurlMultiResource();
   }
 
   /**
-   * XXX: not documented by PHP
-   *
-   * @param env
-   * @param curl
+   * int curl_multi_remove_handle ( resource $mh , resource $ch )
    */
-  public static StringValue curl_multi_getcontent(Env env,
-                              Value curl)
+  public static int curl_multi_remove_handle(Env env,
+                                             CurlMultiResource multi,
+                                             CurlResource curl)
   {
-    throw new UnimplementedException("curl_multi_getcontent");
+    multi.removeCurl(curl);
+
+    return 0;
   }
 
   /**
-   * XXX: not documented by PHP
-   *
-   * @param env
-   * @param curls
+   * int curl_multi_select ( resource $mh [, float $timeout = 1.0 ] )
    */
-  public static ArrayValue curl_multi_info_read(Env env,
-                              Value curls)
+  public static int curl_multi_select(Env env,
+                                      CurlMultiResource multi,
+                                      @Optional Value timeout)
   {
-    throw new UnimplementedException("curl_multi_info_read");
-  }
-
-  /**
-   * XXX: not documented by PHP
-   *
-   * @param env
-   */
-  public static Value curl_multi_init(Env env)
-  {
-    throw new UnimplementedException("curl_multi_init");
-  }
-
-  /**
-   * XXX: not documented by PHP
-   *
-   * @param env
-   * @param curls
-   * @param curl
-   */
-  public static LongValue curl_multi_remove_handle(Env env,
-                              Value curls,
-                              Value curl)
-  {
-    throw new UnimplementedException("curl_multi_remove_handle");
-  }
-
-  /**
-   * XXX: not documented by PHP
-   *
-   * @param env
-   * @param curls
-   * @param timeout
-   */
-  public static LongValue curl_multi_select(Env env,
-                              Value curls,
-                              @Optional Value timeout)
-  {
-    throw new UnimplementedException("curl_multi_select");
+    return 0;
   }
 
   /**
@@ -658,8 +645,8 @@ public class CurlModule
    * @param options
    */
   public static BooleanValue curl_setopt_array(Env env,
-                              @NotNull CurlResource curl,
-                              ArrayValue options)
+                                               @NotNull CurlResource curl,
+                                               ArrayValue options)
   {
     if (curl == null)
       return BooleanValue.FALSE;
@@ -683,9 +670,9 @@ public class CurlModule
    * @return true if successful
    */
   public static BooleanValue curl_setopt(Env env,
-                              @NotNull CurlResource curl,
-                              int option,
-                              Value value)
+                                         @NotNull CurlResource curl,
+                                         int option,
+                                         Value value)
   {
     if (curl == null)
       return BooleanValue.FALSE;
@@ -697,9 +684,9 @@ public class CurlModule
   }
 
   private static boolean setOption(Env env,
-                              CurlResource curl,
-                              int option,
-                              Value value)
+                                   CurlResource curl,
+                                   int option,
+                                   Value value)
   {
     int i;
 
@@ -795,7 +782,7 @@ public class CurlModule
 */
         break;
       case CURLOPT_INFILESIZE:
-        curl.setUploadFileSize(value.toInt());
+        curl.setUploadFileSize(value.toLong());
         break;
       case CURLOPT_LOW_SPEED_LIMIT:
         //XXX
@@ -867,7 +854,7 @@ public class CurlModule
       case CURLOPT_TIMEVALUE:
         long time = value.toLong() * 1000L;
         String format = "%a, %d %b %Y %H:%M:%S %Z";
-        
+
         String date = QDate.formatGMT(time, format);
 
         curl.setModifiedTime(date);
@@ -971,12 +958,12 @@ public class CurlModule
 
         for (Map.Entry<Value,Value> entry : array.entrySet()) {
           String header = entry.getValue().toString();
-          
+
           String name = header;
           String body = "";
-          
+
           i = header.indexOf(':');
-          
+
           if (i >= 0) {
             name = header.substring(0, i).trim();
             body = header.substring(i + 1).trim();
@@ -993,13 +980,13 @@ public class CurlModule
         Object outputFile = value.toJavaObject();
 
         if (outputFile instanceof BinaryOutput)
-          curl.setOutputFile((BinaryOutput)outputFile);
+          curl.setOutputFile((BinaryOutput) outputFile);
         break;
       case CURLOPT_INFILE:
         Object uploadFile = value.toJavaObject();
 
         if (uploadFile instanceof BinaryInput)
-          curl.setUploadFile((BinaryInput)uploadFile);
+          curl.setUploadFile((BinaryInput) uploadFile);
         break;
       case CURLOPT_STDERR:
         //XXX
@@ -1015,22 +1002,22 @@ public class CurlModule
       // callback functions
       //
       case CURLOPT_HEADERFUNCTION:
-        curl.setHeaderCallback(value.toCallable(env));
+        curl.setHeaderCallback(value.toCallable(env, false));
         break;
       case CURLOPT_PASSWDFUNCTION:
-        curl.setPasswordCallback(value.toCallable(env));
+        curl.setPasswordCallback(value.toCallable(env, false));
         break;
       case CURLOPT_READFUNCTION:
-        curl.setReadCallback(value.toCallable(env));
+        curl.setReadCallback(value.toCallable(env, false));
         break;
       case CURLOPT_WRITEFUNCTION:
-        curl.setWriteCallback(value.toCallable(env));
+        curl.setWriteCallback(value.toCallable(env, false));
         break;
 
       default:
         env.warning(L.l("CURL option '{0}' unknown or unimplemented",
                         option));
-        
+
         log.fine(L.l("CURL option '{0}' unknown or unimplemented",
                      option));
         return false;
@@ -1049,7 +1036,7 @@ public class CurlModule
                                         @Optional Value age)
   {
     ArrayValue array = new ArrayValueImpl();
-    
+
     // dummy values
     array.put(env, "version_number", 462848);
     array.put(env, "age", 2);
@@ -1059,14 +1046,14 @@ public class CurlModule
     array.put(env, "host", "i386-pc-java");
     array.put(env, "ssl_version", " OpenSSL/0.9.8g");
     array.put(env, "libz_version", "1.2.3");
-    
+
     // supported protocols
     ArrayValue protocols = new ArrayValueImpl();
     protocols.put(env.createString("http"));
     protocols.put(env.createString("https"));
-    
+
     array.put(env.createString("protocols"), protocols);
-    
+
     return array;
   }
 

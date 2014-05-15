@@ -31,54 +31,68 @@ package com.caucho.quercus.lib.reflection;
 
 import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.env.ArrayValue;
+import com.caucho.quercus.env.Callable;
 import com.caucho.quercus.env.Env;
-import com.caucho.quercus.env.ObjectValue;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.function.AbstractFunction;
+import com.caucho.util.L10N;
 
 public class ReflectionFunction extends ReflectionFunctionAbstract
   implements Reflector
 {
   public static final int IS_DEPRECATED = 1024 * 256; //262144;  //2^18
-  
-  protected ReflectionFunction(AbstractFunction fun)
+
+  protected static final L10N L = new L10N(ReflectionFunction.class);
+
+  protected ReflectionFunction(Callable callable)
   {
-    super(fun);
+    super(callable);
   }
-  
+
   final private void __clone()
   {
   }
-  
-  public static ReflectionFunction __construct(Env env, String name)
-  {
-    AbstractFunction fun = env.findFunction(name);
 
-    if (fun != null)
-      return new ReflectionFunction(fun);
-    else
-      return null;
+  public static ReflectionFunction __construct(Env env, Value nameV)
+  {
+    Callable callable;
+
+    if (nameV instanceof Callable) {
+      callable = (Callable) nameV;
+    }
+    else {
+      AbstractFunction fun = env.findFunction(nameV.toStringValue(env));
+
+      if (fun == null) {
+        env.error(L.l("function '{0}' does not exist", nameV));
+      }
+
+      callable = (Callable) fun;
+    }
+
+    return new ReflectionFunction(callable);
   }
-  
+
   public Value export(Env env,
                       String name,
                       @Optional boolean isReturn)
   {
     return null;
   }
-  
+
   public Value invoke(Env env, Value []args)
   {
-    return getFunction().call(env, args);
+    return getCallable().call(env, args);
   }
-  
+
   public Value invokeArgs(Env env, ArrayValue args)
   {
-    return getFunction().call(env, args.getValueArray(env));
+    return getCallable().call(env, args.getValueArray(env));
   }
-  
+
+  @Override
   public String toString()
   {
-    return "ReflectionFunction[" + getName() + "]";
+    return getClass().getSimpleName() + "[" + getName() + "]";
   }
 }

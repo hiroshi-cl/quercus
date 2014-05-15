@@ -26,7 +26,7 @@
  *
  * @author Scott Ferguson
  */
- 
+
 package com.caucho.quercus.env;
 
 import java.util.*;
@@ -43,42 +43,40 @@ import com.caucho.util.Primes;
 public final class MethodMap<V>
 {
   private static final L10N L = new L10N(MethodMap.class);
-  
+
   private final QuercusClass _quercusClass;
   private final ClassDef _classDef;
-  
+
   private Entry<V> []_entries = new Entry[16];
   private int _prime = Primes.getBiggestPrime(_entries.length);
   private int _size;
-  
+
   public MethodMap(QuercusClass quercusClass, ClassDef classDef)
   {
     _quercusClass = quercusClass;
     _classDef = classDef;
   }
-    
-  public void put(String methodName, V value)
+
+  public void put(StringValue name, V value)
   {
-    StringValue name = MethodIntern.intern(methodName);
-    
     if (_entries.length <= _size * 4)
       resize();
-    
+
     int hash = name.hashCodeCaseInsensitive();
-      
+
     int bucket = (hash & 0x7fffffff) % _prime;
 
     Entry<V> entry;
     for (entry = _entries[bucket]; entry != null; entry = entry.getNext()) {
       StringValue entryKey = entry.getKey();
-      
+
       if (name == entryKey || name.equalsIgnoreCase(entryKey)) {
         entry.setValue(value);
 
         return;
       }
     }
-    
+
     entry = new Entry<V>(name, value);
 
     entry._next = _entries[bucket];
@@ -90,9 +88,9 @@ public final class MethodMap<V>
   public boolean containsKey(StringValue key)
   {
     int hash = key.hashCodeCaseInsensitive();
-    
+
     final int bucket = (hash & 0x7fffffff) % _prime;
-    
+
     for (Entry<V> entry = _entries[bucket];
          entry != null;
          entry = entry.getNext()) {
@@ -101,14 +99,24 @@ public final class MethodMap<V>
       if (key == entryKey || key.equalsIgnoreCase(entryKey))
         return true;
     }
-    
+
     return false;
   }
 
   public final V get(final StringValue key, int hash)
   {
+    return get(key, hash, false);
+  }
+
+  public final V getStatic(final StringValue key, int hash)
+  {
+    return get(key, hash, true);
+  }
+
+  public final V get(final StringValue key, int hash, boolean isStatic)
+  {
     final int bucket = (hash & 0x7fffffff) % _prime;
-    
+
     for (Entry<V> entry = _entries[bucket];
          entry != null;
          entry = entry.getNext()) {
@@ -117,20 +125,32 @@ public final class MethodMap<V>
       if (key == entryKey || key.equalsIgnoreCase(entryKey))
         return entry._value;
     }
-    
+
     AbstractFunction call = null;
-    
-    if (_quercusClass != null)
-      call = _quercusClass.getCall();
-    else if (_classDef != null) {
-      call = _classDef.getCall();
+
+    if (isStatic) {
+      if (_quercusClass != null) {
+        call = _quercusClass.getCallStatic();
+      }
+      else if (_classDef != null) {
+        call = _classDef.getCallStatic();
+      }
     }
-    
-    if (call != null)
+    else {
+      if (_quercusClass != null) {
+        call = _quercusClass.getCall();
+      }
+      else if (_classDef != null) {
+        call = _classDef.getCall();
+      }
+    }
+
+    if (call != null) {
       return (V) new FunSpecialCall(call, key);
+    }
 
     Env env = Env.getCurrent();
-    
+
     if (_quercusClass != null) {
       env.error(L.l("Call to undefined method {0}::{1}",
                     _quercusClass.getName(), key));
@@ -139,7 +159,7 @@ public final class MethodMap<V>
       env.error(L.l("Call to undefined function {0}",
                     key));
     }
-    
+
     throw new IllegalStateException(L.l("Call to undefined function {0}",
                                         key));
   }
@@ -158,7 +178,7 @@ public final class MethodMap<V>
       if (key == entryKey || key.equalsIgnoreCase(entryKey))
         return entry.getValue();
     }
-    
+
     return null;
   }
 
@@ -190,7 +210,7 @@ public final class MethodMap<V>
       else {
         if ('A' <= chA && chA <= 'Z')
           chA += 'a' - 'A';
-          
+
         if ('A' <= chB && chB <= 'Z')
           chB += 'a' - 'A';
 
@@ -206,10 +226,10 @@ public final class MethodMap<V>
   {
     Entry<V> []newEntries = new Entry[2 * _entries.length];
     int newPrime = Primes.getBiggestPrime(newEntries.length);
-    
+
     for (int i = 0; i < _entries.length; i++) {
       Entry<V> entry = _entries[i];
-      
+
       while (entry != null) {
         Entry<V> next = entry.getNext();
 
@@ -218,7 +238,7 @@ public final class MethodMap<V>
 
         entry.setNext(newEntries[bucket]);
         newEntries[bucket] = entry;
-        
+
         entry = next;
       }
     }
@@ -230,7 +250,7 @@ public final class MethodMap<V>
   final static class Entry<V> {
     private final StringValue _key;
     private V _value;
-    
+
     private Entry<V> _next;
 
     Entry(StringValue key, V value)
@@ -238,27 +258,27 @@ public final class MethodMap<V>
       _key = key;
       _value = value;
     }
-    
+
     public final StringValue getKey()
     {
       return _key;
     }
-    
+
     public final V getValue()
     {
       return _value;
     }
-    
+
     public void setValue(V value)
     {
       _value = value;
     }
-    
+
     public Entry<V> getNext()
     {
       return _next;
     }
-    
+
     public void setNext(Entry<V> next)
     {
       _next = next;
@@ -270,14 +290,14 @@ public final class MethodMap<V>
     int _index;
     Entry<V> []_entries;
     Entry<V> _next;
-    
+
     public ValueIterator(Entry<V> []entries)
     {
       _entries = entries;
 
       getNext();
     }
-    
+
     private void getNext()
     {
       Entry<V> entry = _next == null ? null : _next._next;
@@ -294,16 +314,16 @@ public final class MethodMap<V>
     {
       return _next != null;
     }
-    
+
     public V next()
     {
       V value = _next._value;
-      
+
       getNext();
 
       return value;
     }
-    
+
     public Iterator<V> iterator()
     {
       return this;

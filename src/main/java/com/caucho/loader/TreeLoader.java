@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights - reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,13 +29,17 @@
 package com.caucho.loader;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
+import com.caucho.make.DependencyContainer;
 import com.caucho.util.L10N;
+import com.caucho.vfs.Depend;
 import com.caucho.vfs.Dependency;
 import com.caucho.vfs.Path;
 
@@ -50,6 +54,8 @@ public class TreeLoader extends JarListLoader implements Dependency
   
   // Directory which may have jars dynamically added
   private Path _dir;
+  
+  private DependencyContainer _dependencyList = new DependencyContainer();
 
   /**
    * Creates a new directory loader.
@@ -134,13 +140,15 @@ public class TreeLoader extends JarListLoader implements Dependency
 
     fillJars();
 
-    for (int i = 0; i < _jarList.size(); i++)
+    for (int i = 0; i < _jarList.size(); i++) { 
       getClassLoader().addURL(_jarList.get(i).getJarPath());
+    }
   }
   
   /**
    * True if the classes in the directory have changed.
    */
+  @Override
   public boolean logModified(Logger log)
   {
     if (isModified()) {
@@ -149,6 +157,18 @@ public class TreeLoader extends JarListLoader implements Dependency
     }
     else
       return false;
+  }
+  
+  @Override
+  public boolean isModified()
+  {
+    // server/6p44
+    if (super.isModified()) {
+      return true;
+    }
+    else {
+      return _dependencyList.isModified();
+    }
   }
 
   /**
@@ -166,22 +186,46 @@ public class TreeLoader extends JarListLoader implements Dependency
    */
   private void fillJars(Path dir)
   {
+    ArrayList<Path> paths = new ArrayList<Path>();
+    
+    fillJars(paths, dir);
+    
+    Collections.sort(paths);
+    
+    for (Path path : paths) {
+      addJar(path);
+    }
+  }
+  
+  /**
+   * Find all the jars in this directory and add them to jarList.
+   */
+  private void fillJars(ArrayList<Path> paths, Path dir)
+  {
     try {
-      String []list = dir.list();
+      addDependency(dir);
 
+      String []list = dir.list();
+      
       for (int j = 0; list != null && j < list.length; j++) {
         Path path = dir.lookup(list[j]);
-
+        
         if (list[j].endsWith(".jar") || list[j].endsWith(".zip")) {
-          addJar(path);
+          paths.add(path);
         }
         else if (path.isDirectory()) {
-          fillJars(path);
+          fillJars(paths, path);
         }
       }
       
     } catch (IOException e) {
+      e.printStackTrace();
     }
+  }
+  
+  private void addDependency(Path path)
+  {
+    _dependencyList.add(new Depend(path));
   }
 
   public Path getCodePath()

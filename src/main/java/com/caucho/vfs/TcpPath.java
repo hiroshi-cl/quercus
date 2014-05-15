@@ -30,6 +30,7 @@
 package com.caucho.vfs;
 
 import com.caucho.util.CharBuffer;
+import com.caucho.util.CurrentTime;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -42,6 +43,8 @@ import java.util.Map;
 public class TcpPath extends Path {
   // Attribute name for connection timeouts
   public static final String CONNECT_TIMEOUT = "connect-timeout";
+  
+  private static final long SOCKET_ADDRESS_TIMEOUT = 120 * 1000L;
 
   private String _host;
   private int _port;
@@ -49,6 +52,8 @@ public class TcpPath extends Path {
   private long _connectTimeout = 5000L;
   private long _socketTimeout = 600000L;
   private boolean _noDelay;
+  
+  private long _socketAddressExpireTime = 0;
 
   public TcpPath(TcpPath root, String userPath,
                  Map<String,Object> newAttributes,
@@ -137,26 +142,31 @@ public class TcpPath extends Path {
     return new TcpPath(root, userPath, newAttributes, host, port);
   }
 
+  @Override
   public String getScheme()
   {
     return "tcp";
   }
 
+  @Override
   public String getURL()
   {
     return (getScheme() + "://" + getHost() + ":" + getPort());
   }
 
+  @Override
   public String getPath()
   {
     return "";
   }
 
+  @Override
   public String getHost()
   {
     return _host;
   }
 
+  @Override
   public int getPort()
   {
     return _port;
@@ -164,20 +174,55 @@ public class TcpPath extends Path {
 
   public SocketAddress getSocketAddress()
   {
-    if (_address == null)
+    long now = CurrentTime.getCurrentTime();
+    
+    if (_address == null || _socketAddressExpireTime < now) {
+      _socketAddressExpireTime = now + SOCKET_ADDRESS_TIMEOUT;
       _address = new InetSocketAddress(_host, _port);
+    }
 
     return _address;
   }
-
-  public StreamImpl openReadImpl() throws IOException
+  
+  private void clearSocketAddress()
   {
-    return TcpStream.openRead(this, _connectTimeout, _socketTimeout, _noDelay);
+    _socketAddressExpireTime = 0;
   }
 
+  @Override
+  public StreamImpl openReadImpl() throws IOException
+  {
+    boolean isValid = false;
+    
+    try {
+      StreamImpl stream = TcpStream.openRead(this, _connectTimeout, _socketTimeout, _noDelay);
+      
+      isValid = true;
+      
+      return stream;
+    } finally {
+      if (! isValid) {
+        clearSocketAddress();
+      }
+    }
+  }
+
+  @Override
   public StreamImpl openReadWriteImpl() throws IOException
   {
-    return TcpStream.openReadWrite(this, _connectTimeout, _socketTimeout, _noDelay);
+    boolean isValid = false;
+    
+    try {
+      StreamImpl stream = TcpStream.openReadWrite(this, _connectTimeout, _socketTimeout, _noDelay);
+      
+      isValid = true;
+      
+      return stream;
+    } finally {
+      if (! isValid) {
+        clearSocketAddress();
+      }
+    }
   }
 
   @Override
@@ -186,6 +231,7 @@ public class TcpPath extends Path {
     return new TcpPath(null, getUserPath(), null, _host, _port);
   }
 
+  @Override
   public String toString()
   {
     return getURL();

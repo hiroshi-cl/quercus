@@ -44,6 +44,7 @@ public class PathPatternType {
   static final L10N L = new L10N(PathPatternType.class);
   static final Logger log = Logger.getLogger(PathPatternType.class.getName());
 
+  private String _prefix;
   private Pattern _pattern;
 
   public PathPatternType()
@@ -54,6 +55,23 @@ public class PathPatternType {
     throws ConfigException, PatternSyntaxException
   {
     setName(pattern);
+  }
+
+  public PathPatternType(String prefix, String pattern)
+    throws ConfigException, PatternSyntaxException
+  {
+    setPrefix(prefix);
+    setName(pattern);
+  }
+  
+  public void setPrefix(String prefix)
+  {
+    _prefix = prefix;
+  }
+  
+  public String getPrefix()
+  {
+    return _prefix;
   }
 
   /**
@@ -75,22 +93,30 @@ public class PathPatternType {
     for (; i < length; i++) {
       char ch = pattern.charAt(i);
 
-      if (ch == '/')
+      if (ch == '/') {
         cb.append('/');
-      else if (ch != '*')
+      }
+      else if (ch == '.') {
+        cb.append("\\.");
+      }
+      else if (ch != '*') {
         cb.append(ch);
-      else if (length <= i + 1 || pattern.charAt(i + 1) != '*')
+      }
+      else if (length <= i + 1 || pattern.charAt(i + 1) != '*') {
         cb.append("[^/]*");
-      else if (i > 0 && pattern.charAt(i - 1) != '/')
+      }
+      else if (i > 0 && pattern.charAt(i - 1) != '/') {
         throw new ConfigException(L.l("'{0}' is an invalid pattern at '**'",
                                       pattern));
+      }
       else if (i + 2 < length && pattern.charAt(i + 2) == '/') {
         cb.append("([^/]*/)*");
         i += 2;
       }
-      else if (i + 2 < length)
+      else if (i + 2 < length) {
         throw new ConfigException(L.l("'{0}' is an invalid pattern at '**'",
                                       pattern));
+      }
       else {
         cb.append(".*");
         i++;
@@ -123,6 +149,18 @@ public class PathPatternType {
   {
     if (_pattern == null)
       throw new ConfigException(L.l("pattern requires 'name' attribute."));
+  }
+  
+  /**
+   * Checks that the path is an allowable prefix.
+   */
+  
+  public boolean isValidPrefix(String path)
+  {
+    if (_prefix == null)
+      return true;
+    else
+      return path.startsWith(_prefix);
   }
 
   /**

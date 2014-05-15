@@ -45,26 +45,18 @@ import java.util.Iterator;
 @ClassImplementation
 public class ExceptionClass
 {
-  private static final StringValue MESSAGE = new ConstStringValue("message");
-  private static final StringValue FUNCTION = new ConstStringValue("function");
-  private static final StringValue FILE = new ConstStringValue("file");
-  private static final StringValue LINE = new ConstStringValue("line");
-  private static final StringValue CODE = new ConstStringValue("code");
-  private static final StringValue TRACE = new ConstStringValue("trace");
-  private static final StringValue JAVA_EXCEPTION
-    = new ConstStringValue("__javaException");
-  
   /**
    * Create a new exception API object.
    */
   public static Value __construct(Env env,
                                   @This ObjectValue value,
                                   @Optional StringValue message,
-                                  @Optional("0") int code)
+                                  @Optional("0") int code,
+                                  @Optional Value previous)
   {
     value.putField(env, "message", message);
-    
-    if (! value.issetField(env.createString("code"))) {
+
+    if (! value.issetField(env, env.createString("code"))) {
       value.putField(env, "code", LongValue.create(code));
     }
 
@@ -79,11 +71,15 @@ public class ExceptionClass
       value.putField(env, "line", LongValue.create(location.getLineNumber()));
     }
 
-    value.putField(env, "trace", ErrorModule.debug_backtrace(env));
+    value.putField(env, "trace", ErrorModule.debug_backtrace(env, 0, 0));
     QuercusException e = new QuercusException();
     e.fillInStackTrace();
-    
+
     value.putField(env, "_quercusException", env.wrapJava(e));
+
+    if (! previous.isDefault()) {
+      value.putField(env, "previous", previous);
+    }
 
     return value;
   }
@@ -94,13 +90,13 @@ public class ExceptionClass
   public static Value __toString(Env env, @This ObjectValue value)
   {
     StringValue sb = env.createUnicodeBuilder();
-    
+
     sb.append("ExceptionClass[" + value.getName() + "]\n");
     sb.append(getMessage(env, value));
     sb.append("\n");
     sb.append(getTraceAsString(env, value));
     sb.append("\n");
-    
+
     return sb;
   }
 
@@ -109,7 +105,7 @@ public class ExceptionClass
    */
   public static Value getMessage(Env env, @This ObjectValue obj)
   {
-    return obj.getField(env, MESSAGE);
+    return obj.getField(env, env.createString("message"));
   }
 
   /**
@@ -117,7 +113,7 @@ public class ExceptionClass
    */
   public static Value getCode(Env env, @This ObjectValue obj)
   {
-    return obj.getField(env, CODE);
+    return obj.getField(env, env.createString("code"));
   }
 
   /**
@@ -125,7 +121,7 @@ public class ExceptionClass
    */
   public static Value getFile(Env env, @This ObjectValue obj)
   {
-    return obj.getField(env, FILE);
+    return obj.getField(env, env.createString("file"));
   }
 
   /**
@@ -133,7 +129,7 @@ public class ExceptionClass
    */
   public static Value getLine(Env env, @This ObjectValue obj)
   {
-    return obj.getField(env, LINE);
+    return obj.getField(env, env.createString("line"));
   }
 
   /**
@@ -141,7 +137,15 @@ public class ExceptionClass
    */
   public static Value getTrace(Env env, @This Value obj)
   {
-    return obj.getField(env, TRACE);
+    return obj.getField(env, env.createString("trace"));
+  }
+
+  /**
+   * Returns the previous exception.
+   */
+  public static Value getPrevious(Env env, @This Value obj)
+  {
+    return obj.getField(env, env.createString("previous"));
   }
 
   /**
@@ -149,7 +153,7 @@ public class ExceptionClass
    */
   public static Value getJavaException(Env env, @This Value obj)
   {
-    return obj.getField(env, JAVA_EXCEPTION);
+    return obj.getField(env, env.createString("__javaException"));
   }
 
   /**
@@ -158,7 +162,7 @@ public class ExceptionClass
   public static Value getTraceAsString(Env env, @This Value obj)
   {
     Value trace = getTrace(env, obj);
-    
+
     StringValue sb = env.createUnicodeBuilder();
     sb.append("<trace>");
 
@@ -168,11 +172,11 @@ public class ExceptionClass
       Value value = iter.next();
 
       sb = sb.append('\n');
-      sb = sb.append(value.get(FILE));
+      sb = sb.append(value.get(env.createString("file")));
       sb = sb.append(':');
-      sb = sb.append(value.get(LINE));
+      sb = sb.append(value.get(env.createString("line")));
       sb = sb.append(": ");
-      sb = sb.append(value.get(FUNCTION));
+      sb = sb.append(value.get(env.createString("function")));
     }
 
     return sb;

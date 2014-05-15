@@ -47,18 +47,6 @@ public class ObjectMethod extends Function {
 
   private ClassDef _quercusClass;
 
-  ObjectMethod(Location location,
-               InterpretedClassDef quercusClass,
-               String name,
-               FunctionInfo info,
-               Arg []args,
-               Statement []statements)
-  {
-    super(location, name, info, args, statements);
-
-    _quercusClass = quercusClass;
-  }
-
   public ObjectMethod(ExprFactory exprFactory,
                       Location location,
                       InterpretedClassDef quercusClass,
@@ -76,7 +64,7 @@ public class ObjectMethod extends Function {
   {
     return _quercusClass.getName();
   }
-  
+
   @Override
   public ClassDef getDeclaringClass()
   {

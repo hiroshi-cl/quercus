@@ -32,11 +32,9 @@ package com.caucho.quercus.expr;
 import com.caucho.quercus.Location;
 import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.Env;
-import com.caucho.quercus.env.MethodIntern;
 import com.caucho.quercus.env.NullValue;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.env.StringValue;
-import com.caucho.quercus.env.ConstStringValue;
 import com.caucho.quercus.env.Var;
 import com.caucho.quercus.parser.QuercusParser;
 
@@ -54,7 +52,7 @@ public class VarExpr
   protected VarExpr(Location location, VarInfo var)
   {
     super(location);
-    
+
     _var = var;
     _name = var.getName();
   }
@@ -141,7 +139,7 @@ public class VarExpr
   {
     return env.getValue(_name, false, true);
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -153,13 +151,21 @@ public class VarExpr
   {
     return env.getValue(_name, false, false);
   }
-  
+
   /**
    * Evaluates the expression as an isset() statement.
    */
   public boolean evalIsset(Env env)
   {
     return env.getValue(_name, false, false).isset();
+  }
+
+  /**
+   * Evaluates the expression as an isset() statement.
+   */
+  public Value evalIssetValue(Env env)
+  {
+    return env.getValue(_name, false, false);
   }
 
   /**
@@ -183,39 +189,9 @@ public class VarExpr
   @Override
   public Value evalArray(Env env)
   {
-    Value value;
+    Value value = env.getVar(_name);
 
-    /*
-    if (_var.isGlobal()) {
-      value = env.getGlobalValue(_name);
-
-      if (value == null) {
-        value = new ArrayValueImpl();
-
-        env.setGlobalValue(_name, value);
-      }
-      else {
-        Value array = value.toAutoArray();
-
-        if (array != value) {
-          env.setGlobalValue(_name, array);
-
-          value = array;
-        }
-      }
-    */
-    //} else {
-      value = env.getVar(_name);
-
-      if (value == null) {
-        value = new ArrayValueImpl();
-
-        env.setValue(_name, value);
-      }
-      else {
-        value = value.toAutoArray();
-      }
-   // }
+    value = value.toAutoArray();
 
     return value;
   }
@@ -290,7 +266,7 @@ public class VarExpr
   {
     // php/0232
     env.setValue(_name, value);
-    
+
     return value;
   }
 
@@ -303,7 +279,7 @@ public class VarExpr
   public Value evalAssignRef(Env env, Value value)
   {
     env.setRef(_name, value);
-    
+
     return value;
   }
 

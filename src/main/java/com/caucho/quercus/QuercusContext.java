@@ -29,29 +29,10 @@
 
 package com.caucho.quercus;
 
-import java.io.IOException;
-import java.sql.Connection;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.LockSupport;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import javax.cache.Cache;
-import javax.servlet.ServletContext;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.sql.DataSource;
-
 import com.caucho.config.ConfigException;
 import com.caucho.java.JavaCompilerUtil;
 import com.caucho.quercus.annotation.ClassImplementation;
+import com.caucho.quercus.env.AbstractJavaMethod;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.BooleanValue;
@@ -59,7 +40,6 @@ import com.caucho.quercus.env.ConstStringValue;
 import com.caucho.quercus.env.DoubleValue;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.LongValue;
-import com.caucho.quercus.env.MethodIntern;
 import com.caucho.quercus.env.NullValue;
 import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.SessionArrayValue;
@@ -69,6 +49,7 @@ import com.caucho.quercus.env.Value;
 import com.caucho.quercus.expr.ExprFactory;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.quercus.lib.db.JavaSqlDriverWrapper;
+import com.caucho.quercus.lib.db.JdbcDriverContext;
 import com.caucho.quercus.lib.file.FileModule;
 import com.caucho.quercus.lib.regexp.RegexpModule;
 import com.caucho.quercus.lib.session.QuercusSessionManager;
@@ -86,14 +67,34 @@ import com.caucho.quercus.program.ClassDef;
 import com.caucho.quercus.program.JavaClassDef;
 import com.caucho.quercus.program.QuercusProgram;
 import com.caucho.quercus.program.UndefinedFunction;
+import com.caucho.quercus.servlet.api.QuercusHttpServletRequest;
+import com.caucho.quercus.servlet.api.QuercusHttpServletResponse;
+import com.caucho.quercus.servlet.api.QuercusServletContext;
 import com.caucho.util.IntMap;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
 import com.caucho.util.TimedCache;
-import com.caucho.vfs.FilePath;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.ReadStream;
+import com.caucho.vfs.Vfs;
 import com.caucho.vfs.WriteStream;
+
+import javax.cache.Cache;
+import javax.sql.DataSource;
+import java.io.IOException;
+import java.lang.reflect.Method;
+import java.sql.Connection;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.LockSupport;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Facade for the PHP language.
@@ -110,20 +111,22 @@ public class QuercusContext
   private static IniDefinitions _ini = new IniDefinitions();
 
   private final PageManager _pageManager;
-  private final QuercusSessionManager _sessionManager;
-
   private final ClassLoader _loader;
+  private final QuercusSessionManager _sessionManager;
 
   private ModuleContext _moduleContext;
 
   private static LruCache<String, UnicodeBuilderValue> _unicodeMap
     = new LruCache<String, UnicodeBuilderValue>(8 * 1024);
 
-  private static LruCache<String, StringValue> _stringMap
-    = new LruCache<String, StringValue>(8 * 1024);
+  private static LruCache<String, ConstStringValue> _stringMap
+    = new LruCache<String, ConstStringValue>(8 * 1024);
 
   private HashMap<String, ModuleInfo> _modules
     = new HashMap<String, ModuleInfo>();
+
+  private ArrayList<ModuleInfo> _moduleInitList
+    = new ArrayList<ModuleInfo>();
 
   private HashSet<ModuleStartupListener> _moduleStartupListeners
     = new HashSet<ModuleStartupListener>();
@@ -134,16 +137,11 @@ public class QuercusContext
   private HashSet<String> _extensionSetLowerCase
   = new HashSet<String>();
 
-  private HashMap<String, AbstractFunction> _funMap
-    = new HashMap<String, AbstractFunction>();
+  private HashMap<StringValue, AbstractFunction> _funMap
+    = new HashMap<StringValue, AbstractFunction>();
 
-  private HashMap<String, AbstractFunction> _lowerFunMap
-    = new HashMap<String, AbstractFunction>();
-
-  /*
-  private ClassDef _stdClassDef;
-  private QuercusClass _stdClass;
-  */
+  private HashMap<StringValue, AbstractFunction> _lowerFunMap
+    = new HashMap<StringValue, AbstractFunction>();
 
   private ConcurrentHashMap<String, JavaClassDef> _javaClassWrappers
     = new ConcurrentHashMap<String, JavaClassDef>();
@@ -153,6 +151,9 @@ public class QuercusContext
 
   private HashMap<String, JavaClassDef> _lowerJavaClassWrappers
     = new HashMap<String, JavaClassDef>();
+
+  private HashMap<String, Class<?>> _javaInitClassMap
+    = new HashMap<String, Class<?>>();
 
   private final IniDefinitions _iniDefinitions = new IniDefinitions();
 
@@ -177,8 +178,8 @@ public class QuercusContext
 
   private AbstractFunction []_functionMap = new AbstractFunction[256];
 
-  private LruCache<String, QuercusProgram> _evalCache
-    = new LruCache<String, QuercusProgram>(4096);
+  private LruCache<StringValue, QuercusProgram> _evalCache
+    = new LruCache<StringValue, QuercusProgram>(4096);
 
   private int _includeCacheMax = 8192;
   private long _includeCacheTimeout = 10000L;
@@ -200,9 +201,8 @@ public class QuercusContext
 
   private String _scriptEncoding;
 
-  private String _phpVersion = "5.3.2";
+  private String _phpVersion = "5.4.0";
   private String _mySqlVersion;
-  private StringValue _phpVersionValue;
 
   private boolean _isStrict;
   private boolean _isLooseParse;
@@ -210,13 +210,11 @@ public class QuercusContext
 
   private boolean _isConnectionPool = true;
 
-  private Boolean _isUnicodeSemantics;
-
   private DataSource _database;
 
   private ConcurrentHashMap<String,DataSource> _databaseMap
     = new ConcurrentHashMap<String,DataSource>();
-  
+
   private ConcurrentHashMap<Env,Env> _activeEnvSet
     = new ConcurrentHashMap<Env,Env>();
 
@@ -224,19 +222,26 @@ public class QuercusContext
 
   private Path _pwd;
   private Path _workDir;
+  private Path _webInfDir;
 
-  private ServletContext _servletContext;
-  
+  private QuercusServletContext _servletContext;
+
   private QuercusTimer _quercusTimer;
-  
+
   private EnvTimeoutThread _envTimeoutThread;
   protected long _envTimeout = 60000L;
-  
+
   // how long to sleep the env timeout thread,
   // for fast, complete tomcat undeploys
   protected static final long ENV_TIMEOUT_UPDATE_INTERVAL = 1000L;
-  
+
+  private long _dependencyCheckInterval = 2000L;
+
   private boolean _isClosed;
+
+  private JdbcDriverContext _jdbcDriverContext;
+
+  private Boolean _isUnicodeSemantics;
 
   /**
    * Constructor.
@@ -244,19 +249,12 @@ public class QuercusContext
   public QuercusContext()
   {
     _loader = Thread.currentThread().getContextClassLoader();
-
-    _moduleContext = getLocalContext();
-    
     _pageManager = createPageManager();
-
     _sessionManager = createSessionManager();
 
-    for (Map.Entry<String,String> entry : System.getenv().entrySet()) {
-       _serverEnvMap.put(createString(entry.getKey()),
-                         createString(entry.getValue()));
-    }
+    _moduleContext = getLocalContext();
   }
-  
+
   /**
    * Returns the current time.
    */
@@ -264,7 +262,7 @@ public class QuercusContext
   {
     return _quercusTimer.getCurrentTime();
   }
-  
+
   /**
    * Returns the current time in nanoseconds.
    */
@@ -272,7 +270,7 @@ public class QuercusContext
   {
     return _quercusTimer.getExactTimeNanoseconds();
   }
-  
+
   /**
    * Returns the exact current time in milliseconds.
    */
@@ -286,8 +284,9 @@ public class QuercusContext
    */
   public Path getPwd()
   {
-    if (_pwd == null)
-      _pwd = new FilePath(System.getProperty("user.dir"));
+    if (_pwd == null) {
+      _pwd = Vfs.getPwd();
+    }
 
     return _pwd;
   }
@@ -300,10 +299,24 @@ public class QuercusContext
     _pwd = path;
   }
 
+  public Path getWebInfDir()
+  {
+    if (_webInfDir == null) {
+      _webInfDir = getPwd().lookup("WEB-INF");
+    }
+
+    return _webInfDir;
+  }
+
+  public void setWebInfDir(Path path)
+  {
+    _webInfDir = path;
+  }
+
   public Path getWorkDir()
   {
     if (_workDir == null)
-      _workDir = getPwd().lookup("WEB-INF/work");
+      _workDir = getWebInfDir().lookup("work");
 
     return _workDir;
   }
@@ -318,9 +331,14 @@ public class QuercusContext
     return "JSESSIONID";
   }
 
-  public long getDependencyCheckInterval()
+  public final long getDependencyCheckInterval()
   {
-    return 2000L;
+    return _dependencyCheckInterval;
+  }
+
+  public final void setDependencyCheckInterval(long ms)
+  {
+    _dependencyCheckInterval = ms;
   }
 
   public int getIncludeCacheMax()
@@ -343,6 +361,16 @@ public class QuercusContext
     return _includeCacheTimeout;
   }
 
+  public String getName()
+  {
+    if (isPro()) {
+      return "Quercus Pro";
+    }
+    else {
+      return "Quercus";
+    }
+  }
+
   public String getVersion()
   {
     return "Open Source " + QuercusVersion.getVersionNumber();
@@ -358,7 +386,12 @@ public class QuercusContext
    */
   public String getSapiName()
   {
-    return "apache";
+    // default to cgi for mediawiki-1.19.1
+    return "cgi";
+  }
+
+  public boolean isRegisterArgv() {
+    return getIniBoolean("register_argc_argv");
   }
 
   public boolean isProfile()
@@ -450,23 +483,23 @@ public class QuercusContext
 
   public void setUnicodeSemantics(boolean isUnicode)
   {
-    _isUnicodeSemantics = isUnicode;
+    _isUnicodeSemantics = Boolean.valueOf(isUnicode);
   }
-  
+
   /**
    * Returns true if unicode.semantics is on.
    */
   public boolean isUnicodeSemantics()
   {
     if (_isUnicodeSemantics == null) {
-      _isUnicodeSemantics
-        = Boolean.valueOf(getIniBoolean("unicode.semantics"));
+      return false;
     }
-
-    return _isUnicodeSemantics.booleanValue();
+    else {
+      return _isUnicodeSemantics.booleanValue();
+    }
   }
 
-  /*
+  /**
    * Returns true if URLs may be arguments of include().
    */
   public boolean isAllowUrlInclude()
@@ -474,7 +507,7 @@ public class QuercusContext
     return getIniBoolean("allow_url_include");
   }
 
-  /*
+  /**
    * Returns true if URLs may be arguments of fopen().
    */
   public boolean isAllowUrlFopen()
@@ -498,7 +531,7 @@ public class QuercusContext
     _pageManager.setLazyCompile(isCompile);
   }
 
-  /*
+  /**
    * true if interpreted pages should be used if pages fail to compile.
    */
   public void setCompileFailover(boolean isCompileFailover)
@@ -506,7 +539,7 @@ public class QuercusContext
     _pageManager.setCompileFailover(isCompileFailover);
   }
 
-  /*
+  /**
    * Returns the expected encoding of php scripts.
    */
   public String getScriptEncoding()
@@ -516,10 +549,10 @@ public class QuercusContext
     else if (isUnicodeSemantics())
       return "utf-8";
     else
-      return "iso-8859-1";
+      return "utf-8";
   }
 
-  /*
+  /**
    * Sets the expected encoding of php scripts.
    */
   public void setScriptEncoding(String encoding)
@@ -527,7 +560,27 @@ public class QuercusContext
     _scriptEncoding = encoding;
   }
 
-  /*
+  /**
+   * Returns the encoding used for output, null if unicode.semantics is off.
+   */
+  public String getOutputEncoding()
+  {
+    if (! _isUnicodeSemantics)
+      return null;
+
+    String encoding = QuercusContext.INI_UNICODE_OUTPUT_ENCODING.getAsString(this);
+
+    if (encoding == null)
+      encoding = QuercusContext.INI_UNICODE_FALLBACK_ENCODING.getAsString(this);
+
+    if (encoding == null)
+      encoding = "utf-8";
+
+    return encoding;
+  }
+
+
+  /**
    * Returns the mysql version to report to to PHP applications.
    * It is user set-able to allow cloaking of the underlying mysql
    * JDBC driver version for application compatibility.
@@ -537,7 +590,7 @@ public class QuercusContext
     return _mySqlVersion;
   }
 
-  /*
+  /**
    * Sets the mysql version to report to applications.  This cloaks
    * the underlying JDBC driver version, so that when an application
    * asks for the mysql version, this version string is returned instead.
@@ -555,33 +608,20 @@ public class QuercusContext
   public void setPhpVersion(String version)
   {
     _phpVersion = version;
-    _phpVersionValue = null;
   }
 
-  public StringValue getPhpVersionValue()
-  {
-    if (_phpVersionValue == null) {
-      if (isUnicodeSemantics())
-        _phpVersionValue = createUnicodeString(_phpVersion);
-      else
-        _phpVersionValue = createString(_phpVersion);
-    }
-
-    return _phpVersionValue;
-  }
-
-  /*
+  /**
    * Sets the ServletContext.
    */
-  public void setServletContext(ServletContext servletContext)
+  public void setServletContext(QuercusServletContext servletContext)
   {
     _servletContext = servletContext;
   }
 
-  /*
+  /**
    * Returns the ServletContext.
    */
-  public ServletContext getServletContext()
+  public QuercusServletContext getServletContext()
   {
     return _servletContext;
   }
@@ -602,6 +642,29 @@ public class QuercusContext
     return _database;
   }
 
+  public JdbcDriverContext getJdbcDriverContext()
+  {
+    if (_jdbcDriverContext == null) {
+      _jdbcDriverContext = new JdbcDriverContext();
+
+      Value driverValue = getIniValue("quercus.jdbc_drivers");
+
+      if (driverValue.isArray()) {
+        ArrayValue array = driverValue.toArray();
+
+        for (Map.Entry<Value,Value> entry : array.entrySet()) {
+
+          Value key = entry.getKey();
+          Value value = entry.getValue();
+
+          _jdbcDriverContext.setProtocol(key.toString(), value.toString());
+        }
+      }
+    }
+
+    return _jdbcDriverContext;
+  }
+
   /**
    * Gets the default data source.
    */
@@ -620,7 +683,7 @@ public class QuercusContext
 
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
 
-        Class cls = loader.loadClass(driver);
+        Class<?> cls = loader.loadClass(driver);
 
         Object ds = cls.newInstance();
 
@@ -642,7 +705,7 @@ public class QuercusContext
     }
   }
 
-  /*
+  /**
    * Marks the connection for removal from the connection pool.
    */
   public void markForPoolRemoval(Connection conn)
@@ -697,7 +760,7 @@ public class QuercusContext
     return _isLooseParse;
   }
 
-  /*
+  /**
    * Gets the max size of the page cache.
    */
   public int getPageCacheSize()
@@ -705,7 +768,7 @@ public class QuercusContext
     return _pageManager.getPageCacheSize();
   }
 
-  /*
+  /**
    * Sets the capacity of the page cache.
    */
   public void setPageCacheSize(int size)
@@ -713,7 +776,7 @@ public class QuercusContext
     _pageManager.setPageCacheSize(size);
   }
 
-  /*
+  /**
    * Gets the max size of the regexp cache.
    */
   public int getRegexpCacheSize()
@@ -721,7 +784,7 @@ public class QuercusContext
     return RegexpModule.getRegexpCacheSize();
   }
 
-  /*
+  /**
    * Sets the capacity of the regexp cache.
    */
   public void setRegexpCacheSize(int size)
@@ -729,7 +792,7 @@ public class QuercusContext
     RegexpModule.setRegexpCacheSize(size);
   }
 
-  /*
+  /**
    * Set to true if compiled pages need to be backed by php source files.
    */
   public void setRequireSource(boolean isRequireSource)
@@ -737,7 +800,7 @@ public class QuercusContext
     _isRequireSource = isRequireSource;
   }
 
-  /*
+  /**
    * Returns whether the php source is required for compiled files.
    */
   public boolean isRequireSource()
@@ -745,7 +808,7 @@ public class QuercusContext
     return _isRequireSource;
   }
 
-  /*
+  /**
    * Turns connection pooling on or off.
    */
   public void setConnectionPool(boolean isEnable)
@@ -753,7 +816,7 @@ public class QuercusContext
     _isConnectionPool = isEnable;
   }
 
-  /*
+  /**
    * Returns true if connections should be pooled.
    */
   public boolean isConnectionPool()
@@ -761,35 +824,31 @@ public class QuercusContext
     return _isConnectionPool;
   }
 
-  /**
-   * Adds a module
-   */
-  /*
-  public void addModule(QuercusModule module)
-    throws ConfigException
+  private void initJavaClasses()
   {
-    try {
-      introspectPhpModuleClass(module.getClass());
-    } catch (Exception e) {
-      throw ConfigException.create(e);
+    for (Map.Entry<String, Class<?>> entry : _javaInitClassMap.entrySet()) {
+      String name = entry.getKey();
+      Class<?> cls = entry.getValue();
+
+      try {
+        if (cls.isAnnotationPresent(ClassImplementation.class))
+          _moduleContext.introspectJavaImplClass(name, cls, null);
+        else
+          _moduleContext.introspectJavaClass(name, cls, null, null);
+      }
+      catch (Exception e) {
+        throw new QuercusRuntimeException(e);
+      }
     }
   }
-  */
 
   /**
    * Adds a java class
    */
-  public void addJavaClass(String name, Class type)
+  public void addJavaClass(String name, Class<?> type)
     throws ConfigException
   {
-    try {
-      if (type.isAnnotationPresent(ClassImplementation.class))
-        _moduleContext.introspectJavaImplClass(name, type, null);
-      else
-        _moduleContext.introspectJavaClass(name, type, null, null);
-    } catch (Exception e) {
-      throw ConfigException.create(e);
-    }
+    _javaInitClassMap.put(name, type);
   }
 
   /**
@@ -797,24 +856,22 @@ public class QuercusContext
    */
   public void addJavaClass(String phpName, String className)
   {
-    Class type;
-
     try {
-      type = Class.forName(className, false, _loader);
+      Class<?> type = Class.forName(className, false, _loader);
+
+      addJavaClass(phpName, type);
     }
     catch (ClassNotFoundException e) {
       throw new QuercusRuntimeException(L.l("`{0}' not valid: {1}",
                                             className,
                                             e.toString()), e);
     }
-
-    addJavaClass(phpName, type);
   }
 
   /**
    * Adds a impl class
    */
-  public void addImplClass(String name, Class type)
+  public void addImplClass(String name, Class<?> type)
     throws ConfigException
   {
     throw new UnsupportedOperationException(
@@ -909,22 +966,7 @@ public class QuercusContext
    */
   public void setIniFile(Path path)
   {
-    // XXX: Not sure why this dependency would be useful
-    // Environment.addDependency(new Depend(path));
-
-    if (path.canRead()) {
-      Env env = new Env(this);
-
-      Value result = FileModule.parse_ini_file(env, path, false);
-
-      if (result instanceof ArrayValue) {
-        ArrayValue array = (ArrayValue) result;
-
-        for (Map.Entry<Value,Value> entry : array.entrySet()) {
-          setIni(entry.getKey().toString(), entry.getValue().toString());
-        }
-      }
-
+    if (path != null && path.canRead()) {
       _iniFile = path;
     }
   }
@@ -959,7 +1001,7 @@ public class QuercusContext
   /**
    * Sets an ini value.
    */
-  public void setIni(String name, StringValue value)
+  public void setIni(String name, Value value)
   {
     _iniDefinitions.get(name).set(this, value);
   }
@@ -994,6 +1036,14 @@ public class QuercusContext
   public Value getIniValue(String name)
   {
     return _iniDefinitions.get(name).getValue(this);
+  }
+
+  /**
+   * Returns an ini value.
+   */
+  public String getIniString(String name)
+  {
+    return _iniDefinitions.get(name).getValue(this).toJavaString();
   }
 
   /**
@@ -1210,7 +1260,7 @@ public class QuercusContext
    * @return the parsed program
    * @throws IOException
    */
-  public QuercusProgram parseCode(String code)
+  public QuercusProgram parseCode(StringValue code)
     throws IOException
   {
     QuercusProgram program = _evalCache.get(code);
@@ -1230,7 +1280,7 @@ public class QuercusContext
    * @return the parsed program
    * @throws IOException
    */
-  public QuercusProgram parseEvalExpr(String code)
+  public QuercusProgram parseEvalExpr(StringValue code)
     throws IOException
   {
     // XXX: possible conflict with parse eval because of the
@@ -1262,12 +1312,13 @@ public class QuercusContext
   /**
    * Returns the function with the given name.
    */
-  public AbstractFunction findFunction(String name)
+  public AbstractFunction findFunction(StringValue name)
   {
     AbstractFunction fun = _funMap.get(name);
 
-    if ((fun == null) && ! isStrict())
+    if ((fun == null) && ! isStrict()) {
       fun = _lowerFunMap.get(name.toLowerCase(Locale.ENGLISH));
+    }
 
     return fun;
   }
@@ -1275,7 +1326,7 @@ public class QuercusContext
   /**
    * Returns the function with the given name.
    */
-  public AbstractFunction findFunctionImpl(String name)
+  public AbstractFunction findFunctionImpl(StringValue name)
   {
     AbstractFunction fun = _funMap.get(name);
 
@@ -1285,7 +1336,7 @@ public class QuercusContext
   /**
    * Returns the function with the given name.
    */
-  public AbstractFunction findLowerFunctionImpl(String lowerName)
+  public AbstractFunction findLowerFunctionImpl(StringValue lowerName)
   {
     AbstractFunction fun = _lowerFunMap.get(lowerName);
 
@@ -1299,7 +1350,7 @@ public class QuercusContext
   {
     ArrayValue internal = new ArrayValueImpl();
 
-    for (String name : _funMap.keySet()) {
+    for (StringValue name : _funMap.keySet()) {
       internal.put(name);
     }
 
@@ -1313,40 +1364,49 @@ public class QuercusContext
   /**
    * Returns the id for a function name.
    */
-  public int getFunctionId(String name)
+  public int getFunctionId(StringValue name)
   {
-    if (! isStrict())
+    int id = _functionNameMap.get(name);
+
+    if (id >= 0) {
+      return id;
+    }
+
+    if (! isStrict()) {
       name = name.toLowerCase(Locale.ENGLISH);
-    
+    }
+
     if (name.startsWith("\\")) {
       // php/0m18
       name = name.substring(1);
     }
 
-    int id = _functionNameMap.get(name);
+    id = _functionNameMap.get(name);
 
-    if (id >= 0)
+    if (id >= 0) {
       return id;
+    }
 
     synchronized (_functionNameMap) {
       id = _functionNameMap.get(name);
 
-      if (id >= 0)
+      if (id >= 0) {
         return id;
+      }
 
       // 0 is used for an undefined function
       // php/1p0g
       id = _functionNameMap.size() + 1;
 
       _functionNameMap.put(name, id);
-      
+
       extendFunctionMap(name, id);
     }
 
     return id;
   }
 
-  protected void extendFunctionMap(String name, int id)
+  protected void extendFunctionMap(StringValue name, int id)
   {
     if (_functionMap.length <= id) {
       AbstractFunction []functionMap = new AbstractFunction[id + 256];
@@ -1354,29 +1414,39 @@ public class QuercusContext
                        functionMap, 0, _functionMap.length);
       _functionMap = functionMap;
     }
-    
+
     int globalId = -1;
     int ns = name.lastIndexOf('\\');
     if (ns > 0) {
       globalId = getFunctionId(name.substring(ns + 1));
     }
 
-    _functionMap[id] = new UndefinedFunction(id, name, globalId);
+    _functionMap[id] = new UndefinedFunction(id, name.toString(), globalId);
   }
 
   /**
    * Returns the id for a function name.
    */
-  public int findFunctionId(String name)
+  public int findFunctionId(StringValue name)
   {
-    if (! isStrict())
+    int id = _functionNameMap.get(name);
+
+    if (id >= 0) {
+      return id;
+    }
+
+    if (! isStrict()) {
       name = name.toLowerCase(Locale.ENGLISH);
-    
-    if (name.startsWith("\\"))
+    }
+
+    if (name.startsWith("\\")) {
       name = name.substring(1);
+    }
+
+    id = _functionNameMap.get(name);
 
     // IntMap is internally synchronized
-    return _functionNameMap.get(name);
+    return id;
   }
 
   /**
@@ -1395,7 +1465,7 @@ public class QuercusContext
     return _functionMap;
   }
 
-  public int setFunction(String name, AbstractFunction fun)
+  public int setFunction(StringValue name, AbstractFunction fun)
   {
     int id = getFunctionId(name);
 
@@ -1411,16 +1481,19 @@ public class QuercusContext
   {
     int id = _classNameMap.get(className);
 
-    if (id >= 0)
+    if (id >= 0) {
       return id;
-    
-    if (className.startsWith("\\"))
+    }
+
+    if (className.startsWith("\\")) {
       className = className.substring(1);
-    
+    }
+
     id = _classNameMap.get(className);
-    
-    if (id >= 0)
+
+    if (id >= 0) {
       return id;
+    }
 
     synchronized (_classNameMap) {
       String name = className.toLowerCase(Locale.ENGLISH);
@@ -1760,8 +1833,38 @@ public class QuercusContext
    */
   public void init()
   {
+    initLocal();
+
     initModules();
     initClasses();
+
+    if (_iniFile != null) {
+      Env env = new Env(this);
+
+      Value result = FileModule.parse_ini_file(env, _iniFile, false);
+
+      if (result instanceof ArrayValue) {
+        ArrayValue array = (ArrayValue) result;
+
+        for (Map.Entry<Value,Value> entry : array.entrySet()) {
+          String key = entry.getKey().toString();
+          Value value = entry.getValue();
+
+          setIni(key, value);
+        }
+      }
+    }
+
+    if (_isUnicodeSemantics == null) {
+      _isUnicodeSemantics = getIniBoolean("unicode.semantics");
+    }
+
+    _moduleContext.setUnicodeSemantics(_isUnicodeSemantics);
+
+    for (Map.Entry<String,String> entry : System.getenv().entrySet()) {
+      _serverEnvMap.put(createString(entry.getKey()),
+                        createString(entry.getValue()));
+    }
 
     _workDir = getWorkDir();
 
@@ -1769,17 +1872,14 @@ public class QuercusContext
 
     _includeCache = new TimedCache<IncludeKey, Path>(getIncludeCacheMax(),
                                                      getIncludeCacheTimeout());
-
-    initLocal();
   }
 
-  public void addModule(QuercusModule module)
+  public void addInitModule(QuercusModule module)
   {
-    ModuleInfo info = new ModuleInfo(_moduleContext,
-                                     module.getClass().getName(),
+    ModuleInfo info = new ModuleInfo(module.getClass().getName(),
                                      module);
 
-    addModuleInfo(info);
+    _moduleInitList.add(info);
   }
 
   /**
@@ -1787,12 +1887,30 @@ public class QuercusContext
    */
   private void initModules()
   {
+    HashSet<String> disableSet = null;
+
+    String value = getIniString("disable_functions");
+    if (value != null) {
+      disableSet = new HashSet<String>();
+
+      String[] values = value.split(",");
+
+      for (String name : values) {
+        disableSet.add(name.trim());
+      }
+    }
+
+
+    for (ModuleInfo info : _moduleInitList) {
+      initModuleInfo(info, disableSet);
+    }
+
     for (ModuleInfo info : _moduleContext.getModules()) {
-      addModuleInfo(info);
+      initModuleInfo(info, disableSet);
     }
   }
 
-  protected void addModuleInfo(ModuleInfo info)
+  private void initModuleInfo(ModuleInfo info, HashSet<String> disableSet)
   {
     _modules.put(info.getName(), info);
 
@@ -1821,15 +1939,31 @@ public class QuercusContext
 
     _iniDefinitions.addAll(info.getIniDefinitions());
 
-    for (Map.Entry<String, AbstractFunction> entry
+    for (Map.Entry<String, Method[]> entry
            : info.getFunctions().entrySet()) {
       String funName = entry.getKey();
-      AbstractFunction fun = entry.getValue();
+      Method[] methods = entry.getValue();
 
-      _funMap.put(funName, fun);
-      _lowerFunMap.put(funName.toLowerCase(Locale.ENGLISH), fun);
+      if (disableSet != null && disableSet.contains(funName)) {
+        continue;
+      }
 
-      setFunction(funName, fun);
+      AbstractJavaMethod fun
+        = _moduleContext.createStaticFunction(info.getModule(), methods[0]);
+
+      for (int i = 1; i < methods.length; i++) {
+        AbstractJavaMethod overload
+          = _moduleContext.createStaticFunction(info.getModule(), methods[i]);
+
+        fun = fun.overload(overload);
+      }
+
+      StringValue funNameV = createString(funName);
+
+      _funMap.put(funNameV, fun);
+      _lowerFunMap.put(funNameV.toLowerCase(Locale.ENGLISH), fun);
+
+      setFunction(funNameV, fun);
     }
   }
 
@@ -1838,8 +1972,11 @@ public class QuercusContext
    */
   private void initClasses()
   {
-    for (Map.Entry<String,JavaClassDef> entry
-           : _moduleContext.getWrapperMap().entrySet()) {
+    initJavaClasses();
+
+    ModuleContext context = _moduleContext;
+
+    for (Map.Entry<String,JavaClassDef> entry : context.getWrapperMap().entrySet()) {
       String name = entry.getKey();
       JavaClassDef def = entry.getValue();
 
@@ -1847,9 +1984,7 @@ public class QuercusContext
       _lowerJavaClassWrappers.put(name.toLowerCase(Locale.ENGLISH), def);
     }
 
-    for (Map.Entry<String,ClassDef> entry
-           : _moduleContext.getClassMap().entrySet()) {
-
+    for (Map.Entry<String,ClassDef> entry : context.getClassMap().entrySet()) {
       String name = entry.getKey();
       ClassDef def = entry.getValue();
 
@@ -1882,45 +2017,31 @@ public class QuercusContext
    */
   public StringValue createString(String name)
   {
-    StringValue value = _stringMap.get(name);
-
-    if (value == null) {
-      value = new ConstStringValue(name);
-
-      _stringMap.put(name, value);
-    }
-
-    return value;
-  }
-
-  /**
-   * Interns a string.
-   */
-/*
-  public StringValue intern(String name)
-  {
-    StringValue value = _internMap.get(name);
-
-    if (value != null)
-      return value;
-
-    synchronized (_internMap) {
-      value = _internMap.get(name);
-
-      if (value != null)
-        return value;
+    if (isUnicodeSemantics()) {
+      UnicodeBuilderValue value = _unicodeMap.get(name);
 
       if (value == null) {
-        name = name.intern();
+        if (isUnicodeSemantics()) {
+          value = new UnicodeBuilderValue(name);
+        }
 
-        value = new StringBuilderValue(name);
-        _internMap.put(name, value);
+        _unicodeMap.put(name, value);
+      }
+
+      return value;
+    }
+    else {
+      ConstStringValue value = _stringMap.get(name);
+
+      if (value == null) {
+        value = new ConstStringValue(name);
+
+        _stringMap.put(name, value);
       }
 
       return value;
     }
   }
-*/
 
   /**
    * Returns a named constant.
@@ -1932,14 +2053,16 @@ public class QuercusContext
 
   public StringValue createStaticName()
   {
-    return MethodIntern.intern("s" + _staticId++);
+    StringValue str = createString("s" + _staticId++);
+
+    return str;
   }
 
   public Cache getSessionCache()
   {
     return null;
   }
-  
+
   public void setSessionTimeout(long sessionTimeout)
   {
   }
@@ -2041,7 +2164,7 @@ public class QuercusContext
   {
     try {
       _quercusTimer = new QuercusTimer();
-      
+
       _envTimeoutThread = new EnvTimeoutThread();
       _envTimeoutThread.start();
     } catch (Exception e) {
@@ -2051,8 +2174,8 @@ public class QuercusContext
 
   public Env createEnv(QuercusPage page,
                        WriteStream out,
-                       HttpServletRequest request,
-                       HttpServletResponse response)
+                       QuercusHttpServletRequest request,
+                       QuercusHttpServletResponse response)
   {
     return new Env(this, page, out, request, response);
   }
@@ -2061,7 +2184,7 @@ public class QuercusContext
   {
     return new ExprFactory();
   }
-  
+
   protected Map<Env,Env> getActiveEnvSet()
   {
     return _activeEnvSet;
@@ -2071,12 +2194,12 @@ public class QuercusContext
   {
     _activeEnvSet.put(env, env);
   }
-  
+
   public void completeEnv(Env env)
   {
     _activeEnvSet.remove(env);
   }
-  
+
   protected boolean isClosed()
   {
     return _isClosed;
@@ -2084,17 +2207,42 @@ public class QuercusContext
 
   public void close()
   {
-    _isClosed = true;
-    
+    synchronized (this) {
+      if (_isClosed) {
+        return;
+      }
+
+      _isClosed = true;
+    }
+
     _sessionManager.close();
     _pageManager.close();
-    
-    if (_envTimeoutThread != null)
-      _envTimeoutThread.shutdown();
-    
-    if (_quercusTimer != null) {
-      _quercusTimer.shutdown();
+
+    EnvTimeoutThread envTimeoutThread = _envTimeoutThread;
+    _envTimeoutThread = null;
+
+    if (envTimeoutThread != null) {
+      envTimeoutThread.shutdown();
     }
+
+    QuercusTimer quercusTimer = _quercusTimer;
+    _quercusTimer = null;
+
+    if (quercusTimer != null) {
+      quercusTimer.shutdown();
+    }
+  }
+
+  /**
+   * Calls close().
+   */
+  @Override
+  protected void finalize()
+    throws Throwable
+  {
+    super.finalize();
+
+    close();
   }
 
   static class IncludeKey {
@@ -2120,7 +2268,8 @@ public class QuercusContext
 
       hash = 65537 * hash + _include.hashCode();
       hash = 65537 * hash + _includePath.hashCode();
-      hash = 65537 * hash + _pwd.hashCode();
+      if (_pwd != null)
+        hash = 65537 * hash + _pwd.hashCode();
       hash = 65537 * hash + _scriptPwd.hashCode();
 
       return hash;
@@ -2139,13 +2288,13 @@ public class QuercusContext
               && _scriptPwd.equals(key._scriptPwd));
     }
   }
-  
+
   class EnvTimeoutThread extends Thread {
     private volatile boolean _isRunnable = true;
     private final long _timeout = _envTimeout;
-    
+
     private long _quantumCount;
-    
+
     EnvTimeoutThread()
     {
       super("quercus-env-timeout");
@@ -2153,12 +2302,18 @@ public class QuercusContext
       setDaemon(true);
       //setPriority(Thread.MAX_PRIORITY);
     }
-    
+
     public void shutdown()
     {
       _isRunnable = false;
-      
+
       LockSupport.unpark(this);
+
+      try {
+        Thread.sleep(ENV_TIMEOUT_UPDATE_INTERVAL * 2);
+      }
+      catch (InterruptedException e) {
+      }
     }
 
     public void run()
@@ -2166,11 +2321,11 @@ public class QuercusContext
       while (_isRunnable) {
         if (_quantumCount >= _timeout) {
           _quantumCount = 0;
-          
+
           try {
             ArrayList<Env> activeEnv
               = new ArrayList<Env>(_activeEnvSet.keySet());
-            
+
             for (Env env : activeEnv) {
               env.updateTimeout();
             }
@@ -2222,8 +2377,7 @@ public class QuercusContext
   public static final IniDefinition INI_REGISTER_LONG_ARRAYS
     = _ini.add("register_long_arrays", true, IniDefinition.PHP_INI_PERDIR);
   public static final IniDefinition INI_ALWAYS_POPULATE_RAW_POST_DATA
-    = _ini.add(
-    "always_populate_raw_post_data", false, IniDefinition.PHP_INI_PERDIR);
+    = _ini.add("always_populate_raw_post_data", false, IniDefinition.PHP_INI_PERDIR);
 
   // unicode ini
   public static final IniDefinition INI_UNICODE_SEMANTICS
@@ -2233,8 +2387,7 @@ public class QuercusContext
   public static final IniDefinition INI_UNICODE_FROM_ERROR_MODE
     = _ini.add("unicode.from_error_mode", "2", IniDefinition.PHP_INI_ALL);
   public static final IniDefinition INI_UNICODE_FROM_ERROR_SUBST_CHAR
-    = _ini.add(
-    "unicode.from_error_subst_char", "3f", IniDefinition.PHP_INI_ALL);
+    = _ini.add("unicode.from_error_subst_char", "3f", IniDefinition.PHP_INI_ALL);
   public static final IniDefinition INI_UNICODE_HTTP_INPUT_ENCODING
     = _ini.add("unicode.http_input_encoding", null, IniDefinition.PHP_INI_ALL);
   public static final IniDefinition INI_UNICODE_OUTPUT_ENCODING

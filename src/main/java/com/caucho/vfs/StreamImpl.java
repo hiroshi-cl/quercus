@@ -333,6 +333,52 @@ public class StreamImpl {
   {
     return NullIterator.create();
   }
+  
+  //
+  // mmap/sendfile
+  //
+
+  /**
+   * Returns true if the stream supports mmap.
+   */
+  public boolean isMmapEnabled()
+  {
+    return false;
+  }
+
+  /**
+   * Returns true if the stream supports mmap.
+   */
+  public boolean isSendfileEnabled()
+  {
+    return false;
+  }
+  
+
+  /*
+  public void writeMmap(long mmapAddress, long mmapOffset, int mmapLength)
+    throws IOException
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  */
+  
+  public void writeMmap(long mmapAddress,
+                        long []mmapBlocks,
+                        long mmapOffset, 
+                        long mmapLength)
+    throws IOException
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  public void writeSendfile(byte []buffer, int offset, int length,
+                            byte []fileName, int nameLength,
+                            long fileLength)
+    throws IOException
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
 
   /**
    * Closes the write half of the stream.

@@ -31,7 +31,6 @@ package com.caucho.quercus.env;
 
 import com.caucho.vfs.WriteStream;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.util.IdentityHashMap;
 
@@ -39,8 +38,14 @@ import java.util.IdentityHashMap;
  * Represents a PHP resource
  */
 public class ResourceValue extends Value
-    implements EnvCleanup
+  implements EnvCleanup
 {
+  @Override
+  public boolean isResource()
+  {
+    return true;
+  }
+
   /**
    * Implements the EnvCleanup interface.
    */
@@ -69,6 +74,15 @@ public class ResourceValue extends Value
   {
     return new LongValue(System.identityHashCode(this));
   }
+  
+  /**
+   * Serializes the value.
+   */
+  @Override
+  public void serialize(Env env, StringBuilder sb)
+  {
+    sb.append("i:0;");
+  }
 
   /**
    * Converts to a string.
@@ -76,7 +90,13 @@ public class ResourceValue extends Value
   @Override
   public String toString()
   {
-    return "ResourceValue[]";
+    if (ResourceValue.class.equals(getClass())) {
+      return ResourceValue.class.getSimpleName() + "[]";
+    }
+    else {
+      return ResourceValue.class.getSimpleName()
+             + "[" + getClass().getSimpleName() + "]";
+    }
   }
 
   @Override
@@ -85,10 +105,10 @@ public class ResourceValue extends Value
                              int depth,
                              IdentityHashMap<Value, String> valueSet)
     throws IOException
-  { 
+  {
     out.print("resource(" + toString(env) + ")");
   }
-  
+
   @Override
   protected void printRImpl(Env env,
                             WriteStream out,

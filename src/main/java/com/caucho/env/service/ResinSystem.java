@@ -30,6 +30,7 @@
 package com.caucho.env.service;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.TreeSet;
@@ -49,6 +50,7 @@ import com.caucho.loader.Environment;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentLocal;
 import com.caucho.util.Alarm;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 
@@ -60,6 +62,8 @@ public class ResinSystem
   
   private static final EnvironmentLocal<ResinSystem> _serverLocal
     = new EnvironmentLocal<ResinSystem>();
+  
+  private static WeakReference<ResinSystem> _globalSystemRef;
 
   private String _id;
   private EnvironmentClassLoader _classLoader;
@@ -115,6 +119,8 @@ public class ResinSystem
     }
 
     _serverLocal.set(this, _classLoader);
+    
+    _globalSystemRef = new WeakReference<ResinSystem>(this);
 
     _lifecycle = new Lifecycle(log, toString(), Level.FINE);
     
@@ -136,7 +142,7 @@ public class ResinSystem
         = _injectManager.createBeanFactory(ResinSystem.class);
       // factory.deployment(Standard.class);
       beanFactory.type(ResinSystem.class);
-      _injectManager.addBean(beanFactory.singleton(this));
+      _injectManager.addBeanDiscover(beanFactory.singleton(this));
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
@@ -188,7 +194,17 @@ public class ResinSystem
    */
   public static ResinSystem getCurrent()
   {
-    return _serverLocal.get();
+    ResinSystem system = _serverLocal.get();
+    
+    if (system == null) {
+      WeakReference<ResinSystem> globalRef = _globalSystemRef;
+          
+      if (globalRef != null) {
+        system = globalRef.get();
+      }
+    }
+    
+    return system;
   }
   
   /**
@@ -463,9 +479,9 @@ public class ResinSystem
       if (! _lifecycle.toStarting())
         return;
 
-      _startTime = Alarm.getCurrentTime();
+      _startTime = CurrentTime.getCurrentTime();
 
-      if (! Alarm.isTest()) {
+      if (! CurrentTime.isTest()) {
         log.info("");
 
         log.info(VersionFactory.getFullVersion());
@@ -521,13 +537,15 @@ public class ResinSystem
         
         thread.setContextClassLoader(_classLoader);
         
-        if (log.isLoggable(Level.FINE))
-          log.fine(service + " starting");
+        if (log.isLoggable(Level.FINEST)) {
+          log.finest(service + " starting");
+        }
 
         service.start();
         
-        if (log.isLoggable(Level.FINER))
-          log.finer(service + " active");
+        if (log.isLoggable(Level.FINEST)) {
+          log.finest(service + " active");
+        }
       }
     } catch (RuntimeException e) {
       log.log(Level.WARNING, e.toString(), e);
@@ -573,11 +591,12 @@ public class ResinSystem
         try {
           thread.setContextClassLoader(_classLoader);
 
-          if (log.isLoggable(Level.FINE))
-            log.fine(service + " stopping");
+          if (log.isLoggable(Level.FINEST)) {
+            log.finest(service + " stopping");
+          }
           
           service.stop();
-        } catch (Exception e) {
+        } catch (Throwable e) {
           log.log(Level.WARNING, e.toString(), e);
         }
       }
@@ -619,6 +638,12 @@ public class ResinSystem
         }
       }
 
+      WeakReference<ResinSystem> globalRef = _globalSystemRef;
+      
+      if (globalRef != null && globalRef.get() == this) {
+        _globalSystemRef = null;
+      }
+      
       /*
        * destroy
        */
@@ -646,6 +671,12 @@ public class ResinSystem
     public int getStartPriority()
     {
       return START_PRIORITY_CLASSLOADER;
+    }
+    
+    @Override
+    public int getStopPriority()
+    {
+      return STOP_PRIORITY_CLASSLOADER;
     }
     
     @Override

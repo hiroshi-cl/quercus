@@ -30,6 +30,7 @@
 package com.caucho.quercus.function;
 
 import com.caucho.quercus.Location;
+import com.caucho.quercus.UnimplementedException;
 import com.caucho.quercus.env.Callback;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.QuercusClass;
@@ -47,7 +48,7 @@ import com.caucho.util.L10N;
 abstract public class AbstractFunction extends Callback {
   private static final L10N L = new L10N(AbstractFunction.class);
 
-  private static final Arg []NULL_ARGS = new Arg[0];
+  public static final Arg []NULL_ARGS = new Arg[0];
   private static final Value []NULL_ARG_VALUES = new Value[0];
 
   private final Location _location;
@@ -57,14 +58,16 @@ abstract public class AbstractFunction extends Callback {
   protected boolean _isFinal = false;
   protected boolean _isConstructor = false;
   protected boolean _isClosure = false;
-  
+
+  protected boolean _isTraitMethod = false;
+
   protected Visibility _visibility = Visibility.PUBLIC;
   protected String _declaringClassName;
-  
+
   protected QuercusClass _bindingClass;
-  
+
   protected int _parseIndex;
-  
+
   public AbstractFunction()
   {
     // XXX:
@@ -80,53 +83,109 @@ abstract public class AbstractFunction extends Callback {
   {
     return "unknown";
   }
-  
+
   //
   // Callback values
   //
-  
+
   @Override
   public String getCallbackName()
   {
     return getName();
   }
-  
+
   @Override
   public boolean isInternal(Env env)
   {
     return false;
   }
-  
+
   @Override
   public boolean isValid(Env env)
   {
     return true;
   }
-  
+
+  /**
+   * Returns the name of the file where this is defined in.
+   */
+  @Override
+  public String getDeclFileName(Env env)
+  {
+    return _location.getFileName();
+  }
+
+  /**
+   * Returns the start line in the file where this is defined in.
+   */
+  @Override
+  public int getDeclStartLine(Env env)
+  {
+    return _location.getLineNumber();
+  }
+
+  /**
+   * Returns the end line in the file where this is defined in.
+   */
+  @Override
+  public int getDeclEndLine(Env env)
+  {
+    return _location.getLineNumber();
+  }
+
+  /**
+   * Returns the comment in the file where this is defined in.
+   */
+  @Override
+  public String getDeclComment(Env env)
+  {
+    return getComment();
+  }
+
+  /**
+   * Returns true if this returns a reference.
+   */
+  @Override
+  public boolean isReturnsReference(Env env)
+  {
+    return true;
+  }
+
+  @Override
+  public Arg []getArgs(Env env)
+  {
+    return NULL_ARGS;
+  }
+
+  public boolean isJavaMethod()
+  {
+    return false;
+  }
+
   public final String getCompilationName()
   {
     String compName = getName() + "_" + _parseIndex;
-    
+
     compName = compName.replace("__", "___");
     compName = compName.replace("\\", "__");
-    
+
     return compName;
   }
-  
-  /*
+
+  /**
    * Returns the name of class lexically declaring the method
    */
   public String getDeclaringClassName()
   {
     return _declaringClassName;
   }
-  
+
   public void setDeclaringClassName(String name)
   {
     _declaringClassName = name;
   }
-  
-  /*
+
+  /**
    * Returns the name of class lexically binding the method
    */
   public String getBindingClassName()
@@ -136,18 +195,18 @@ abstract public class AbstractFunction extends Callback {
     else
       return "<none>";
   }
-  
+
   public void setBindingClass(QuercusClass qcl)
   {
     _bindingClass = qcl;
   }
-  
+
   public QuercusClass getBindingClass()
   {
     return _bindingClass;
   }
-  
-  /*
+
+  /**
    * Returns the implementing class.
    */
   public ClassDef getDeclaringClass()
@@ -170,7 +229,7 @@ abstract public class AbstractFunction extends Callback {
   {
     return false;
   }
-  
+
   /**
    * Sets true if function is static.
    */
@@ -178,7 +237,7 @@ abstract public class AbstractFunction extends Callback {
   {
     _isStatic = isStatic;
   }
-  
+
   /**
    * Returns true for a static function.
    */
@@ -186,20 +245,20 @@ abstract public class AbstractFunction extends Callback {
   {
     return _isStatic;
   }
-  
-  /*
+
+  /**
    * Returns true for a final function.
    */
   public boolean isFinal()
   {
     return _isFinal;
   }
-  
+
   public final void setFinal(boolean isFinal)
   {
     _isFinal = isFinal;
   }
-  
+
   /**
    * Sets true if function is a closure.
    */
@@ -207,7 +266,7 @@ abstract public class AbstractFunction extends Callback {
   {
     _isClosure = isClosure;
   }
-  
+
   /**
    * Returns true for a closure.
    */
@@ -215,51 +274,73 @@ abstract public class AbstractFunction extends Callback {
   {
     return _isClosure;
   }
-  
+
+  /**
+   * Returns true for a constructor.
+   */
   public boolean isConstructor()
   {
     return _isConstructor;
   }
-  
+
+  /**
+   * True for a constructor.
+   */
   public final void setConstructor(boolean isConstructor)
   {
     _isConstructor = isConstructor;
   }
 
-  /*
+  /**
+   * Returns true for a trait method.
+   */
+  public boolean isTraitMethod()
+  {
+    return _isTraitMethod;
+  }
+
+  /**
+   * True for a trait method.
+   */
+  public void setTraitMethod(boolean isTraitMethod)
+  {
+    _isTraitMethod = isTraitMethod;
+  }
+
+  /**
    * Returns true for a protected function.
    */
   public boolean isPublic()
   {
     return _visibility == Visibility.PUBLIC;
   }
-  
-  /*
+
+  /**
    * Returns true for a protected function.
    */
   public boolean isProtected()
   {
     return _visibility == Visibility.PROTECTED;
   }
-  
-  /*
+
+  /**
    * Returns true for a private function.
    */
   public boolean isPrivate()
   {
     return _visibility == Visibility.PRIVATE;
   }
-  
+
   public final void setVisibility(Visibility v)
   {
     _visibility = v;
   }
-  
+
   public final void setParseIndex(int index)
   {
     _parseIndex = index;
   }
-  
+
   public final Location getLocation()
   {
     return _location;
@@ -322,19 +403,19 @@ abstract public class AbstractFunction extends Callback {
   }
 
   /**
-   * True for a returns reference.
+   * Returns the args.
    */
-  public boolean isReturnsReference()
+  public Arg []getClosureUseArgs()
   {
-    return true;
+    throw new UnsupportedOperationException();
   }
 
   /**
    * Returns the args.
    */
-  public Arg []getArgs()
+  public void setClosureUseArgs(Arg []useArgs)
   {
-    return NULL_ARGS;
+    throw new UnsupportedOperationException();
   }
 
   /**
@@ -352,7 +433,7 @@ abstract public class AbstractFunction extends Callback {
   {
     return this;
   }
-  
+
   /**
    * Returns the documentation for this function.
    */
@@ -376,11 +457,11 @@ abstract public class AbstractFunction extends Callback {
 
     return values;
   }
-  
+
   //
   // Value methods
   //
-  
+
   //
   // Value predicates
   //
@@ -393,13 +474,22 @@ abstract public class AbstractFunction extends Callback {
   {
     return true;
   }
-  
+
   @Override
   public String getType()
   {
     return "object";
   }
-  
+
+  /**
+   * The object is callable if it has an __invoke method
+   */
+  @Override
+  public boolean isCallable(Env env, boolean isCheckSyntaxOnly, Value nameRef)
+  {
+    throw new UnimplementedException();
+  }
+
   /**
    * Evaluates the function.
    */
@@ -422,6 +512,14 @@ abstract public class AbstractFunction extends Callback {
   public Value callCopy(Env env, Value []args)
   {
     return call(env, args).copyReturn();
+  }
+
+  /**
+   * Evaluates the function as a closure.
+   */
+  public Value callClosure(Env env, Value []args, Value []useArgs)
+  {
+    throw new UnsupportedOperationException();
   }
 
   /**
@@ -532,15 +630,15 @@ abstract public class AbstractFunction extends Callback {
   {
     return callRef(env, new Value[] { a1, a2, a3, a4, a5 });
   }
-  
+
   //
   // method calls
   //
-  
+
   /**
    * Evaluates the method call.
    */
-  public Value callMethod(Env env, 
+  public Value callMethod(Env env,
                           QuercusClass qClass,
                           Value qThis,
                           Value []args)
@@ -559,13 +657,24 @@ abstract public class AbstractFunction extends Callback {
     }
     */
   }
-  
+
+  /**
+   * Evaluates the new() method call.
+   */
+  public Value callNew(Env env,
+                       QuercusClass qClass,
+                       Value qThis,
+                       Value []args)
+  {
+    return callMethod(env, qClass, qThis, args);
+  }
+
   /**
    * Evaluates the method call, returning a reference.
    */
-  public Value callMethodRef(Env env, 
+  public Value callMethodRef(Env env,
                              QuercusClass qClass,
-                             Value qThis, 
+                             Value qThis,
                              Value []args)
   {
     throw new IllegalStateException(getClass().getName());
@@ -606,36 +715,36 @@ abstract public class AbstractFunction extends Callback {
   /**
    * Evaluates the function as a method call.
    */
-  public Value callMethod(Env env, 
+  public Value callMethod(Env env,
                           QuercusClass qClass,
                           Value qThis,
                           Value a1)
   {
-    return callMethod(env, qClass, qThis, 
+    return callMethod(env, qClass, qThis,
                       new Value[] { a1 });
   }
 
   /**
    * Evaluates the function as a method call.
    */
-  public Value callMethodRef(Env env, 
+  public Value callMethodRef(Env env,
                              QuercusClass qClass,
                              Value qThis,
                              Value a1)
   {
-    return callMethodRef(env, qClass, qThis, 
+    return callMethodRef(env, qClass, qThis,
                          new Value[] { a1 });
   }
 
   /**
    * Evaluates the function as a method call.
    */
-  public Value callMethod(Env env, 
+  public Value callMethod(Env env,
                           QuercusClass qClass,
                           Value qThis,
                           Value a1, Value a2)
   {
-    return callMethod(env, qClass, qThis, 
+    return callMethod(env, qClass, qThis,
                       new Value[] { a1, a2 });
   }
 
@@ -659,7 +768,7 @@ abstract public class AbstractFunction extends Callback {
                           Value qThis,
                           Value a1, Value a2, Value a3)
   {
-    return callMethod(env, qClass, qThis, 
+    return callMethod(env, qClass, qThis,
                       new Value[] { a1, a2, a3 });
   }
 
@@ -683,7 +792,7 @@ abstract public class AbstractFunction extends Callback {
                           Value qThis,
                           Value a1, Value a2, Value a3, Value a4)
   {
-    return callMethod(env, qClass, qThis, 
+    return callMethod(env, qClass, qThis,
                       new Value[] { a1, a2, a3, a4 });
   }
 
@@ -695,7 +804,7 @@ abstract public class AbstractFunction extends Callback {
                              Value qThis,
                              Value a1, Value a2, Value a3, Value a4)
   {
-    return callMethodRef(env, qClass, qThis, 
+    return callMethodRef(env, qClass, qThis,
                          new Value[] { a1, a2, a3, a4 });
   }
 
@@ -707,19 +816,19 @@ abstract public class AbstractFunction extends Callback {
                           Value qThis,
                           Value a1, Value a2, Value a3, Value a4, Value a5)
   {
-    return callMethod(env, qClass, qThis, 
+    return callMethod(env, qClass, qThis,
                       new Value[] { a1, a2, a3, a4, a5 });
   }
 
   /**
    * Evaluates the function as a method call.
    */
-  public Value callMethodRef(Env env, 
+  public Value callMethodRef(Env env,
                              QuercusClass qClass,
                              Value qThis,
                              Value a1, Value a2, Value a3, Value a4, Value a5)
   {
-    return callMethodRef(env, qClass, qThis, 
+    return callMethodRef(env, qClass, qThis,
                          new Value[] { a1, a2, a3, a4, a5 });
   }
 
@@ -728,11 +837,11 @@ abstract public class AbstractFunction extends Callback {
    */
   public Value callMethod(Env env,
                           QuercusClass qClass,
-                          Value qThis, 
+                          Value qThis,
                           Expr []exprs)
   {
     Value []argValues = new Value[exprs.length];
-    Arg []args = getArgs();
+    Arg []args = getArgs(env);
 
     for (int i = 0; i < exprs.length; i++) {
       if (i < args.length && args[i].isReference()) {
@@ -748,13 +857,13 @@ abstract public class AbstractFunction extends Callback {
   /**
    * Evaluates the function.
    */
-  public Value callMethodRef(Env env, 
-                             QuercusClass qClass, 
-                             Value qThis, 
+  public Value callMethodRef(Env env,
+                             QuercusClass qClass,
+                             Value qThis,
                              Expr []exprs)
   {
     Value []argValues = new Value[exprs.length];
-    Arg []args = getArgs();
+    Arg []args = getArgs(env);
 
     for (int i = 0; i < exprs.length; i++) {
       if (i < args.length && args[i].isReference())
@@ -765,7 +874,7 @@ abstract public class AbstractFunction extends Callback {
 
     return callMethodRef(env, qClass, qThis, argValues);
   }
-  
+
   protected Value errorProtectedAccess(Env env, Value oldThis)
   {
     return env.error(L.l(
@@ -774,7 +883,7 @@ abstract public class AbstractFunction extends Callback {
       getName(),
       oldThis != null ? oldThis.getClassName() : null));
   }
-  
+
   protected Value errorPrivateAccess(Env env, Value oldThis)
   {
     return env.error(L.l(
@@ -783,7 +892,7 @@ abstract public class AbstractFunction extends Callback {
       getName(),
       oldThis != null ? oldThis.getClassName() : null));
   }
-  
+
   @Override
   public String toString()
   {

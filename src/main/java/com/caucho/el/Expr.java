@@ -1047,6 +1047,39 @@ public abstract class Expr extends ValueExpression {
     }
   }
 
+  /**
+   * jsp/3019
+   */
+  public static Class<?> toClass(Object value, ELContext env)
+    throws ELException
+  {
+    if (value == null)
+      return null;
+    else if (value instanceof Class)
+      return (Class<?>) value;
+    else if (value instanceof String) {
+      try {
+        Thread thread = Thread.currentThread();
+        
+        ClassLoader loader = thread.getContextClassLoader();
+        
+        return Class.forName((String) value, false, loader);
+      } catch (ClassNotFoundException e) {
+        error(e, env);
+        
+        return null;
+      }
+    }
+    else {
+      ELException e = new ELException(L.l("can't convert {0} to Class.",
+                                          value.getClass().getName()));
+      
+      error(e, env);
+
+      return null;
+    }
+  }
+
   public static Object toEnum(Object obj, Class<? extends Enum> enumType)
   {
     if (obj == null)
@@ -1269,6 +1302,8 @@ public abstract class Expr extends ValueExpression {
         return Expr.toBigDecimal(obj, null);
       case BIG_INTEGER:
         return Expr.toBigInteger(obj, null);
+      case CLASS:
+        return Expr.toClass(obj, null);
       case OBJECT:
         return obj;
       case VOID:
@@ -1293,7 +1328,9 @@ public abstract class Expr extends ValueExpression {
   public static Object error(Throwable e, ELContext env)
     throws ELException
   {
-    if (env == null) {
+    if (e instanceof ELException)
+      throw (ELException) e;
+    else if (env == null) {
       // jsp/1b56
       throw new ELException(e);
     }
@@ -1354,6 +1391,7 @@ public abstract class Expr extends ValueExpression {
     BYTE,
     BIG_INTEGER,
     BIG_DECIMAL,
+    CLASS,
     VOID,
     OBJECT
   };
@@ -1387,9 +1425,11 @@ public abstract class Expr extends ValueExpression {
     
     _coerceMap.put(BigDecimal.class, CoerceType.BIG_DECIMAL);
     _coerceMap.put(BigInteger.class, CoerceType.BIG_INTEGER);
-    
+
     _coerceMap.put(void.class, CoerceType.VOID);
     _coerceMap.put(Object.class, CoerceType.OBJECT);
+
+    _coerceMap.put(Class.class, CoerceType.CLASS);
   }
 
   static {

@@ -38,11 +38,8 @@ import java.util.logging.Logger;
  * Represents a Quercus java Date value.
  */
 public class JavaDateValue extends JavaValue {
-  private static final Logger log
-    = Logger.getLogger(JavaDateValue.class.getName());
-  
   private final Date _date;
-  
+
   public JavaDateValue(Env env, Date date, JavaClassDef def)
   {
     super(env, date, def);
@@ -58,7 +55,7 @@ public class JavaDateValue extends JavaValue {
     // return seconds per PHP convention
     return _date.getTime() / 1000;
   }
-  
+
   /**
    * Converts to a Java Date.
    */
@@ -68,4 +65,11 @@ public class JavaDateValue extends JavaValue {
     return _date;
   }
 
+  /*
+  @Override
+  public StringValue toString(Env env)
+  {
+    return env.createString(toLong());
+  }
+  */
 }

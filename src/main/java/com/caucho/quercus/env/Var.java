@@ -42,11 +42,13 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import com.caucho.quercus.program.ClassField;
 import com.caucho.vfs.WriteStream;
 
 /**
  * Represents a PHP variable value.
  */
+@SuppressWarnings("serial")
 public class Var extends Value
   implements Serializable
 {
@@ -60,6 +62,8 @@ public class Var extends Value
   public Var(Value value)
   {
     _value = value;
+
+    checkVar(value);
   }
 
   /**
@@ -71,31 +75,40 @@ public class Var extends Value
     // assert(! value.isVar());
     _value = value;
 
+    checkVar(value);
+
     // php/151m
     return this;
   }
-  
+
+  private void checkVar(Value value)
+  {
+    //assert(! (value instanceof Var));
+  }
+
   public boolean isVar()
   {
     return true;
   }
-  
+
   /**
    * Sets the value, possibly replacing if a var and returning the resulting var
-   * 
+   *
    * $a =& (...).
    */
   public Var setRef(Value value)
   {
     // php/078d-f
-    
+
     if (value.isVar())
       return (Var) value;
     else {
       // XXX:
-      
+
       _value = value;
-      
+
+      checkVar(value);
+
       return this;
     }
   }
@@ -107,6 +120,8 @@ public class Var extends Value
   {
     // quercus/0431
     _value = value;
+
+    checkVar(value);
 
     return this;
   }
@@ -120,7 +135,16 @@ public class Var extends Value
     return _value.getType();
   }
 
-  /*
+  /**
+   * Returns the SPL object hash.
+   */
+  @Override
+  public StringValue getObjectHash(Env env)
+  {
+    return _value.getObjectHash(env);
+  }
+
+  /**
    * Returns the type of the resource.
    */
   @Override
@@ -147,6 +171,18 @@ public class Var extends Value
     return _value.getClassName();
   }
 
+  @Override
+  public QuercusClass getQuercusClass()
+  {
+    return _value.getQuercusClass();
+  }
+
+  @Override
+  public QuercusClass findQuercusClass(Env env)
+  {
+    return _value.findQuercusClass(env);
+  }
+
   /**
    * Returns true for an object.
    */
@@ -169,9 +205,9 @@ public class Var extends Value
    * Returns true for an implementation of a class
    */
   @Override
-  public boolean isA(String name)
+  public boolean isA(Env env, String name)
   {
-    return _value.isA(name);
+    return _value.isA(env, name);
   }
 
   /**
@@ -302,6 +338,15 @@ public class Var extends Value
   }
 
   /**
+   * Returns true if the value is empty
+   */
+  @Override
+  public boolean isEmpty(Env env, Value index)
+  {
+    return _value.isEmpty(env, index);
+  }
+
+  /**
    * True if the object is null
    */
   @Override
@@ -373,6 +418,76 @@ public class Var extends Value
   public StringValue toString(Env env)
   {
     return _value.toString(env);
+  }
+
+  /**
+   * Converts to a java boolean object.
+   */
+  @Override
+  public Boolean toJavaBoolean()
+  {
+    return _value.toJavaBoolean();
+  }
+
+  /**
+   * Converts to a java byte object.
+   */
+  @Override
+  public Byte toJavaByte()
+  {
+    return _value.toJavaByte();
+  }
+
+  /**
+   * Converts to a java short object.
+   */
+  @Override
+  public Short toJavaShort()
+  {
+    return _value.toJavaShort();
+  }
+
+  /**
+   * Converts to a java Integer object.
+   */
+  @Override
+  public Integer toJavaInteger()
+  {
+    return _value.toJavaInteger();
+  }
+
+  /**
+   * Converts to a java Long object.
+   */
+  @Override
+  public Long toJavaLong()
+  {
+    return _value.toJavaLong();
+  }
+
+  /**
+   * Converts to a java Float object.
+   */
+  @Override
+  public Float toJavaFloat()
+  {
+    return _value.toJavaFloat();
+  }
+
+  /**
+   * Converts to a java Double object.
+   */
+  public Double toJavaDouble()
+  {
+    return _value.toJavaDouble();
+  }
+
+  /**
+   * Converts to a java Character object.
+   */
+  public Character toJavaCharacter()
+  {
+    return _value.toJavaCharacter();
   }
 
   /**
@@ -469,6 +584,15 @@ public class Var extends Value
   }
 
   /**
+   * Converts to a Java Enum.
+   */
+  @Override
+  public Enum toJavaEnum(Env env, Class cls)
+  {
+    return _value.toJavaEnum(env, cls);
+  }
+
+  /**
    * Converts to a Java BigDecimal.
    */
   @Override
@@ -490,7 +614,7 @@ public class Var extends Value
    * Converts to an array
    */
   @Override
-  public Value toArray()
+  public ArrayValue toArray()
   {
     return _value.toArray();
   }
@@ -511,7 +635,9 @@ public class Var extends Value
   public Value toAutoArray()
   {
     _value = _value.toAutoArray();
-    
+
+    checkVar(_value);
+
     // php/03mg
 
     return this;
@@ -771,7 +897,7 @@ public class Var extends Value
     // return new Var(_value.toArgValue());
     return this;
   }
-  
+
   /**
    * Converts to a local argument variable
    */
@@ -872,11 +998,11 @@ public class Var extends Value
   {
     return _value.toInputStream();
   }
-  
+
   @Override
-  public Callable toCallable(Env env)
+  public Callable toCallable(Env env, boolean isOptional)
   {
-    return _value.toCallable(env);
+    return _value.toCallable(env, isOptional);
   }
 
   //
@@ -916,7 +1042,7 @@ public class Var extends Value
   @Override
   public Value copyArrayItem()
   {
-    // php/041d
+    // php/041d, php/041k, php/041l
     return this;
   }
 
@@ -983,6 +1109,8 @@ public class Var extends Value
   {
     _value = _value.increment(incr);
 
+    checkVar(_value);
+
     return _value;
   }
 
@@ -995,6 +1123,8 @@ public class Var extends Value
     Value value = _value;
 
     _value = value.increment(incr);
+
+    checkVar(_value);
 
     return value;
   }
@@ -1025,6 +1155,8 @@ public class Var extends Value
   {
     _value = _value.preincr();
 
+    checkVar(_value);
+
     return _value;
   }
 
@@ -1035,6 +1167,8 @@ public class Var extends Value
   public Value predecr()
   {
     _value = _value.predecr();
+
+    checkVar(_value);
 
     return _value;
   }
@@ -1049,6 +1183,8 @@ public class Var extends Value
 
     _value = value.postincr();
 
+    checkVar(_value);
+
     return value;
   }
 
@@ -1061,6 +1197,8 @@ public class Var extends Value
     Value value = _value;
 
     _value = value.postdecr();
+
+    checkVar(_value);
 
     return value;
   }
@@ -1295,8 +1433,11 @@ public class Var extends Value
   @Override
   public Value getArray()
   {
-    if (! _value.isset())
+    if (! _value.isset()) {
       _value = new ArrayValueImpl();
+    }
+
+    checkVar(_value);
 
     return _value;
   }
@@ -1307,8 +1448,11 @@ public class Var extends Value
   @Override
   public Value getObject(Env env)
   {
-    if (! _value.isset())
+    if (! _value.isset()) {
       _value = env.createObject();
+    }
+
+    checkVar(_value);
 
     return _value;
   }
@@ -1323,6 +1467,16 @@ public class Var extends Value
   }
 
   /**
+   * Returns a reference to the array value.
+   */
+  @Override
+  public Value getRef(Value index)
+  {
+    // php/066z
+    return _value.getRef(index);
+  }
+
+  /**
    * Returns the array ref.
    */
   @Override
@@ -1330,8 +1484,11 @@ public class Var extends Value
   {
     // php/3d1a
     // php/34ab
-    if (! _value.toBoolean())
+    if (! _value.toBoolean()) {
       _value = new ArrayValueImpl();
+    }
+
+    checkVar(_value);
 
     return _value.getVar(index);
   }
@@ -1359,6 +1516,8 @@ public class Var extends Value
     // php/3d11
     _value = _value.toAutoArray();
 
+    checkVar(_value);
+
     return _value.getArray(index);
   }
 
@@ -1380,6 +1539,8 @@ public class Var extends Value
     // php/3d2p
     _value = _value.toAutoArray();
 
+    checkVar(_value);
+
     return _value.getObject(env, index);
   }
 
@@ -1392,6 +1553,8 @@ public class Var extends Value
     // php/33m{g,h}
     // _value = _value.toAutoArray().append(index, value);
     _value = _value.append(index, value);
+
+    checkVar(_value);
 
     // this is slow, but ok because put() is only used for slow ops
     if (_value.isArray() || _value.isObject()) {
@@ -1413,6 +1576,8 @@ public class Var extends Value
     // php/323g
     _value = _value.append(index, value);
 
+    checkVar(_value);
+
     return _value;
   }
 
@@ -1424,6 +1589,8 @@ public class Var extends Value
   {
     _value = _value.toAutoArray();
 
+    checkVar(_value);
+
     return _value.put(value);
   }
 
@@ -1434,6 +1601,8 @@ public class Var extends Value
   public Var putVar()
   {
     _value = _value.toAutoArray();
+
+    checkVar(_value);
 
     return _value.putVar();
   }
@@ -1478,6 +1647,8 @@ public class Var extends Value
     // php/3a0r
     _value = _value.toAutoObject(env);
 
+    checkVar(_value);
+
     return _value.getFieldVar(env, name);
   }
 
@@ -1504,6 +1675,8 @@ public class Var extends Value
     // php/3d1q
     _value = _value.toAutoObject(env);
 
+    checkVar(_value);
+
     return _value.getFieldArray(env, name);
   }
 
@@ -1514,6 +1687,8 @@ public class Var extends Value
   public Value getFieldObject(Env env, StringValue name)
   {
     _value = _value.toAutoObject(env);
+
+    checkVar(_value);
 
     return _value.getFieldObject(env, name);
   }
@@ -1527,16 +1702,26 @@ public class Var extends Value
     // php/3a0s
     _value = _value.toAutoObject(env);
 
+    checkVar(_value);
+
     return _value.putField(env, name, value);
+  }
+
+  /**
+   * Returns true if the object has this field.
+   */
+  @Override
+  public boolean isFieldExists(Env env, StringValue name) {
+    return _value.isFieldExists(env, name);
   }
 
   /**
    * Returns true if the field is set.
    */
   @Override
-  public boolean issetField(StringValue name)
+  public boolean issetField(Env env, StringValue name)
   {
-    return _value.issetField(name);
+    return _value.issetField(env, name);
   }
 
   /**
@@ -1585,6 +1770,19 @@ public class Var extends Value
   }
 
   /**
+   * Appends a value to an array that is a field of an object.
+   */
+  @Override
+  public Value putThisFieldArray(Env env,
+                                 Value obj,
+                                 StringValue fieldName,
+                                 Value index,
+                                 Value value)
+  {
+    return _value.putThisFieldArray(env, obj, fieldName, index, value);
+  }
+
+  /**
    * Returns the field value as an object
    */
   @Override
@@ -1596,11 +1794,13 @@ public class Var extends Value
   /**
    * Initializes a new field, does not call __set if it is defined.
    */
-  public void initField(StringValue key,
-                        Value value,
-                        FieldVisibility visibility)
+  @Override
+  public void initField(Env env,
+                        StringValue name,
+                        StringValue canonicalName,
+                        Value value)
   {
-    _value.initField(key, value, visibility);
+    _value.initField(env, name, canonicalName, value);
   }
 
   /**
@@ -1616,9 +1816,9 @@ public class Var extends Value
    * Returns true if the field is set.
    */
   @Override
-  public boolean issetThisField(StringValue name)
+  public boolean issetThisField(Env env, StringValue name)
   {
-    return _value.issetThisField(name);
+    return _value.issetThisField(env, name);
   }
 
   /**
@@ -1628,6 +1828,42 @@ public class Var extends Value
   public void unsetThisField(StringValue name)
   {
     _value.unsetThisField(name);
+  }
+
+  /**
+   * Unsets the field.
+   */
+  @Override
+  public void unsetThisPrivateField(String className, StringValue name)
+  {
+    _value.unsetThisPrivateField(className, name);
+  }
+
+  /**
+   * Returns the static field.
+   */
+  @Override
+  public Value getStaticFieldValue(Env env, StringValue name)
+  {
+    return _value.getStaticFieldValue(env, name);
+  }
+
+  /**
+  * Returns the static field reference.
+  */
+  @Override
+  public Var getStaticFieldVar(Env env, StringValue name)
+  {
+    return _value.getStaticFieldVar(env, name);
+  }
+
+  /**
+   * Sets the static field.
+   */
+  @Override
+  public Value setStaticFieldRef(Env env, StringValue name, Value value)
+  {
+    return _value.setStaticFieldRef(env, name, value);
   }
 
   //
@@ -1662,6 +1898,8 @@ public class Var extends Value
     // php/03mg
 
     _value = _value.setCharValueAt(index, value);
+
+    checkVar(_value);
 
     return _value;
   }
@@ -2109,9 +2347,9 @@ public class Var extends Value
    * Encodes the value in JSON.
    */
   @Override
-  public void jsonEncode(Env env, StringValue sb)
+  public void jsonEncode(Env env, JsonEncodeContext context, StringValue sb)
   {
-    _value.jsonEncode(env, sb);
+    _value.jsonEncode(env, context, sb);
   }
 
   @Override
@@ -2123,6 +2361,15 @@ public class Var extends Value
   {
     out.print("&");
     _value.varDump(env, out, depth, valueSet);
+  }
+
+  protected void printRImpl(Env env,
+                            WriteStream out,
+                            int depth,
+                            IdentityHashMap<Value, String> valueSet)
+    throws IOException
+  {
+    _value.printRImpl(env, out, depth, valueSet);
   }
 
   //

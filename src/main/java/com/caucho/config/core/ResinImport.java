@@ -32,6 +32,7 @@ package com.caucho.config.core;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.SchemaBean;
+import com.caucho.config.annotation.NoAspect;
 import com.caucho.config.program.RecoverableProgram;
 import com.caucho.config.type.FlowBean;
 import com.caucho.config.types.FileSetType;
@@ -41,6 +42,8 @@ import com.caucho.vfs.Depend;
 import com.caucho.vfs.Path;
 
 import javax.annotation.PostConstruct;
+
+import java.net.ConnectException;
 import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -49,6 +52,7 @@ import java.util.logging.Logger;
  * Imports values from a separate file.
  */
 // XXX: FlowBean is from ioc/04c1 and server/1ac2
+@NoAspect
 public class ResinImport extends ResinControl implements FlowBean
 {
   private static final L10N L = new L10N(ResinImport.class);
@@ -99,6 +103,16 @@ public class ResinImport extends ResinControl implements FlowBean
   public void init()
     throws Exception
   {
+    try {
+      initImpl();
+    } catch (Exception e) {
+      throw e;
+    }
+  }
+  
+  private void initImpl()
+    throws Exception
+  {
     if (_path == null) {
       if (_fileSet == null)
         throw new ConfigException(L.l("'path' attribute missing from resin:import."));
@@ -128,8 +142,10 @@ public class ResinImport extends ResinControl implements FlowBean
 
     if (_fileSet != null) {
       paths = _fileSet.getPaths();
-
-      Environment.addDependency(new Depend(_fileSet.getDir()));
+      
+      for (Path root : _fileSet.getRoots()) {
+        Environment.addDependency(new Depend(root));
+      }
     }
     else {
       paths = new ArrayList<Path>();
@@ -138,6 +154,10 @@ public class ResinImport extends ResinControl implements FlowBean
 
     for (int i = 0; i < paths.size(); i++) {
       Path path = paths.get(i);
+      
+      if (path.isDirectory()) {
+        continue;
+      }
 
       log.config(L.l("resin:import '{0}'", path.getNativePath()));
 
@@ -154,6 +174,14 @@ public class ResinImport extends ResinControl implements FlowBean
         // config.setResinInclude(true);
 
         config.configureBean(object, path, schema);
+      } catch (ConnectException e) {
+        if (! _isOptional)
+          throw e;
+        
+        if (log.isLoggable(Level.FINEST))
+          log.log(Level.FINEST, e.toString(), e);
+        else
+          log.fine(path + ": " + e);
       } catch (RuntimeException e) {
         if (! _isRecover)
           throw e;

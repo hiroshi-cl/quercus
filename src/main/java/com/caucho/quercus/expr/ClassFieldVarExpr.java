@@ -36,7 +36,6 @@ import com.caucho.quercus.Location;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.env.StringValue;
-import com.caucho.quercus.env.StringBuilderValue;
 import com.caucho.quercus.env.Var;
 import com.caucho.quercus.parser.QuercusParser;
 import com.caucho.util.L10N;
@@ -50,17 +49,13 @@ public class ClassFieldVarExpr extends AbstractVarExpr {
   protected final String _className;
   protected final Expr _varName;
 
-  private StringValue _prefix;
-
   public ClassFieldVarExpr(String className, Expr varName)
   {
     _className = className;
-    
+
     _varName = varName;
-    
-    _prefix = new StringBuilderValue(_className).append("::");
   }
-  
+
   //
   // function call creation
   //
@@ -77,10 +72,10 @@ public class ClassFieldVarExpr extends AbstractVarExpr {
     ExprFactory factory = parser.getExprFactory();
 
     Expr var = factory.createVarVar(_varName);
-    
+
     return factory.createClassMethodCall(location, _className, var, args);
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -92,12 +87,10 @@ public class ClassFieldVarExpr extends AbstractVarExpr {
   public Value eval(Env env)
   {
     StringValue varName = _varName.evalStringValue(env);
-    
-    StringValue var = _prefix.toStringBuilder().append(varName);
-    
-    return env.getStaticValue(var);
+
+    return env.getClass(_className).getStaticFieldValue(env, varName);
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -109,12 +102,10 @@ public class ClassFieldVarExpr extends AbstractVarExpr {
   public Var evalVar(Env env)
   {
     StringValue varName = _varName.evalStringValue(env);
-    
-    StringValue var = _prefix.toStringBuilder().append(varName);
-    
-    return env.getStaticVar(var);
+
+    return env.getClass(_className).getStaticFieldVar(env, varName);
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -126,14 +117,12 @@ public class ClassFieldVarExpr extends AbstractVarExpr {
   public Value evalAssignRef(Env env, Value value)
   {
     StringValue varName = _varName.evalStringValue(env);
-    
-    StringValue var = _prefix.toStringBuilder().append(varName);
-    
-    env.setStaticRef(var, value);
-    
+
+    env.getClass(_className).setStaticFieldRef(env, varName, value);
+
     return value;
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -144,11 +133,11 @@ public class ClassFieldVarExpr extends AbstractVarExpr {
   @Override
   public void evalUnset(Env env)
   {
-    env.error(getLocation(),
-              L.l("{0}::${1}: Cannot unset static variables.",
-                  _className, _varName));
+    env.error(L.l("{0}::${1}: Cannot unset static variables.",
+                  _className, _varName.evalStringValue(env)),
+              getLocation());
   }
-  
+
   public String toString()
   {
     return _className + "::$" + _varName;

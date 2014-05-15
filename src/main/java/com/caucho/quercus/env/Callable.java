@@ -29,6 +29,8 @@
 
 package com.caucho.quercus.env;
 
+import com.caucho.quercus.program.Arg;
+
 /**
  * Represents a call to a function.
  */
@@ -37,12 +39,42 @@ public interface Callable {
    * Returns the callable name, needed as special case for ob_*
    */
   public String getCallbackName();
-  
+
   /**
    * Checks for a valid callback.
    */
   public boolean isValid(Env env);
-  
+
+  /**
+   * Returns the name of the file where this is defined in.
+   */
+  public String getDeclFileName(Env env);
+
+  /**
+   * Returns the start line in the file where this is defined in.
+   */
+  public int getDeclStartLine(Env env);
+
+  /**
+   * Returns the end line in the file where this is defined in.
+   */
+  public int getDeclEndLine(Env env);
+
+  /**
+   * Returns the comment in the file where this is defined in.
+   */
+  public String getDeclComment(Env env);
+
+  /**
+   * Returns true if this returns a reference.
+   */
+  public boolean isReturnsReference(Env env);
+
+  /**
+   * Returns the formal arguments.
+   */
+  public Arg[] getArgs(Env env);
+
   /**
    * Evaluates the callback with no arguments.
    *
@@ -93,12 +125,12 @@ public interface Callable {
    * @param env the calling environment
    */
   abstract public Value call(Env env, Value []args);
-  
+
   /**
    * Evaluates a callback where the first argument is from an array.
    * The callback may be modifying that array element.
    * For ArrayModule.
-   * 
+   *
    * @param env
    * @param array from which a1 came from
    * @param key index of a1 in the array
@@ -113,7 +145,7 @@ public interface Callable {
    * Evaluates a callback where the first argument is from an array.
    * The callback may be modifying that array element.
    * For ArrayModule.
-   * 
+   *
    * @param env
    * @param array from which a1 came from
    * @param key index of a1 in the array
@@ -125,12 +157,12 @@ public interface Callable {
                                   Value key,
                                   Value a1,
                                   Value a2);
-  
+
   /**
    * Evaluates a callback where the first argument is from an array.
    * The callback may be modifying that array element.
    * For ArrayModule.
-   * 
+   *
    * @param env
    * @param array from which a1 came from
    * @param key index of a1 in the array

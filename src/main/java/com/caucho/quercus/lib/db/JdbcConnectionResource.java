@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.db;
 
-import com.caucho.quercus.QuercusModuleException;
+import com.caucho.quercus.UnimplementedException;
 import com.caucho.quercus.env.BooleanValue;
 import com.caucho.quercus.env.ConnectionEntry;
 import com.caucho.quercus.env.Env;
@@ -49,7 +49,7 @@ import java.util.logging.Logger;
  * Represents a JDBC Connection value.
  */
 public abstract class JdbcConnectionResource
-    implements EnvCleanup
+  implements EnvCleanup
 {
   private static final L10N L = new L10N(JdbcConnectionResource.class);
   private static final Logger log
@@ -62,7 +62,7 @@ public abstract class JdbcConnectionResource
 
   // cached statement
   private Statement _savedStmt;
-  
+
   private Statement _freeStmt;
 
   private DatabaseMetaData _dmd;
@@ -73,8 +73,8 @@ public abstract class JdbcConnectionResource
   private String _errorMessage = null;
   private int _errorCode;
   private SQLWarning _warnings;
+  private SQLException _exception;
 
-  private Env _env;
   protected String _host;
   protected int _port;
   private String _userName;
@@ -84,21 +84,30 @@ public abstract class JdbcConnectionResource
   protected int _flags;
   protected String _socket;
 
+  protected boolean _isEmulatePrepares;
+
   private String _catalog;
   private boolean _isCatalogOptimEnabled = false;
 
   private boolean _isUsed;
 
   protected SqlParseToken _sqlParseToken = new SqlParseToken();
-  
-  // php/144b, php/1464, php/1465
-  protected static final String ENCODING = "ISO8859_1";
 
-  public JdbcConnectionResource(Env env)
+  protected JdbcConnectionResource(Env env)
   {
-    _env = env;
-    
     env.addCleanup(this);
+  }
+
+  protected String getDriverName()
+  {
+    return "mysql";
+  }
+
+  protected Value getServerStat(Env env)
+  {
+    env.warning(L.l("driver does not support server stat"));
+
+    return BooleanValue.FALSE;
   }
 
   /**
@@ -116,11 +125,6 @@ public abstract class JdbcConnectionResource
   public boolean isConnected()
   {
     return _conn != null;
-  }
-
-  public Env getEnv()
-  {
-    return _env;
   }
 
   public String getHost()
@@ -158,6 +162,11 @@ public abstract class JdbcConnectionResource
     return _url;
   }
 
+  public boolean isEmulatePrepares()
+  {
+    return _isEmulatePrepares;
+  }
+
   /**
    * Set the current underlying connection and
    * corresponding information: host, port and
@@ -177,12 +186,13 @@ public abstract class JdbcConnectionResource
                                           int flags,
                                           String driver,
                                           String url,
-                                          boolean isNewLink)
+                                          boolean isNewLink,
+                                          boolean isEmulatePrepares)
   {
-    if (_conn != null)
-      throw new IllegalStateException(
-        getClass().getSimpleName() + " attempt to open multiple connections");
-    
+    if (_conn != null) {
+      throw new IllegalStateException(getClass().getSimpleName() + " attempt to open multiple connections");
+    }
+
     _host = host;
     _userName = userName;
     _password = password;
@@ -191,19 +201,20 @@ public abstract class JdbcConnectionResource
     _flags = flags;
     _driver = driver;
     _url = url;
+    _isEmulatePrepares = isEmulatePrepares;
 
     if (dbname == null)
       dbname = "";
-    
+
     _catalog = dbname;
 
     _conn = connectImpl(env, host, userName, password,
                         dbname, port, socket, flags, driver, url,
-                        isNewLink);
+                        isNewLink, isEmulatePrepares);
 
     if (_conn != null) {
       try {
-        if ("".equals(_catalog)) 
+        if ("".equals(_catalog))
           _catalog = _conn.getConnection().getCatalog();
       } catch (SQLException e) {
         log.log(Level.FINE, e.toString(), e);
@@ -226,7 +237,8 @@ public abstract class JdbcConnectionResource
                                                  int flags,
                                                  String driver,
                                                  String url,
-                                                 boolean isNewLink);
+                                                 boolean isNewLink,
+                                                 boolean isEmulatePrepares);
 
   /**
    * Escape the given string for SQL statements.
@@ -234,9 +246,9 @@ public abstract class JdbcConnectionResource
    * @param str a string
    * @return the string escaped for SQL statements
    */
-  protected StringValue realEscapeString(StringValue str)
+  protected StringValue realEscapeString(Env env, StringValue str)
   {
-    StringValue buf = _env.createUnicodeBuilder();
+    StringValue buf = env.createUnicodeBuilder();
 
     final int strLength = str.length();
 
@@ -309,7 +321,7 @@ public abstract class JdbcConnectionResource
   /**
    * Returns JdbcResultResource of available databases
    */
-  protected JdbcResultResource getCatalogs()
+  protected JdbcResultResource getCatalogs(Env env)
   {
     clearErrors();
 
@@ -319,23 +331,23 @@ public abstract class JdbcConnectionResource
 
       ResultSet rs = _dmd.getCatalogs();
 
-      if (rs != null)
-        return createResult(_env, _savedStmt, rs);
-      else
+      if (rs != null) {
+        return createResult(_savedStmt, rs);
+      }
+      else {
         return null;
-    } catch (SQLException e) {
+      }
+    }
+    catch (SQLException e) {
       saveErrors(e);
       log.log(Level.FINEST, e.toString(), e);
       return null;
     }
   }
 
-  /**
-   * @return current catalog or false if error
-   */
-  protected Value getCatalog()
+  protected String getCatalog()
   {
-    return _env.createString(_catalog);
+    return _catalog;
   }
 
   /**
@@ -367,6 +379,11 @@ public abstract class JdbcConnectionResource
     return true;
   }
 
+  protected String getClientInfo(Env env)
+  {
+    throw new UnimplementedException();
+  }
+
   /**
    * Returns the client version
    * @deprecated
@@ -392,21 +409,23 @@ public abstract class JdbcConnectionResource
     _isUsed = true;
 
     Connection conn = null;
-    
-    if (_conn != null)
-      conn = _conn.getConnection();
 
-    if (conn != null)
+    if (_conn != null) {
+      conn = _conn.getConnection();
+    }
+
+    if (conn != null) {
       return conn;
+    }
     else if (_errorMessage != null) {
       env.warning(_errorMessage);
       return null;
     }
     else {
       env.warning(L.l("Connection is not available: {0}", _conn));
-      
+
       _errorMessage = L.l("Connection is not available: {0}", _conn);
-      
+
       return null;
     }
   }
@@ -415,17 +434,17 @@ public abstract class JdbcConnectionResource
    * Returns the unwrapped SQL connection
    * associated to this statement.
    */
-  protected Connection getJavaConnection()
+  protected Connection getJavaConnection(Env env)
     throws SQLException
   {
     // XXX: jdbc for jdk 1.6 updates
-    return _env.getQuercus().getConnection(_conn.getConnection());
+    return env.getQuercus().getConnection(_conn.getConnection());
   }
 
   /**
    * Returns the data source.
    */
-  public String getURL()
+  protected String getURL()
   {
     // return getJavaConnection().getURL();
     return _url;
@@ -434,7 +453,7 @@ public abstract class JdbcConnectionResource
   /**
    * Returns the last error code.
    */
-  public int getErrorCode()
+  protected int getErrorCode()
   {
     return _errorCode;
   }
@@ -442,9 +461,14 @@ public abstract class JdbcConnectionResource
   /**
    * Returns the last error message.
    */
-  public String getErrorMessage()
+  protected String getErrorMessage()
   {
     return _errorMessage;
+  }
+
+  protected SQLException getException()
+  {
+    return _exception;
   }
 
   /**
@@ -465,7 +489,7 @@ public abstract class JdbcConnectionResource
   /**
    * returns the server version
    */
-  public String getServerInfo()
+  protected String getServerInfo()
     throws SQLException
   {
     return getMetaData().getDatabaseProductVersion();
@@ -483,15 +507,15 @@ public abstract class JdbcConnectionResource
     try {
       if (table == null || table.equals(""))
         return null;
-    
+
       TableKey key = new TableKey(getURL(), catalog, schema, table);
 
       // XXX: needs invalidation on DROP or ALTER
       JdbcTableMetaData tableMd = _tableMetadataMap.get(key);
-    
+
       if (tableMd != null && tableMd.isValid(env))
         return tableMd;
-    
+
       tableMd = new JdbcTableMetaData(env,
                                       catalog,
                                       schema,
@@ -517,7 +541,7 @@ public abstract class JdbcConnectionResource
     return _dmd;
   }
 
-  static int infoToVersion(String info)
+  protected static int infoToVersion(String info)
   {
     String[] result = info.split("[.a-z-]");
 
@@ -531,10 +555,15 @@ public abstract class JdbcConnectionResource
 
   public void closeStatement(Statement stmt)
   {
+    closeStatement(stmt, false);
+  }
+
+  private void closeStatement(Statement stmt, boolean isReuse)
+  {
     if (stmt == null)
       return;
 
-    if (_freeStmt == null && false)
+    if (isReuse && _freeStmt == null && false)
       _freeStmt = stmt;
     else
       JdbcUtil.close(stmt);
@@ -543,7 +572,7 @@ public abstract class JdbcConnectionResource
   /**
    * Closes the connection.
    */
-  public boolean close(Env env)
+  protected void close()
   {
     // php/1418
     // cleanup();
@@ -551,10 +580,9 @@ public abstract class JdbcConnectionResource
     ConnectionEntry conn = _conn;
     _conn = null;
 
-    if (conn != null)
+    if (conn != null) {
       conn.phpClose();
-
-    return true;
+    }
   }
 
   /**
@@ -571,23 +599,14 @@ public abstract class JdbcConnectionResource
       log.finer(this +  " cleanup()");
     }
 
-    try {
-      Statement savedStmt = _savedStmt;
-      _savedStmt = null;
-      
-      Statement freeStmt = _freeStmt;
-      _freeStmt = null;
+    Statement savedStmt = _savedStmt;
+    _savedStmt = null;
 
-      if (savedStmt != null)
-        savedStmt.close();
+    Statement freeStmt = _freeStmt;
+    _freeStmt = null;
 
-      if (freeStmt != null)
-        freeStmt.close();
-    } catch (Throwable e) {
-      // must catch throwable to force the conn close to work
-      
-      log.log(Level.FINER, e.toString(), e);
-    }
+    closeStatement(savedStmt, false);
+    closeStatement(freeStmt, false);
 
     ConnectionEntry conn = _conn;
     _conn = null;
@@ -597,12 +616,11 @@ public abstract class JdbcConnectionResource
     }
   }
 
-  public JdbcConnectionResource validateConnection()
+  public JdbcConnectionResource validateConnection(Env env)
   {
     if (_conn == null) {
-      throw _env.createErrorException(
-        L.l("Connection is not properly initialized {0}\nDriver {1}",
-            _url, _driver));
+      throw env.createErrorException(L.l("Connection is not properly initialized {0}\nDriver {1}",
+                                         _url, _driver));
     }
 
     return this;
@@ -622,25 +640,27 @@ public abstract class JdbcConnectionResource
 
     try {
       Connection conn = getConnection(env);
-      
+
       if (conn == null)
         return BooleanValue.FALSE;
 
-      if (checkSql(_conn, sql))
+      if (checkSql(env, _conn, sql))
         return BooleanValue.TRUE;
 
       // statement reuse does not gain performance significantly (< 1%)
       // php/142v
       if (true || stmt == null) {
         // XXX: test for performance
-        
+
         boolean isSeekable = isSeekable();
-        if (isSeekable)
+        if (isSeekable) {
           stmt = conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE,
-                          ResultSet.CONCUR_READ_ONLY);
-        else
+                                      ResultSet.CONCUR_READ_ONLY);
+        }
+        else {
           stmt = conn.createStatement();
-          
+        }
+
         stmt.setEscapeProcessing(false); // php/1406
       }
 
@@ -649,7 +669,7 @@ public abstract class JdbcConnectionResource
         // SELECT statement that returns a result set.
 
         ResultSet rs = stmt.getResultSet();
-        _rs = createResult(_env, stmt, rs);
+        _rs = createResult(stmt, rs);
         _affectedRows = 0;
 
         // XXX: if these are needed, get them lazily for performance
@@ -682,15 +702,17 @@ public abstract class JdbcConnectionResource
         }
         else {
           // _warnings = stmt.getWarnings();
-              _freeStmt = stmt;
+          _freeStmt = stmt;
         }
       }
     } catch (DataTruncation truncationError) {
+      saveErrors(truncationError);
+
       try {
         _affectedRows = stmt.getUpdateCount();
         //_warnings = stmt.getWarnings();
       } catch (SQLException e) {
-        saveErrors(e);
+        //saveErrors(e);
         log.log(Level.FINEST, e.toString(), e);
         return BooleanValue.FALSE;
       }
@@ -711,13 +733,32 @@ public abstract class JdbcConnectionResource
       return BooleanValue.FALSE;
     }
 
-    if (_rs == null)
+    if (_rs == null) {
       return BooleanValue.TRUE;
-    
+    }
+
     return env.wrapJava(_rs);
   }
 
-  private boolean checkSql(ConnectionEntry connEntry, String sql)
+  protected Statement createStatement(Env env)
+    throws SQLException
+  {
+    Connection conn = getConnection(env);
+    Statement stmt;
+
+    boolean isSeekable = isSeekable();
+    if (isSeekable) {
+      stmt = conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE,
+                                  ResultSet.CONCUR_READ_ONLY);
+    }
+    else {
+      stmt = conn.createStatement();
+    }
+
+    return stmt;
+  }
+
+  private boolean checkSql(Env env, ConnectionEntry connEntry, String sql)
   {
     SqlParseToken tok = parseSqlToken(sql, null);
 
@@ -750,7 +791,7 @@ public abstract class JdbcConnectionResource
 
               if (dbname.equals(_catalog)) {
                 try {
-                  setCatalog(null);
+                  setCatalog(env, null);
                 } catch (SQLException e) {
                   log.log(Level.FINEST, e.toString(), e);
                 }
@@ -823,7 +864,7 @@ public abstract class JdbcConnectionResource
     if (prevToken == null)
       i = 0;
     else
-      i = prevToken._end;
+      i = prevToken.getEnd();
 
     while (i < len && Character.isWhitespace(sql.charAt(i))) {
       i++;
@@ -850,13 +891,30 @@ public abstract class JdbcConnectionResource
   /**
    * Creates a database-specific result.
    */
-  protected JdbcResultResource createResult(Env env,
-                                            Statement stmt,
+  protected JdbcResultResource createResult(Statement stmt,
                                             ResultSet rs)
   {
-    return new JdbcResultResource(env, stmt, rs, this);
+    return new JdbcResultResource(rs);
   }
 
+  public JdbcResultResource getResultSet()
+  {
+    return _rs;
+  }
+
+  public boolean getAutoCommit()
+  {
+    clearErrors();
+
+    try {
+      return _conn.getConnection().getAutoCommit();
+    }
+    catch (SQLException e) {
+      saveErrors(e);
+      log.log(Level.FINEST, e.toString(), e);
+      return false;
+    }
+  }
 
   /**
    * sets auto-commmit to true or false
@@ -867,7 +925,8 @@ public abstract class JdbcConnectionResource
 
     try {
       _conn.getConnection().setAutoCommit(mode);
-    } catch (SQLException e) {
+    }
+    catch (SQLException e) {
       saveErrors(e);
       log.log(Level.FINEST, e.toString(), e);
       return false;
@@ -917,14 +976,14 @@ public abstract class JdbcConnectionResource
   /**
    * Sets the catalog
    */
-  public void setCatalog(String name)
+  public void setCatalog(Env env, String name)
     throws SQLException
   {
     if (_catalog != null && _catalog.equals(name))
       return;
 
     clearErrors();
-    
+
     // php/142v
     // mysql jdbc: can't reuse old statements after a USE query
     _savedStmt = null;
@@ -940,13 +999,13 @@ public abstract class JdbcConnectionResource
       if (conn != null)
         conn.phpClose();
 
-      connectInternal(_env, _host, _userName, _password, name,
-                      _port, _socket, _flags, _driver, _url, false);
+      connectInternal(env, _host, _userName, _password, name,
+                      _port, _socket, _flags, _driver, _url, false, _isEmulatePrepares);
     }
     else {
       _conn.setCatalog(name);
     }
-    
+
     _catalog = name;
   }
 
@@ -1025,7 +1084,7 @@ public abstract class JdbcConnectionResource
     } catch (SQLException e) {
       log.log(Level.FINE, e.toString(), e);
       env.warning(e.toString(), e);
-      
+
       return false;
     }
   }
@@ -1042,6 +1101,7 @@ public abstract class JdbcConnectionResource
 
   protected void clearErrors()
   {
+    _exception = null;
     _errorMessage = null;
     _errorCode = 0;
     _warnings = null;
@@ -1049,13 +1109,15 @@ public abstract class JdbcConnectionResource
 
   protected void saveErrors(SQLException e)
   {
+    _exception = e;
+
     _errorMessage = e.getMessage();
     if (_errorMessage == null || "".equals(_errorMessage))
       _errorMessage = e.toString();
-    
+
     _errorCode = e.getErrorCode();
   }
-  
+
   /**
    * Returns true if this connection supports TYPE_SCROLL_INSENSITIVE.
    * http://bugs.caucho.com/view.php?id=3746
@@ -1128,89 +1190,6 @@ public abstract class JdbcConnectionResource
         return false;
 
       return true;
-    }
-  }
-
-  /*
-   * This class enables efficient parsing of a SQL token from
-   * a String. An SQL statement can be parsed one token at a
-   * time. One can efficiently check that first letter of
-   * the parse token via matchesFirstChar() without creating
-   * a substring from the original.
-   */
-
-  protected static class SqlParseToken {
-    private String _query;
-    private String _token;
-    private int _start;
-    private int _end;
-    private char _firstChar;
-
-    public void init()
-    {
-      _query = null;
-      _token = null;
-      _start = -1;
-      _end = -1;
-      _firstChar = '\0';
-    }
-
-    public void assign(String query, int start, int end)
-    {
-      _query = query;
-      _token = null;
-      _start = start;
-      _end = end;
-      _firstChar = query.charAt(start);
-    }
-
-    public boolean matchesFirstChar(char upper, char lower)
-    {
-      return (_firstChar == upper) || (_firstChar == lower);
-    }
-
-    public char getFirstChar()
-    {
-      return _firstChar;
-    }
-
-    // Case insensitive compare of token string
-
-    public boolean matchesToken(String token)
-    {
-      if (_token == null)
-        _token = _query.substring(_start, _end);
-
-      return _token.equalsIgnoreCase(token);
-    }
-
-    public String toString()
-    {
-      if (_token == null)
-        _token = _query.substring(_start, _end);
-      
-      return _token;
-    }
-
-    /*
-     * Return the SQL token as a string. If the token
-     * is back quoted, then remove the back quotes and
-     * return the string inside.
-     */
-
-    public String toUnquotedString()
-    {
-      String tok = toString();
-
-      // Extract database name if back quoted : "DROP DATABASE `DBNAME`"
-
-      if (tok.length() >= 2
-          && tok.charAt(0) == '`'
-          && tok.charAt(tok.length() - 1) == '`') {
-        tok = tok.substring(1, tok.length() - 1);
-      }
-
-      return tok;
     }
   }
 }

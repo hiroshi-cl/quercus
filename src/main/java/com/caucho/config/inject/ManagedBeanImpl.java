@@ -95,8 +95,9 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
     InjectionTargetBuilder<X> target;
     target = new InjectionTargetBuilder<X>(injectManager, beanType, this);
     
-    if (isSessionBean)
+    if (isSessionBean) {
       target.setGenerateInterception(false);
+    }
     
     _injectionTarget = target;
   }
@@ -368,13 +369,14 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
   public void introspectProduces()
   {
     ProducesBuilder builder = new ManagedProducesBuilder(getBeanManager());
-    
+
     builder.introspectProduces(this, getAnnotatedType());
   }
   
   /**
    * Introspects the methods for any @Observes
    */
+  /*
   void introspectObservers()
   {
     EventManager eventManager = getBeanManager().getEventManager();
@@ -382,10 +384,6 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
     AnnotatedType<X> annType = getAnnotatedType();
 
     // ioc/0b25
-    /*
-    if (! getBeanManager().isIntrospectObservers(annType))
-      return;
-      */
     for (AnnotatedMethod<? super X> beanMethod : annType.getMethods()) {
       int param = EventManager.findObserverAnnotation(beanMethod);
       
@@ -393,18 +391,11 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
         continue;
       
       // ioc/0b25
-      /*
-      Class<?> declClass = beanMethod.getJavaMember().getDeclaringClass();
-      if (declClass != annType.getJavaClass() 
-          && declClass.isAssignableFrom(annType.getJavaClass())
-          && ! annType.isAnnotationPresent(Specializes.class)) {
-        continue;
-      }
-      */
       
       eventManager.addObserver(this, beanMethod);
     }
   }
+  */
 
   /**
    * 

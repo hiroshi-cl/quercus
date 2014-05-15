@@ -32,15 +32,16 @@ import com.caucho.loader.EnvironmentLocal;
 
 import javax.annotation.PostConstruct;
 import java.io.File;
+import java.io.IOException;
 
 /**
  * Configuration for CaseInsensitive environments.
  */
 public class CaseInsensitive {
-  private final static EnvironmentLocal<Boolean> _caseInsensitive =
-  new EnvironmentLocal<Boolean>("caucho.vfs.case-insensitive");
+  private final static EnvironmentLocal<Boolean> _caseInsensitive
+    = new EnvironmentLocal<Boolean>("caucho.vfs.case-insensitive");
   
-  private boolean _isCaseInsensitive = true;
+  private static boolean isCaseInsensitive = true;
 
   public CaseInsensitive()
   {
@@ -53,8 +54,9 @@ public class CaseInsensitive {
   {
     Boolean value = _caseInsensitive.get();
 
-    if (value == null)
-      return File.separatorChar == '\\';
+    if (value == null) {
+      return isCaseInsensitive;
+    }
     else
       return value.booleanValue();
   }
@@ -64,7 +66,7 @@ public class CaseInsensitive {
    */
   public void setValue(boolean isInsensitive)
   {
-    _isCaseInsensitive = isInsensitive;
+    isCaseInsensitive = isInsensitive;
   }
 
   /**
@@ -73,6 +75,12 @@ public class CaseInsensitive {
   @PostConstruct
   public void init()
   {
-    _caseInsensitive.set(new Boolean(_isCaseInsensitive));
+    _caseInsensitive.set(new Boolean(isCaseInsensitive));
+  }
+  
+  static {
+    String resinHome = System.getProperty("resin.home");
+    File file = new File(resinHome + "/lib/resin.JAR");
+    isCaseInsensitive = file.exists();
   }
 }

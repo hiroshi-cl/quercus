@@ -193,12 +193,12 @@ abstract public class ArrayValue extends Value {
   {
     return this;
   }
-  
+
   protected Entry getCurrent()
   {
     return _current;
   }
-  
+
   protected void setCurrent(Entry entry)
   {
     _current = entry;
@@ -212,7 +212,7 @@ abstract public class ArrayValue extends Value {
    * Converts to an object.
    */
   @Override
-  public Value toArray()
+  public ArrayValue toArray()
   {
     return this;
   }
@@ -317,7 +317,7 @@ abstract public class ArrayValue extends Value {
    * Converts to a java object.
    */
   @Override
-  public Map toJavaMap(Env env, Class type)
+  public Map toJavaMap(Env env, Class<?> type)
   {
     Map map = null;
 
@@ -350,22 +350,55 @@ abstract public class ArrayValue extends Value {
   }
 
   @Override
-  public boolean isCallable(Env env)
+  public boolean isCallable(Env env, boolean isCheckSyntaxOnly, Value nameRef)
   {
+    //XXX: refactor to use toCallable()
+
     Value obj = get(LongValue.ZERO);
     Value nameV = get(LongValue.ONE);
+
+    if (nameRef != null) {
+      nameRef.set(NullValue.NULL);
+    }
 
     if (! nameV.isString()) {
       return false;
     }
+    else if (isCheckSyntaxOnly) {
+      if (obj.isObject() || obj.isString()) {
+        if (nameRef != null) {
+          StringValue sb = env.createStringBuilder();
 
-    String name = nameV.toString();
+          if (obj.isObject()) {
+            sb.append(obj.getClassName());
+          }
+          else {
+            sb.append(obj);
+          }
+
+          sb.append("::");
+          sb.append(nameV);
+
+          nameRef.set(sb);
+        }
+
+        return true;
+      }
+      else {
+        return false;
+      }
+    }
+
+    AbstractFunction fun;
 
     if (obj.isObject()) {
-      int p = name.indexOf("::");
+      StringValue nameStr = nameV.toStringValue(env);
 
-      // php/09lf
+      int p = nameStr.indexOf("::");
+
       if (p > 0) {
+        String name = nameStr.toString();
+
         String clsName = name.substring(0, p);
         name = name.substring(p + 2);
 
@@ -374,26 +407,53 @@ abstract public class ArrayValue extends Value {
         if (cls == null) {
           return false;
         }
-      }
+        else if (! obj.isA(env, cls)) {
+          return false;
+        }
 
-      // php/1270
-      return obj.findFunction(name) != null;
+        nameStr = env.createString(name);
+
+        fun = cls.findFunction(nameStr);
+      }
+      else {
+        fun = obj.findFunction(nameStr);
+      }
     }
     else {
-      QuercusClass cl = env.findClass(obj.toString());
+      String clsName = obj.toString();
+      QuercusClass cls = env.findClass(clsName);
 
-      if (cl == null) {
+      if (cls == null) {
         return false;
+      }
+
+      StringValue nameStr = nameV.toStringValue(env);
+      fun = cls.findFunction(nameStr);
+    }
+
+    if (fun != null && fun.isPublic()) {
+      if (nameRef != null) {
+        StringValue sb = env.createStringBuilder();
+
+        sb.append(fun.getDeclaringClass().getName());
+        sb.append("::");
+        sb.append(fun.getName());
+
+        nameRef.set(sb);
       }
 
       return true;
     }
+    else {
+      return false;
+    }
   }
+
   /**
    * Converts to a callable object.
    */
   @Override
-  public Callable toCallable(Env env)
+  public Callable toCallable(Env env, boolean isOptional)
   {
     Value obj = get(LongValue.ZERO);
     Value nameV = get(LongValue.ONE);
@@ -401,8 +461,8 @@ abstract public class ArrayValue extends Value {
     if (! nameV.isString()) {
       env.warning(L.l("'{0}' ({1}) is an unknown callback name",
                       nameV, nameV.getClass().getSimpleName()));
-    
-      return super.toCallable(env);
+
+      return super.toCallable(env, false);
     }
 
     String name = nameV.toString();
@@ -420,38 +480,36 @@ abstract public class ArrayValue extends Value {
         QuercusClass cls = env.findClass(clsName);
 
         if (cls == null) {
-          env.warning(L.l(
-            "Callback: '{0}' is not a valid callback class for {1}",
-            clsName, name));
+          env.warning(L.l("Callback: '{0}' is not a valid callback class for {1}",
+                          clsName, name));
 
-          return super.toCallable(env);
+          return super.toCallable(env, false);
         }
-        
+
         return new CallbackClassMethod(cls, env.createString(name), obj);
       }
 
-      return new CallbackObjectMethod(env, obj, env.createString(name));
+      return new CallbackObjectMethod((ObjectValue) obj, env.createString(name));
     }
     else {
       QuercusClass cl = env.findClass(obj.toString());
 
       if (cl == null) {
-        env.warning(
-          L.l("Callback: '{0}' is not a valid callback string for {1}",
-              obj.toString(), obj));
+        env.warning(L.l("Callback: '{0}' is not a valid callback string for {1}",
+                        obj.toString(), obj));
 
-        return super.toCallable(env);
+        return super.toCallable(env, isOptional);
       }
 
-      return new CallbackObjectMethod(env, cl, env.createString(name));
+      return new CallbackClassMethod(cl, env.createString(name), NullThisValue.NULL);
     }
   }
-  
+
   public final Value callCallback(Env env, Callable callback, Value key)
   {
     Value result;
     Value value = getRaw(key);
-    
+
     if (value instanceof Var) {
       value = new ArgRef((Var) value);
 
@@ -463,20 +521,20 @@ abstract public class ArrayValue extends Value {
       result = callback.call(env, aVar);
 
       Value aNew = aVar.toValue();
-      
+
       if (aNew != value)
         put(key, aNew);
     }
 
     return result;
   }
-  
+
   public final Value callCallback(Env env, Callable callback, Value key,
                                   Value a2)
   {
     Value result;
     Value value = getRaw(key);
-    
+
     if (value instanceof Var) {
       value = new ArgRef((Var) value);
 
@@ -488,20 +546,20 @@ abstract public class ArrayValue extends Value {
       result = callback.call(env, aVar, a2);
 
       Value aNew = aVar.toValue();
-      
+
       if (aNew != value)
         put(key, aNew);
     }
 
     return result;
   }
-  
+
   public final Value callCallback(Env env, Callable callback, Value key,
                                   Value a2, Value a3)
   {
     Value result;
     Value value = getRaw(key);
-    
+
     if (value instanceof Var) {
       value = new ArgRef((Var) value);
 
@@ -513,14 +571,14 @@ abstract public class ArrayValue extends Value {
       result = callback.call(env, aVar, a2, a3);
 
       Value aNew = aVar.toValue();
-      
+
       if (aNew != value)
         put(key, aNew);
     }
 
     return result;
   }
-  
+
   /**
    * Returns true for an array.
    */
@@ -597,6 +655,14 @@ abstract public class ArrayValue extends Value {
   public boolean isEmpty()
   {
     return getSize() == 0;
+  }
+
+  @Override
+  public boolean isEmpty(Env env, Value key)
+  {
+    Value value = get(key);
+
+    return value.isEmpty();
   }
 
   /**
@@ -692,7 +758,7 @@ abstract public class ArrayValue extends Value {
 
     return value;
   }
-  
+
 
   /**
    * Adds a new value.
@@ -1278,7 +1344,7 @@ abstract public class ArrayValue extends Value {
     }
   }
 
-  /*
+  /**
    * Serializes the value.
    *
    * @param sb holds result of serialization
@@ -1305,28 +1371,43 @@ abstract public class ArrayValue extends Value {
    * Exports the value.
    */
   @Override
-  public void varExport(StringBuilder sb)
+  protected void varExportImpl(StringValue sb, int level)
   {
-    sb.append("array (");
-    sb.append("\n");
+    if (level != 0) {
+      sb.append('\n');
+    }
 
-    //boolean isFirst = true;
-    for (Entry entry = getHead(); entry != null; entry = entry._next) {
+    for (int i = 0; i < level; i++) {
       sb.append("  ");
-      entry.getKey().varExport(sb);
+    }
+
+    sb.append("array (");
+    sb.append('\n');
+
+    for (Entry entry = getHead(); entry != null; entry = entry._next) {
+      Value key = entry.getKey();
+      Value value = entry.getValue();
+
+      for (int i = 0; i < level + 1; i++) {
+        sb.append("  ");
+      }
+
+      key.varExportImpl(sb, level + 1);
       sb.append(" => ");
-      entry.getValue().varExport(sb);
+
+      value.varExportImpl(sb, level + 1);
       sb.append(",\n");
+    }
+
+    for (int i = 0; i < level; i++) {
+      sb.append("  ");
     }
 
     sb.append(")");
   }
 
-  /**
-   * Encodes the value in JSON.
-   */
   @Override
-  public void jsonEncode(Env env, StringValue sb)
+  public void jsonEncode(Env env, JsonEncodeContext context, StringValue sb)
   {
     long length = 0;
 
@@ -1336,9 +1417,10 @@ abstract public class ArrayValue extends Value {
       Value key = keyIter.next();
 
       if ((! key.isLongConvertible()) || key.toLong() != length) {
-        jsonEncodeAssociative(env, sb);
+        jsonEncodeAssociative(env, context, sb);
         return;
       }
+
       length++;
     }
 
@@ -1346,16 +1428,20 @@ abstract public class ArrayValue extends Value {
 
     length = 0;
     for (Value value : values()) {
-      if (length > 0)
+      if (length > 0) {
         sb.append(',');
-      value.jsonEncode(env, sb);
+      }
+
+      value.jsonEncode(env, context, sb);
       length++;
     }
 
     sb.append(']');
   }
 
-  private void jsonEncodeAssociative(Env env, StringValue sb)
+  public void jsonEncodeAssociative(Env env,
+                                    JsonEncodeContext context,
+                                    StringValue sb)
   {
     sb.append('{');
 
@@ -1369,9 +1455,9 @@ abstract public class ArrayValue extends Value {
       if (length > 0)
         sb.append(',');
 
-      entry.getKey().toStringValue().jsonEncode(env, sb);
+      entry.getKey().toStringValue(env).jsonEncode(env, context, sb);
       sb.append(':');
-      entry.getValue().jsonEncode(env, sb);
+      entry.getValue().jsonEncode(env, context, sb);
       length++;
     }
 
@@ -1419,8 +1505,24 @@ abstract public class ArrayValue extends Value {
   @Override
   public boolean eq(Value rValue)
   {
-    if (rValue == null)
+    if (rValue == this) {
+      return true;
+    }
+    else if (rValue == null) {
       return false;
+    }
+    else if (rValue.isObject()) {
+      // php/03q1
+      return false;
+    }
+    else if (! rValue.isArray()) {
+      return rValue.eq(this);
+    }
+    else if (getSize() != rValue.getSize()) {
+      return false;
+    }
+
+    rValue = rValue.toValue();
 
     for (Map.Entry<Value, Value> entry : entrySet()) {
       Value entryValue = entry.getValue();
@@ -1450,12 +1552,15 @@ abstract public class ArrayValue extends Value {
   @Override
   public boolean eql(Value rValue)
   {
-    if (rValue == this)
+    if (rValue == this) {
       return true;
-    else if (rValue == null)
+    }
+    else if (rValue == null) {
       return false;
-    else if (getSize() != rValue.getSize())
+    }
+    else if (getSize() != rValue.getSize()) {
       return false;
+    }
 
     rValue = rValue.toValue();
 
@@ -1534,7 +1639,7 @@ abstract public class ArrayValue extends Value {
     throws IOException
   {
     out.println("Array");
-    printDepth(out, 8 * depth);
+    printDepth(out, 4 * depth);
     out.println("(");
 
     for (Map.Entry<Value,Value> mapEntry : entrySet()) {
@@ -1543,7 +1648,7 @@ abstract public class ArrayValue extends Value {
       entry.printRImpl(env, out, depth, valueSet);
     }
 
-    printDepth(out, 8 * depth);
+    printDepth(out, 4 * depth);
     out.println(")");
   }
 
@@ -1588,12 +1693,6 @@ abstract public class ArrayValue extends Value {
     {
       _key = entry._key;
 
-      /*
-      if (entry._var != null)
-        _var = entry._var;
-      else
-        _value = entry._value.copyArrayItem();
-      */
       _value = entry._value.copyArrayItem();
     }
 
@@ -1601,7 +1700,7 @@ abstract public class ArrayValue extends Value {
     {
       return _next;
     }
-    
+
     public final void setNext(final Entry next)
     {
       _next = next;
@@ -1611,17 +1710,17 @@ abstract public class ArrayValue extends Value {
     {
       return _prev;
     }
-    
+
     public final void setPrev(final Entry prev)
     {
       _prev = prev;
     }
-    
+
     public final Entry getNextHash()
     {
       return _nextHash;
     }
-    
+
     public final void setNextHash(Entry next)
     {
       _nextHash = next;
@@ -1660,7 +1759,7 @@ abstract public class ArrayValue extends Value {
 
       return var;
     }
-    
+
     /**
      * Argument used/declared as a ref.
      */
@@ -1810,12 +1909,14 @@ abstract public class ArrayValue extends Value {
                               IdentityHashMap<Value, String> valueSet)
       throws IOException
     {
-      printDepth(out, 8 * depth);
-      out.print("    [");
+      printDepth(out, 4 * (depth + 1));
+      out.print("[");
       out.print(_key);
       out.print("] => ");
-      if (getRawValue() != null)
-        getRawValue().printR(env, out, depth + 1, valueSet);
+      if (getRawValue() != null) {
+        getRawValue().printR(env, out, depth + 2, valueSet);
+      }
+
       out.println();
     }
 

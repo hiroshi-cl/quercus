@@ -38,24 +38,22 @@ import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.env.Var;
 import com.caucho.quercus.parser.QuercusParser;
-import com.caucho.util.L10N;
 
 /**
  * Represents a PHP field reference.
  */
 public class ThisFieldVarExpr extends AbstractVarExpr {
-  private static final L10N L = new L10N(ObjectFieldVarExpr.class);
-
   protected final ThisExpr _qThis;
   protected final Expr _nameExpr;
 
-  public ThisFieldVarExpr(ThisExpr qThis, Expr nameExpr)
+  public ThisFieldVarExpr(Location location, ThisExpr qThis, Expr nameExpr)
   {
+    super(location);
+
     _qThis = qThis;
-    
     _nameExpr = nameExpr;
   }
-  
+
   //
   // function call creation
   //
@@ -70,7 +68,7 @@ public class ThisFieldVarExpr extends AbstractVarExpr {
     throws IOException
   {
     ExprFactory factory = parser.getExprFactory();
-    
+
     return factory.createThisMethod(location, _qThis, _nameExpr, args);
   }
 
@@ -104,7 +102,7 @@ public class ThisFieldVarExpr extends AbstractVarExpr {
 
     return value.getThisFieldVar(env, _nameExpr.evalStringValue(env));
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -119,7 +117,7 @@ public class ThisFieldVarExpr extends AbstractVarExpr {
 
     return obj.getThisField(env, _nameExpr.evalStringValue(env));
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -133,10 +131,10 @@ public class ThisFieldVarExpr extends AbstractVarExpr {
     Value obj = env.getThis();
 
     obj.putThisField(env, _nameExpr.evalStringValue(env), value);
-    
+
     return value;
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -150,24 +148,46 @@ public class ThisFieldVarExpr extends AbstractVarExpr {
     Value obj = env.getThis();
 
     obj.putThisField(env, _nameExpr.evalStringValue(env), value);
-    
+
     return value;
   }
-  
+
   /**
    * Evaluates as an array index assign ($a[index] = value).
    */
   @Override
-  public Value evalArrayAssign(Env env, Value index, Value value)
+  public Value evalArrayAssign(Env env, Expr indexExpr, Expr valueExpr)
   {
     Value obj = env.getThis();
-    
+
     StringValue name = _nameExpr.evalStringValue(env);
-    
-    Value fieldVar = obj.getThisFieldVar(env, name);
+
+    Value fieldVar = obj.getThisFieldArray(env, name);
+    Value index = indexExpr.eval(env);
+
+    Value value = valueExpr.evalCopy(env);
 
     // php/03mn
-    return fieldVar.put(index, value);
+    return fieldVar.putThisFieldArray(env, obj, name, index, value);
+  }
+
+  /**
+   * Evaluates as an array index assign ($a[index] = &value).
+   */
+  @Override
+  public Value evalArrayAssignRef(Env env, Expr indexExpr, Expr valueExpr)
+  {
+    Value obj = env.getThis();
+
+    StringValue name = _nameExpr.evalStringValue(env);
+
+    Value fieldVar = obj.getThisFieldArray(env, name);
+    Value index = indexExpr.eval(env);
+
+    Value value = valueExpr.evalRef(env);
+
+    // php/03mn
+    return fieldVar.putThisFieldArray(env, obj, name, index, value);
   }
 
   /**
@@ -197,7 +217,7 @@ public class ThisFieldVarExpr extends AbstractVarExpr {
 
     return obj.getThisFieldObject(env, _nameExpr.evalStringValue(env));
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -211,7 +231,7 @@ public class ThisFieldVarExpr extends AbstractVarExpr {
 
     obj.unsetThisField(_nameExpr.evalStringValue(env));
   }
-  
+
   public String toString()
   {
     return "$this->{" + _nameExpr + "}";

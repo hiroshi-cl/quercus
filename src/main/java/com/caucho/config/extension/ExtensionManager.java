@@ -239,9 +239,14 @@ public class ExtensionManager
       observer = new ExtensionObserver(ext,
                                        method.getMethod(),
                                        method.getArgs());
+      
+      BaseType baseType = method.getBaseType();
+      
+      // #5531, convert Process<Foo> to Process<? extends Foo>
+      baseType = baseType.extendGenericType();
 
       _cdiManager.getEventManager().addExtensionObserver(observer,
-                                                         method.getBaseType(),
+                                                         baseType,
                                                          method.getQualifiers());
       
       if ((ProcessAnnotatedType.class.isAssignableFrom(rawType))
@@ -287,16 +292,6 @@ public class ExtensionManager
     
     _pendingEventList.add(new PendingEvent(processBean, baseType));
     
-    /*
-    getEventManager().fireExtensionEvent(processBean, baseType);
-
-    if (processBean instanceof ProcessBeanImpl<?>
-        && ((ProcessBeanImpl<?>) processBean).isVeto())
-      return null;
-    else
-      return processBean.getBean();
-      */
-    
     return processBean.getBean();
   }
 
@@ -304,6 +299,9 @@ public class ExtensionManager
   public <T> Bean<T> processBean(Bean<T> bean, Annotated ann)
   {
     InjectManager cdi = _cdiManager;
+
+    if (ann == null)
+      ann = cdi.createAnnotatedType(bean.getBeanClass());
     
     ProcessBeanImpl<T> event = new ProcessBeanImpl<T>(_cdiManager, bean, ann);
     
@@ -311,15 +309,6 @@ public class ExtensionManager
     baseType = baseType.fill(cdi.createTargetBaseType(bean.getBeanClass()));
 
     _pendingEventList.add(new PendingEvent(event, baseType));
-    
-    /*
-    getEventManager().fireExtensionEvent(event, baseType);
-
-    if (event.isVeto())
-      return null;
-    else
-      return event.getBean();
-      */
     
     return event.getBean();
   }

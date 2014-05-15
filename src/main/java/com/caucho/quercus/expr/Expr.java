@@ -30,23 +30,26 @@
 package com.caucho.quercus.expr;
 
 import com.caucho.quercus.Location;
-import com.caucho.quercus.env.*;
+import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.QuercusClass;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.Value;
+import com.caucho.quercus.env.Var;
 import com.caucho.quercus.parser.QuercusParser;
 import com.caucho.quercus.statement.Statement;
 import com.caucho.util.L10N;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.logging.Logger;
 
 /**
  * Represents a PHP expression.
  */
 abstract public class Expr {
   private static final L10N L = new L10N(Expr.class);
-  private static final Logger log = Logger.getLogger(Expr.class.getName());
 
   public static final int COMPILE_ARG_MAX = 5;
+  public static final Expr[] NULL_ARGS = new Expr[0];
 
   private final Location _location;
 
@@ -209,7 +212,7 @@ abstract public class Expr {
   {
     return false;
   }
-  
+
   /**
    * Returns true if the expression is a var/left-hand-side.
    */
@@ -217,7 +220,7 @@ abstract public class Expr {
   {
     return false;
   }
-  
+
   //
   // expression creation functions
   //
@@ -233,7 +236,7 @@ abstract public class Expr {
     else
       throw new IOException(msg);
   }
-  
+
   /**
    * Creates an assignment using this value as the right hand side.
    */
@@ -241,7 +244,7 @@ abstract public class Expr {
                                AbstractVarExpr leftHandSide)
   {
     ExprFactory factory = parser.getExprFactory();
-    
+
     return factory.createAssign(leftHandSide, this);
   }
 
@@ -313,6 +316,7 @@ abstract public class Expr {
    * Creates a field ref
    */
   public Expr createFieldGet(ExprFactory factory,
+                             Location location,
                              StringValue name)
   {
     return factory.createFieldGet(this, name);
@@ -322,45 +326,56 @@ abstract public class Expr {
    * Creates a field ref
    */
   public Expr createFieldGet(ExprFactory factory,
+                             Location location,
                              Expr name)
   {
     return factory.createFieldVarGet(this, name);
   }
-  
+
   //
   // class field refs $class::$bar
   //
-  
+
   /**
    * Creates a class field $class::foo
    */
-  public Expr createClassConst(QuercusParser parser, String name)
+  public Expr createClassConst(QuercusParser parser, StringValue name)
   {
     ExprFactory factory = parser.getExprFactory();
-    
+
     return factory.createClassConst(this, name);
   }
-  
+
+  /**
+   * Creates a class field $class::foo
+   */
+  public Expr createClassConst(QuercusParser parser, Expr name)
+  {
+    ExprFactory factory = parser.getExprFactory();
+
+    return factory.createClassConst(this, name);
+  }
+
   /**
    * Creates a class field $class::$foo
    */
-  public Expr createClassField(QuercusParser parser, String name)
+  public Expr createClassField(QuercusParser parser, StringValue name)
   {
     ExprFactory factory = parser.getExprFactory();
-    
+
     return factory.createClassField(this, name);
   }
-  
+
   /**
    * Creates a class field $class::${foo}
    */
   public Expr createClassField(QuercusParser parser, Expr name)
   {
     ExprFactory factory = parser.getExprFactory();
-    
+
     return factory.createClassField(this, name);
   }
-  
+
   //
   // unary operations
   //
@@ -384,7 +399,7 @@ abstract public class Expr {
     throw new IOException(L.l("{0} is an illegal value to isset",
                               this));
   }
-  
+
   //
   // function call creation
   //
@@ -398,10 +413,10 @@ abstract public class Expr {
     throws IOException
   {
     ExprFactory factory = parser.getExprFactory();
-    
+
     return factory.createVarFunction(location, this, args);
   }
-  
+
   //
   // evaluation
   //
@@ -484,7 +499,7 @@ abstract public class Expr {
 
   /**
    * Evaluates the expression as a copy.
-   * 
+   *
    * The default is not to copy because the absence of copying is more
    * testable.
    *
@@ -510,7 +525,7 @@ abstract public class Expr {
   {
     return eval(env);
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -563,11 +578,32 @@ abstract public class Expr {
   /**
    * Evaluates an assignment. The value must not be a Var.
    */
+  public Value evalAssignValue(Env env, Expr valueExpr)
+  {
+    Value value = valueExpr.evalCopy(env);
+
+    return evalAssignValue(env, value);
+  }
+
+  /**
+   * Evaluates an assignment. The value must not be a Var.
+   */
   public Value evalAssignValue(Env env, Value value)
   {
     throw new RuntimeException(L.l(
       "{0} is an invalid left-hand side of an assignment.",
       this));
+  }
+
+  /**
+   * Evaluates an assignment. If the value is a Var, it replaces the
+   * current Var.
+   */
+  public Value evalAssignRef(Env env, Expr valueExpr)
+  {
+    Value value = valueExpr.evalRef(env);
+
+    return evalAssignRef(env, value);
   }
 
   /**
@@ -585,11 +621,82 @@ abstract public class Expr {
    * Evaluates as an array index assign ($a[index] = value).
    * @return what was assigned
    */
-  public Value evalArrayAssign(Env env, Value index, Value value)
+  public Value evalArrayAssign(Env env, Expr indexExpr, Expr valueExpr)
   {
-    Value var = evalVar(env);
+    // php/03mk, php/03mm, php/03mn, php/04b3
+    // overrided in ThisFieldExpr and ThisFieldVarExpr
+    //Value var = eval(env);
+    //
+    //return var.put(index, value);
 
-    return var.put(index, value);
+    Value array = evalArray(env);
+    Value index = indexExpr.eval(env);
+
+    Value value = valueExpr.evalCopy(env);
+
+    Value result = array.put(index, value);
+
+    //return array.get(index); // php/03mm php/03mn
+
+    return result;
+  }
+
+  /**
+   * Evaluates as an array index assign ($a[index] = value).
+   * @return what was assigned
+   */
+  public Value evalArrayAssignRef(Env env, Expr indexExpr, Expr valueExpr)
+  {
+    // php/03mk, php/03mm, php/03mn, php/04b3
+    // overrided in ThisFieldExpr and ThisFieldVarExpr
+    //Value var = eval(env);
+    //
+    //return var.put(index, value);
+
+    Value array = evalArray(env);
+    Value index = indexExpr.eval(env);
+
+    Value value = valueExpr.evalRef(env);
+
+    Value result = array.put(index, value);
+
+    //return array.get(index); // php/03mm php/03mn
+
+    return result;
+  }
+
+  /**
+   * Evaluates as an array index assign ($a[index] = value).
+   * @return what was assigned
+   */
+  public Value evalArrayAssignRef(Env env, Expr indexExpr, Value value)
+  {
+    // php/03mk, php/03mm, php/03mn, php/04b3
+    // overrided in ThisFieldExpr and ThisFieldVarExpr
+    //Value var = eval(env);
+    //
+    //return var.put(index, value);
+
+    Value array = evalArray(env);
+    Value index = indexExpr.eval(env);
+
+    Value result = array.put(index, value);
+
+    //return array.get(index); // php/03mm php/03mn
+
+    return result;
+  }
+
+  /**
+   * Evaluates as an array tail assign ($a[] = value).
+   * @return what was assigned
+   */
+  public Value evalArrayAssignTail(Env env, Value value)
+  {
+    Value array = evalArray(env);
+    array.put(value);
+
+    return value;
   }
 
   /**
@@ -624,9 +731,9 @@ abstract public class Expr {
     Value value = eval(env);
 
     if (value.isObject())
-      return value.toString(env).toString();
+      return value.toString(env).toJavaString();
     else
-      return value.toString();
+      return value.toJavaString();
   }
 
   /**
@@ -698,26 +805,53 @@ abstract public class Expr {
   }
 
   /**
+   * Evaluates the expression as an isset() statement.
+   */
+  public Value evalIssetValue(Env env)
+  {
+    return eval(env);
+  }
+
+  /**
    * Evaluates the expression as an array index unset
    */
-  public void evalUnsetArray(Env env, Value index)
+  public void evalUnsetArray(Env env, Expr indexExpr)
   {
     Value array = evalDirty(env);
+    Value index = indexExpr.eval(env);
 
     array.remove(index);
   }
-  
+
+  /**
+   * Evaluates as an empty() expression.
+   */
+  public boolean evalEmpty(Env env)
+  {
+    return eval(env).isEmpty();
+  }
+
+  /**
+   * Evaluates as a QuercusClass.
+   */
+  public QuercusClass evalQuercusClass(Env env)
+  {
+    Value obj = eval(env);
+
+    return obj.findQuercusClass(env);
+  }
+
   /**
    * Evaluates arguments
    */
   public static Value []evalArgs(Env env, Expr []exprs)
   {
     Value []args = new Value[exprs.length];
-    
+
     for (int i = 0; i < args.length; i++) {
       args[i] = exprs[i].evalArg(env, true);
     }
-    
+
     return args;
   }
 
@@ -728,6 +862,25 @@ abstract public class Expr {
     throws IOException
   {
     eval(env).print(env);
+  }
+
+  @Override
+  public boolean equals(Object obj)
+  {
+    if (this == obj) {
+      return true;
+    }
+    else if (! (obj instanceof Expr)) {
+      return false;
+    }
+
+    Expr expr = (Expr) obj;
+
+    if (! isLiteral() || ! expr.isLiteral()) {
+      return false;
+    }
+
+    return evalConstant().equals(expr.evalConstant());
   }
 
   public String toString()

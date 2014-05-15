@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -41,7 +41,12 @@ import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.QuercusValueException;
 import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.page.QuercusPage;
-import com.caucho.util.Alarm;
+import com.caucho.quercus.servlet.api.QuercusHttpServletRequest;
+import com.caucho.quercus.servlet.api.QuercusHttpServletRequestImpl;
+import com.caucho.quercus.servlet.api.QuercusHttpServletResponse;
+import com.caucho.quercus.servlet.api.QuercusHttpServletResponseImpl;
+import com.caucho.quercus.servlet.api.QuercusServletContextImpl;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.vfs.FilePath;
 import com.caucho.vfs.Path;
@@ -54,6 +59,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpServlet;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.FileNotFoundException;
@@ -63,6 +69,7 @@ import java.util.logging.Logger;
 /**
  * Servlet to call PHP through javax.script.
  */
+@SuppressWarnings("serial")
 public class QuercusServletImpl extends HttpServlet
 {
   private static final L10N L = new L10N(QuercusServletImpl.class);
@@ -72,10 +79,11 @@ public class QuercusServletImpl extends HttpServlet
   protected QuercusContext _quercus;
   protected ServletConfig _config;
   protected ServletContext _servletContext;
-  
+
   /**
    * initialize the script manager.
    */
+  @Override
   public final void init(ServletConfig config)
     throws ServletException
   {
@@ -83,21 +91,25 @@ public class QuercusServletImpl extends HttpServlet
     _servletContext = config.getServletContext();
 
     checkServletAPIVersion();
-    
+
     Path pwd = new FilePath(_servletContext.getRealPath("/"));
-    
+    Path webInfDir = new FilePath(_servletContext.getRealPath("/WEB-INF"));
+
     getQuercus().setPwd(pwd);
+    getQuercus().setWebInfDir(webInfDir);
 
     // need to set these for non-Resin containers
-    if (! Alarm.isTest() && ! getQuercus().isResin()) {
+    if (! CurrentTime.isTest() && ! getQuercus().isResin()) {
       Vfs.setPwd(pwd);
-      WorkDir.setLocalWorkDir(pwd.lookup("WEB-INF/work"));
+      WorkDir.setLocalWorkDir(webInfDir.lookup("work"));
     }
+
+    initImpl(config);
 
     getQuercus().init();
     getQuercus().start();
   }
-  
+
   protected void initImpl(ServletConfig config)
     throws ServletException
   {
@@ -127,44 +139,55 @@ public class QuercusServletImpl extends HttpServlet
    * Service.
    */
   @Override
-  public void service(HttpServletRequest request,
-                      HttpServletResponse response)
+  public final void service(HttpServletRequest request,
+                            HttpServletResponse response)
     throws ServletException, IOException
   {
     Env env = null;
     WriteStream ws = null;
-    
+
+    QuercusHttpServletRequest req = new QuercusHttpServletRequestImpl(request);
+    QuercusHttpServletResponse res = new QuercusHttpServletResponseImpl(response);
+
     try {
-      Path path = getPath(request);
+      Path path = getPath(req);
 
       QuercusPage page;
 
       try {
         page = getQuercus().parse(path);
       }
-      catch (FileNotFoundException ex) {
+      catch (FileNotFoundException e) {
         // php/2001
-        log.log(Level.FINER, ex.toString(), ex);
+        log.log(Level.FINER, e.toString(), e);
 
         response.sendError(HttpServletResponse.SC_NOT_FOUND);
 
         return;
       }
 
-
       ws = openWrite(response);
-      
+
+      // php/2002
+      // for non-Resin containers
+      // for servlet filters that do post-request work after Quercus
+      ws.setDisableCloseSource(true);
+
       // php/6006
       ws.setNewlineString("\n");
 
       QuercusContext quercus = getQuercus();
-      
-      env = quercus.createEnv(page, ws, request, response);
-      quercus.setServletContext(_servletContext);
-      
+
+      env = quercus.createEnv(page, ws, req, res);
+
+      // php/815d
+      env.setPwd(path.getParent());
+
+      quercus.setServletContext(new QuercusServletContextImpl(_servletContext));
+
       try {
         env.start();
-        
+
         // php/2030, php/2032, php/2033
         // Jetty hides server classes from web-app
         // http://docs.codehaus.org/display/JETTY/Classloading
@@ -177,7 +200,7 @@ public class QuercusServletImpl extends HttpServlet
           = quercus.getIniValue("auto_prepend_file").toStringValue(env);
         if (prepend.length() > 0) {
           Path prependPath = env.lookup(prepend);
-          
+
           if (prependPath == null)
             env.error(L.l("auto_prepend_file '{0}' not found.", prepend));
           else {
@@ -192,7 +215,7 @@ public class QuercusServletImpl extends HttpServlet
           = quercus.getIniValue("auto_append_file").toStringValue(env);
         if (append.length() > 0) {
           Path appendPath = env.lookup(append);
-          
+
           if (appendPath == null)
             env.error(L.l("auto_append_file '{0}' not found.", append));
           else {
@@ -216,10 +239,16 @@ public class QuercusServletImpl extends HttpServlet
       }
       catch (QuercusValueException e) {
         log.log(Level.FINE, e.toString(), e);
-        
+
         ws.println(e.toString());
 
         //  return;
+      }
+      catch (StackOverflowError e) {
+        RuntimeException myException
+          = new RuntimeException(L.l("StackOverflowError at {0}", env.getLocation()), e);
+
+        throw myException;
       }
       catch (Throwable e) {
         if (response.isCommitted())
@@ -254,15 +283,21 @@ public class QuercusServletImpl extends HttpServlet
       throw e;
     }
     catch (Throwable e) {
-      throw new ServletException(e);
+      handleThrowable(response, e);
     }
+  }
+
+  protected void handleThrowable(HttpServletResponse response, Throwable e)
+    throws IOException, ServletException
+  {
+    throw new ServletException(e);
   }
 
   protected WriteStream openWrite(HttpServletResponse response)
     throws IOException
   {
     WriteStream ws;
-    
+
     OutputStream out = response.getOutputStream();
 
     ws = Vfs.openWrite(out);
@@ -270,12 +305,46 @@ public class QuercusServletImpl extends HttpServlet
     return ws;
   }
 
-  Path getPath(HttpServletRequest req)
+  protected Path getPath(QuercusHttpServletRequest req)
   {
-    String scriptPath = QuercusRequestAdapter.getPageServletPath(req);
+    // php/8173
+    Path pwd = getQuercus().getPwd().copy();
+
+    String servletPath = QuercusRequestAdapter.getPageServletPath(req);
+
+    if (servletPath.startsWith("/")) {
+      servletPath = servletPath.substring(1);
+    }
+
+    Path path = pwd.lookupChild(servletPath);
+
+    // php/2010, php/2011, php/2012
+    if (path.isFile()) {
+      return path;
+    }
+
+    StringBuilder sb = new StringBuilder();
+
+    sb.append(servletPath);
+
     String pathInfo = QuercusRequestAdapter.getPagePathInfo(req);
 
-    Path pwd = Vfs.lookup();
+    if (pathInfo != null) {
+      sb.append(pathInfo);
+    }
+
+    String scriptPath = sb.toString();
+
+    path = pwd.lookupChild(scriptPath);
+
+    return path;
+
+    /* jetty getRealPath() de-references symlinks, which causes problems with MergePath
+    // php/8173
+    Path pwd = getQuercus().getPwd().copy();
+
+    String scriptPath = QuercusRequestAdapter.getPageServletPath(req);
+    String pathInfo = QuercusRequestAdapter.getPagePathInfo(req);
 
     Path path = pwd.lookup(req.getRealPath(scriptPath));
 
@@ -291,6 +360,7 @@ public class QuercusServletImpl extends HttpServlet
       fullPath = scriptPath;
 
     return pwd.lookup(req.getRealPath(fullPath));
+    */
   }
 
   /**
@@ -298,9 +368,8 @@ public class QuercusServletImpl extends HttpServlet
    */
   protected QuercusContext getQuercus()
   {
-    synchronized (this) {
-      if (_quercus == null)
-        _quercus = new QuercusContext();
+    if (_quercus == null) {
+      _quercus = new QuercusContext();
     }
 
     return _quercus;

@@ -177,6 +177,11 @@ abstract public class AbstractBeanConfig {
     if (binding.annotationType().isAnnotationPresent(Qualifier.class))
       _qualifiers.add(binding);
   }
+  
+  public void add(Bean bean)
+  {
+    System.out.println("Bean: " + bean);
+  }
 
   /**
    * Sets the scope attribute.
@@ -184,17 +189,17 @@ abstract public class AbstractBeanConfig {
   public void setScope(String scope)
   {
     if ("singleton".equals(scope))
-      add(new AnnotationLiteral<Singleton>() {});
+      add(SingletonLiteral.ANN);
     else if ("dependent".equals(scope))
-      add(new AnnotationLiteral<Dependent>() {});
+      add(DependentLiteral.ANN);
     else if ("request".equals(scope))
-      add(new AnnotationLiteral<RequestScoped>() {});
+      add(RequestScopedLiteral.ANN);
     else if ("session".equals(scope))
-      add(new AnnotationLiteral<SessionScoped>() {});
+      add(SessionScopedLiteral.ANN);
     else if ("application".equals(scope))
-      add(new AnnotationLiteral<ApplicationScoped>() {});
+      add(ApplicationScopedLiteral.ANN);
     else if ("conversation".equals(scope))
-      add(new AnnotationLiteral<ConversationScoped>() {});
+      add(ConversationScopedLiteral.ANN);
     else {
       throw new ConfigException(L.l("'{0}' is an invalid scope.  The scope must be a valid @Scope annotation."));
     }
@@ -253,11 +258,11 @@ abstract public class AbstractBeanConfig {
 
     if (value != null) {
       bean = builder.singleton(value);
-      beanManager.addBean(bean);
+      beanManager.addBeanDiscover(bean);
     }
     else {
       bean = builder.bean();
-      beanManager.addBean(bean);
+      beanManager.addBeanDiscover(bean);
     }
 
 

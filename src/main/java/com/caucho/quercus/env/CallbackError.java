@@ -29,19 +29,13 @@
 
 package com.caucho.quercus.env;
 
-import com.caucho.quercus.function.AbstractFunction;
-import com.caucho.util.L10N;
-import com.caucho.vfs.WriteStream;
-
-import java.io.IOException;
-import java.util.IdentityHashMap;
+import com.caucho.quercus.program.Arg;
 
 /**
  * Represents a call to an object's method
  */
+@SuppressWarnings("serial")
 public class CallbackError extends Callback {
-  private static final L10N L = new L10N(CallbackError.class);
-
   private final String _errorString;
 
   public CallbackError(String errorString)
@@ -60,13 +54,49 @@ public class CallbackError extends Callback {
   {
     return false;
   }
-  
+
   @Override
   public boolean isInternal(Env env)
   {
     return false;
   }
-  
+
+  @Override
+  public String getDeclFileName(Env env)
+  {
+    return null;
+  }
+
+  @Override
+  public int getDeclStartLine(Env env)
+  {
+    return -1;
+  }
+
+  @Override
+  public int getDeclEndLine(Env env)
+  {
+    return -1;
+  }
+
+  @Override
+  public String getDeclComment(Env env)
+  {
+    return null;
+  }
+
+  @Override
+  public boolean isReturnsReference(Env env)
+  {
+    return false;
+  }
+
+  @Override
+  public Arg []getArgs(Env env)
+  {
+    return null;
+  }
+
   @Override
   public String getCallbackName()
   {

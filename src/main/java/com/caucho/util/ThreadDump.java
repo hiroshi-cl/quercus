@@ -96,7 +96,7 @@ public class ThreadDump
    */
   public String getThreadDump()
   {
-    return getThreadDump(false);
+    return getThreadDump(32, false);
   }
 
   /**
@@ -104,29 +104,30 @@ public class ThreadDump
    * uses cached dump.
    * @param onlyActive if true only running threads are logged
    */
-  public void dumpThreads(boolean onlyActive)
+  public void dumpThreads(int depth, boolean onlyActive)
   {
-    log.info(getThreadDump(onlyActive));
+    log.info(getThreadDump(depth, onlyActive));
   }
 
   /**
    * Returns dump of threads.  Optionally uses cached dump.
    * @param onlyActive if true only running threads are logged
    */
-  public String getThreadDump(boolean onlyActive)
+  public String getThreadDump(int depth, boolean onlyActive)
   {
     ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
 
     long []ids = threadBean.getAllThreadIds();
-    ThreadInfo []info = threadBean.getThreadInfo(ids, 32);
+    ThreadInfo []info = threadBean.getThreadInfo(ids, depth);
 
     StringBuilder sb = new StringBuilder();
-    sb.append("Thread Dump generated " + new Date(Alarm.getCurrentTime()));
+    sb.append("Thread Dump generated " + new Date(CurrentTime.getCurrentTime()));
 
     Arrays.sort(info, new ThreadCompare());
     
     buildThreads(sb, info, Thread.State.RUNNABLE, false);
     buildThreads(sb, info, Thread.State.RUNNABLE, true);
+    
     if (! onlyActive) {
       buildThreads(sb, info, Thread.State.BLOCKED, false);
       buildThreads(sb, info, Thread.State.WAITING, false);
@@ -176,7 +177,6 @@ public class ThreadDump
   {
     sb.append("\n\"");
     sb.append(info.getThreadName());
-    sb.append("\" id=" + info.getThreadId());
     sb.append(" " + info.getThreadState());
 
     if (info.isInNative())
@@ -234,9 +234,12 @@ public class ThreadDump
   {
     StringBuilder sb = new StringBuilder();
     
-    sb.append("{");
-    sb.append("\"create_time\" : \"" + new Date(Alarm.getCurrentTime()) + "\",\n");
-    sb.append("\"thread_dump\" : {\n");
+    long timestamp = CurrentTime.getCurrentTime();
+    
+    sb.append("{\n");
+    sb.append("  \"create_time\": \"" + new Date(timestamp) + "\",\n");
+    sb.append("  \"timestamp\": " + timestamp + ",\n");
+    sb.append("  \"thread_dump\" : {\n");
     
     ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
 
@@ -257,7 +260,7 @@ public class ThreadDump
       jsonDumpThread(sb, threadInfo);
     }
     
-    sb.append("\n}");
+    sb.append("\n  }");
     sb.append("\n}");
 
     return sb.toString();

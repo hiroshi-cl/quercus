@@ -35,23 +35,19 @@ import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.expr.Expr;
 import com.caucho.quercus.module.AbstractQuercusModule;
+import com.caucho.quercus.program.ClassField;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.util.L10N;
 
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
-import java.util.logging.Logger;
 
 /**
  * Quercus class information
  */
 public class ClassesModule extends AbstractQuercusModule {
   private static final L10N L = new L10N(ClassesModule.class);
-  private static final Logger log
-    = Logger.getLogger(ClassesModule.class.getName());
 
   /**
    * Calls an object method.
@@ -65,14 +61,16 @@ public class ClassesModule extends AbstractQuercusModule {
       return obj.callMethod(env, name, args);
     }
     else {
-      QuercusClass cls = env.findClass(obj.toString());
-      
-      return cls.callMethod(
-          env, env.getThis(), name, name.hashCode(), args).copyReturn();
+      QuercusClass cls = env.getClass(obj.toString());
+
+      Value result
+        = cls.callMethod(env, env.getThis(), name, name.hashCode(), args);
+
+      return result.copyReturn();
     }
   }
 
-  /*
+  /**
    * Calls a object method with arguments in an array.
    */
   public static Value call_user_method_array(Env env,
@@ -81,21 +79,49 @@ public class ClassesModule extends AbstractQuercusModule {
                                              ArrayValue params)
   {
     Value []args = params.valuesToArray();
-    
+
     return call_user_method(env, methodName, obj, args);
   }
-  
+
+  /**
+   * bool class_alias ( string $original , string $alias [, bool $autoload = TRUE ] )
+   */
+  public boolean class_alias(Env env,
+                             String original, String alias,
+                             @Optional("true") boolean isAutoLoad)
+  {
+    QuercusClass aliasCls = env.findClass(alias, -1, false, true, true);
+
+    if (aliasCls != null) {
+      env.warning(L.l("cannot redeclare class {0}", alias));
+
+      return false;
+    }
+
+    QuercusClass cls = env.findClass(original, -1, isAutoLoad, true, true);
+
+    if (cls == null) {
+      env.warning(L.l("original class not found {0}", original));
+
+      return false;
+    }
+
+    env.addClassAlias(alias, cls);
+
+    return true;
+  }
+
   /**
    * returns true if the class exists.
    */
-  public boolean class_exists(Env env,
-                              String className,
-                              @Optional("true") boolean useAutoload)
+  public static boolean class_exists(Env env,
+                                     String className,
+                                     @Optional("true") boolean useAutoload)
   {
     if (className == null)
       return false;
-    
-    QuercusClass cl =  env.findClass(className, useAutoload, true);
+
+    QuercusClass cl =  env.findClass(className, -1, useAutoload, true, true);
 
     // php/[03]9m1
     return cl != null && ! cl.isInterface();
@@ -104,7 +130,7 @@ public class ClassesModule extends AbstractQuercusModule {
   /**
    * Returns the object's class name
    */
-  public Value get_class(Env env, Value value)
+  public static Value get_class(Env env, Value value)
   {
     if (value instanceof ObjectValue) {
       ObjectValue obj = (ObjectValue) value;
@@ -116,23 +142,26 @@ public class ClassesModule extends AbstractQuercusModule {
 
       return env.createString(obj.getClassName());
     }
-    else
+    else {
+      env.warning(L.l("expected an object, but saw {0}", value.getType()));
+
       return BooleanValue.FALSE;
+    }
   }
-  
-  /*
+
+  /**
    * Returns the calling class name.
    */
   @ReturnNullAsFalse
-  public String get_called_class(Env env)
+  public static String get_called_class(Env env)
   {
     Value qThis = env.getThis();
-    
+
     if (qThis == null || qThis.getQuercusClass() == null) {
       env.warning("get_called_class was not called from a class method");
       return null;
     }
-    
+
     return qThis.getQuercusClass().getName();
   }
 
@@ -160,13 +189,13 @@ public class ClassesModule extends AbstractQuercusModule {
     ArrayValue array = new ArrayValueImpl();
 
     HashSet<String> set = new HashSet<String>();
-    
+
     // to combine __construct and class name constructors
     for (AbstractFunction fun : cl.getClassMethods()) {
       if (fun.isPublic())
         set.add(fun.getName());
     }
-    
+
     for (String name : set) {
       array.put(name);
     }
@@ -200,8 +229,8 @@ public class ClassesModule extends AbstractQuercusModule {
     for (ClassField field : cl.getClassFields().values()) {
       if (field.isPublic()) {
         StringValue name = field.getName();
-        Expr initValue = field.getInitValue();
-        
+        Expr initValue = field.getInitExpr();
+
         Value value = initValue.eval(env);
 
         varArray.append(name, value);
@@ -286,7 +315,7 @@ public class ClassesModule extends AbstractQuercusModule {
                                   String interfaceName,
                                   @Optional("true") boolean useAutoload)
   {
-    QuercusClass cl =  env.findClass(interfaceName, useAutoload, true);
+    QuercusClass cl =  env.findClass(interfaceName, -1, useAutoload, true, true);
 
     // php/[03]9m0
     return cl != null && cl.isInterface();
@@ -295,9 +324,9 @@ public class ClassesModule extends AbstractQuercusModule {
   /**
    * Returns true if the object implements the given class.
    */
-  public static boolean is_a(@ReadOnly Value value, String name)
+  public static boolean is_a(Env env, @ReadOnly Value value, String name)
   {
-    return value.isA(name);
+    return value.isA(env, name);
   }
 
   /**
@@ -315,13 +344,14 @@ public class ClassesModule extends AbstractQuercusModule {
                                        @ReadOnly Value value,
                                        String name)
   {
-    if (value instanceof StringValue) {
+    if (value.isString()) {
       QuercusClass cl = env.findClass(value.toString());
 
-      return cl.isA(name) && !cl.getName().equalsIgnoreCase(name);
+      return cl.isA(env, name) && ! cl.getName().equalsIgnoreCase(name);
     }
-    else
-      return value.isA(name) && !value.getClassName().equalsIgnoreCase(name);
+    else {
+      return value.isA(env, name) && ! value.getClassName().equalsIgnoreCase(name);
+    }
   }
 
   /**
@@ -330,21 +360,31 @@ public class ClassesModule extends AbstractQuercusModule {
    * @param obj the object to test
    * @param methodName the name of the method
    */
-  public static boolean method_exists(Env env, 
-                                      Value obj, 
+  public static boolean method_exists(Env env,
+                                      Value obj,
                                       StringValue methodName)
   {
+    if (obj instanceof Closure && methodName.equalsString("__invoke")) {
+      // XXX: Closure needs to be a proper PHP object
+
+      return true;
+    }
+
     QuercusClass qClass = obj.getQuercusClass();
 
-    if (qClass == null)
+
+    if (qClass == null) {
       qClass = env.findClass(obj.toString());
-    
-    if (qClass != null)
+    }
+
+    if (qClass != null) {
       return qClass.findFunction(methodName) != null;
-    else
+    }
+    else {
       return false;
+    }
   }
-  
+
   /**
    * Returns true if the named property exists on the object.
    */
@@ -352,25 +392,23 @@ public class ClassesModule extends AbstractQuercusModule {
                                       Value obj,
                                       StringValue name)
   {
-    QuercusClass cls;
-    
     if (obj.isString()) {
-      cls = env.findClass(obj.toString());
+      QuercusClass cls = env.findClass(obj.toString());
+
+      if (cls != null && cls.getClassField(name) != null)
+        return BooleanValue.TRUE;
+      else
+        return BooleanValue.FALSE;
     }
     else if (obj.isObject()) {
-      cls = ((ObjectValue) obj.toValue()).getQuercusClass();
-      
-      return obj.hasField(name) ? BooleanValue.TRUE : BooleanValue.FALSE;
+      boolean result = obj.isFieldExists(env, name);
+
+      return BooleanValue.create(result);
     }
     else {
       env.warning("must pass in object or name of class");
       return NullValue.NULL;
     }
-    
-    if (cls != null && cls.getClassField(name) != null)
-      return BooleanValue.TRUE;
-    else
-      return BooleanValue.FALSE;
   }
 
 }

@@ -33,9 +33,11 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.types.Bytes;
 import com.caucho.config.types.CronType;
 import com.caucho.config.types.Period;
-import com.caucho.env.thread.TaskWorker;
+import com.caucho.env.thread.AbstractTaskWorker;
+import com.caucho.loader.Environment;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
 import com.caucho.util.QDate;
@@ -47,6 +49,7 @@ import com.caucho.vfs.TempStreamApi;
 import com.caucho.vfs.Vfs;
 import com.caucho.vfs.WriteStream;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
@@ -63,7 +66,7 @@ import java.util.zip.ZipOutputStream;
 /**
  * Abstract class for a log that rolls over based on size or period.
  */
-public class AbstractRolloverLog {
+public class AbstractRolloverLog implements Closeable {
   private static final L10N L = new L10N(AbstractRolloverLog.class);
   private static final Logger log
     = Logger.getLogger(AbstractRolloverLog.class.getName());
@@ -104,7 +107,7 @@ public class AbstractRolloverLog {
 
   private Path _pwd = Vfs.lookup();
 
-  protected Path _path;
+  private Path _path;
 
   protected String _pathFormat;
 
@@ -137,6 +140,8 @@ public class AbstractRolloverLog {
   {
     _rolloverListener = new RolloverAlarm();
     _rolloverAlarm = new WeakAlarm(_rolloverListener);
+    
+    Environment.addCloseListener(this);
   }
 
 
@@ -332,7 +337,7 @@ public class AbstractRolloverLog {
   public void init()
     throws IOException
   {
-    long now = Alarm.getExactTime();
+    long now = CurrentTime.getExactTime();
 
     // server/0263
     // _nextRolloverCheckTime = now + _rolloverCheckPeriod;
@@ -345,8 +350,10 @@ public class AbstractRolloverLog {
       _rolloverPrefix = path.getTail();
 
       long lastModified = path.getLastModified();
-      if (lastModified <= 0 || now < lastModified)
+      
+      if (lastModified <= 0 || now < lastModified) {
         lastModified = now;
+      }
 
       // _calendar.setGMTTime(lastModified);
 
@@ -375,11 +382,10 @@ public class AbstractRolloverLog {
 
   public boolean rollover()
   {
-    long now = Alarm.getCurrentTime();
+    long now = CurrentTime.getCurrentTime();
 
     if (_nextPeriodEnd <= now || _nextRolloverCheckTime.get() <= now) {
       _nextRolloverCheckTime.set(now + _rolloverCheckPeriod);
-
       _rolloverWorker.wake();
 
       return true;
@@ -481,7 +487,7 @@ public class AbstractRolloverLog {
       
       Path savedPath = null;
 
-      long now = Alarm.getCurrentTime();
+      long now = CurrentTime.getCurrentTime();
 
       long lastPeriodEnd = _nextPeriodEnd;
 
@@ -542,7 +548,7 @@ public class AbstractRolloverLog {
     Path path = getPath();
 
     if (path == null) {
-      path = getPath(Alarm.getCurrentTime());
+      path = getPath(CurrentTime.getCurrentTime());
     }
 
     Path parent = path.getParent();
@@ -809,7 +815,7 @@ public class AbstractRolloverLog {
   protected String getFormatName(String format, long time)
   {
     if (time <= 0)
-      time = Alarm.getCurrentTime();
+      time = CurrentTime.getCurrentTime();
 
     if (format != null)
       return QDate.formatLocal(time, format);
@@ -847,7 +853,7 @@ public class AbstractRolloverLog {
     
     _rolloverWorker.wake();
     
-    _rolloverWorker.destroy();
+    _rolloverWorker.close();
 
     synchronized (_logLock) {
       closeLogStream();
@@ -922,10 +928,15 @@ public class AbstractRolloverLog {
   @Override
   public String toString()
   {
-    return getClass().getSimpleName() + "[" + _path + "]";
+    Path path = _path;
+    
+    if (path != null)
+      return getClass().getSimpleName() + "[" + path.getTail() + "]";
+    else
+      return getClass().getSimpleName() + "[" + path + "]";
   }
 
-  class RolloverWorker extends TaskWorker {
+  class RolloverWorker extends AbstractTaskWorker {
     @Override
     public long runTask()
     {
@@ -935,7 +946,7 @@ public class AbstractRolloverLog {
     }
   }
 
-  class FlushWorker extends TaskWorker {
+  class FlushWorker extends AbstractTaskWorker {
     @Override
     public long runTask()
     {
@@ -968,7 +979,7 @@ public class AbstractRolloverLog {
       if (isClosed() || alarm == null)
         return;
       
-      long now = Alarm.getCurrentTime();
+      long now = CurrentTime.getCurrentTime();
       
       long nextCheckTime;
       

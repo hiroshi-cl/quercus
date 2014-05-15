@@ -30,7 +30,11 @@
 package com.caucho.quercus.expr;
 
 import com.caucho.quercus.Location;
-import com.caucho.quercus.env.*;
+import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.QuercusClass;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.Value;
+import com.caucho.quercus.env.Var;
 import com.caucho.quercus.program.InterpretedClassDef;
 import com.caucho.util.L10N;
 
@@ -38,27 +42,29 @@ import com.caucho.util.L10N;
  * Represents the 'this' expression.
  */
 public class ThisExpr extends AbstractVarExpr {
-  private static final L10N L = new L10N(ThisExpr.class);
+  private static final L10N L = new L10N(Expr.class);
 
-  protected final InterpretedClassDef _quercusClass;
-  
-  public ThisExpr(InterpretedClassDef quercusClass)
+  protected final InterpretedClassDef _classDef;
+
+  public ThisExpr(InterpretedClassDef classDef)
   {
-    _quercusClass = quercusClass;
+    _classDef = classDef;
   }
 
-  public InterpretedClassDef getQuercusClass()
+  public InterpretedClassDef getClassDef()
   {
-    return _quercusClass;
+    return _classDef;
   }
+
   /**
    * Creates a field ref
    */
   @Override
   public Expr createFieldGet(ExprFactory factory,
+                             Location location,
                              StringValue name)
   {
-    return factory.createThisField(this, name);
+    return factory.createThisField(location, this, name);
   }
 
   /**
@@ -66,11 +72,12 @@ public class ThisExpr extends AbstractVarExpr {
    */
   @Override
   public Expr createFieldGet(ExprFactory factory,
+                             Location location,
                              Expr name)
   {
-    return factory.createThisField(this, name);
+    return factory.createThisField(location, this, name);
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -82,7 +89,7 @@ public class ThisExpr extends AbstractVarExpr {
   {
     return env.getThis();
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -95,7 +102,7 @@ public class ThisExpr extends AbstractVarExpr {
   {
     return env.getThis();
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -108,7 +115,7 @@ public class ThisExpr extends AbstractVarExpr {
   {
     return env.getThis().toVar();
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -119,11 +126,11 @@ public class ThisExpr extends AbstractVarExpr {
   @Override
   public Value evalAssignValue(Env env, Value value)
   {
-    env.error(getLocation(), "can't assign $this");
-    
+    env.error(L.l("can't assign $this"), getLocation());
+
     return value;
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -134,11 +141,11 @@ public class ThisExpr extends AbstractVarExpr {
   @Override
   public Value evalAssignRef(Env env, Value value)
   {
-    env.error(getLocation(), "can't assign $this");
-    
+    env.error(L.l("can't assign $this"), getLocation());
+
     return value;
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -148,9 +155,17 @@ public class ThisExpr extends AbstractVarExpr {
    */
   public void evalUnset(Env env)
   {
-    env.error(getLocation(), "can't unset $this");
+    env.error(L.l("can't unset $this"), getLocation());
   }
-  
+
+  /**
+   * Evaluates as a QuercusClass.
+   */
+  public QuercusClass evalQuercusClass(Env env)
+  {
+    return env.getThis().getQuercusClass();
+  }
+
   public String toString()
   {
     return "$this";

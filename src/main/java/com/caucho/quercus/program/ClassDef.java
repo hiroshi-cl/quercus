@@ -29,12 +29,19 @@
 
 package com.caucho.quercus.program;
 
-import com.caucho.quercus.env.*;
+import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.FieldVisibility;
+import com.caucho.quercus.env.ObjectExtValue;
+import com.caucho.quercus.env.ObjectValue;
+import com.caucho.quercus.env.QuercusClass;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.Value;
 import com.caucho.quercus.expr.Expr;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.quercus.Location;
 import com.caucho.util.L10N;
 
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.HashSet;
@@ -51,16 +58,39 @@ abstract public class ClassDef {
   private final String _parentName;
 
   private String []_ifaceList;
+  private String []_traitList;
+
+  private TraitInsteadofMap _traitInsteadofMap;
+  private TraitAliasMap _traitAliasMap;
+
+  protected static final String[] NULL_STRING_ARRAY = new String[0];
+
+  protected ClassDef(Location location,
+                     String name,
+                     String parentName)
+  {
+    this(location, name, parentName, NULL_STRING_ARRAY, NULL_STRING_ARRAY);
+  }
 
   protected ClassDef(Location location,
                      String name,
                      String parentName,
                      String []ifaceList)
   {
+    this(location, name, parentName, ifaceList, NULL_STRING_ARRAY);
+  }
+
+  protected ClassDef(Location location,
+                     String name,
+                     String parentName,
+                     String []ifaceList,
+                     String []traitList)
+  {
     _location = location;
     _name = name;
     _parentName = parentName;
     _ifaceList = ifaceList;
+    _traitList = traitList;
   }
 
   /**
@@ -87,8 +117,8 @@ abstract public class ClassDef {
   {
     return _parentName;
   }
-  
-  /*
+
+  /**
    * Returns the name of the extension that this class is part of.
    */
   public String getExtension()
@@ -98,9 +128,11 @@ abstract public class ClassDef {
 
   protected void addInterface(String iface)
   {
-    for (int i = 0; i < _ifaceList.length; i++)
-      if (_ifaceList[i].equals(iface))
+    for (int i = 0; i < _ifaceList.length; i++) {
+      if (_ifaceList[i].equals(iface)) {
         return;
+      }
+    }
 
     String[] ifaceList = new String[_ifaceList.length + 1];
 
@@ -111,14 +143,90 @@ abstract public class ClassDef {
   }
 
   /**
+   * Adds a PHP 5.4 trait.
+   */
+  public void addTrait(String trait)
+  {
+    for (int i = 0; i < _traitList.length; i++) {
+      if (_traitList[i].equals(trait)) {
+        return;
+      }
+    }
+
+    String[] traitList = new String[_traitList.length + 1];
+
+    System.arraycopy(_traitList, 0, traitList, 0, _traitList.length);
+    traitList[traitList.length - 1] = trait;
+
+    _traitList = traitList;
+  }
+
+  /**
+   * Returns true if this class locally declares usage of this trait.
+   */
+  public boolean hasTrait(String traitName)
+  {
+    for (String trait : _traitList) {
+      if (trait.equals(traitName)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  public final TraitInsteadofMap getTraitInsteadofMap()
+  {
+    return _traitInsteadofMap;
+  }
+
+  public final TraitAliasMap getTraitAliasMap()
+  {
+    return _traitAliasMap;
+  }
+
+  public void addTraitInsteadOf(StringValue funName,
+                                String traitName,
+                                String insteadofTraitName)
+  {
+    TraitInsteadofMap traitInsteadofMap = _traitInsteadofMap;
+
+    if (traitInsteadofMap == null) {
+      traitInsteadofMap = new TraitInsteadofMap();
+      _traitInsteadofMap = traitInsteadofMap;
+    }
+
+    traitInsteadofMap.put(funName, traitName, insteadofTraitName);
+  }
+
+  public void addTraitAlias(StringValue funName,
+                            StringValue funNameAlias,
+                            String traitName)
+  {
+    TraitAliasMap traitAliasMap = _traitAliasMap;
+
+    if (traitAliasMap == null) {
+      traitAliasMap = new TraitAliasMap();
+      _traitAliasMap = traitAliasMap;
+    }
+
+    traitAliasMap.put(funName, funNameAlias, traitName);
+  }
+
+  /**
    * forces a load of any lazy ClassDef
    */
   public ClassDef loadClassDef()
   {
     return this;
   }
-  
+
   public AbstractFunction getCall()
+  {
+    return null;
+  }
+
+  public AbstractFunction getCallStatic()
   {
     return null;
   }
@@ -126,11 +234,11 @@ abstract public class ClassDef {
   public void init()
   {
   }
-  
+
   public void init(QuercusClass cl)
   {
   }
-  
+
   /**
    * Returns the interfaces.
    */
@@ -140,14 +248,32 @@ abstract public class ClassDef {
   }
 
   /**
+   * Returns the interfaces.
+   */
+  public String []getTraits()
+  {
+    return _traitList;
+  }
+
+  /**
    * Adds the interfaces to the set
    */
   public void addInterfaces(HashSet<String> interfaceSet)
   {
     interfaceSet.add(getName().toLowerCase(Locale.ENGLISH));
-    
+
     for (String name : getInterfaces()) {
       interfaceSet.add(name.toLowerCase(Locale.ENGLISH));
+    }
+  }
+
+  /**
+   * Adds the interfaces to the set
+   */
+  public void addTraits(HashSet<String> traitSet)
+  {
+    for (String name : getTraits()) {
+      traitSet.add(name.toLowerCase(Locale.ENGLISH));
     }
   }
 
@@ -166,48 +292,50 @@ abstract public class ClassDef {
   {
     return false;
   }
-  
-  /*
+
+  /**
+   * True for an trait class.
+   */
+  public boolean isTrait()
+  {
+    return false;
+  }
+
+  /**
    * Returns true for a final class.
    */
   public boolean isFinal()
   {
     return false;
   }
-  
-  /*
+
+  /**
    * Returns true if the class has private/protected methods.
    */
   public boolean hasNonPublicMethods()
   {
     return false;
   }
-  
+
   /**
-   * Initialize the quercus class.
+   * Initialize the quercus class methods.
+   * @param cl add methods to this QuercusClass
+   * @param bindingClassName name of the owning class (for __CLASS__ resolution)
    */
-  public void initClass(QuercusClass cl)
+  public void initClassMethods(QuercusClass cl, String bindingClassName)
   {
   }
 
   /**
-   * Creates a new instance.
+   * Initialize the quercus class fields.
+   * @param cl add fields to this QuercusClass
+   * @param bindingClassName name of the owning class (for static fields)
    */
-  public ObjectValue newInstance(Env env, QuercusClass qcl)
+  public void initClassFields(QuercusClass cl, String bindingClassName)
   {
-    if (isAbstract()) {
-      throw env.createErrorException(
-        L.l("abstract class '{0}' cannot be instantiated.", getName()));
-    }
-    else if (isInterface()) {
-      throw env.createErrorException(
-        L.l("interface '{0}' cannot be instantiated.", getName()));
-    }
-    
-    return new ObjectExtValue(qcl);
   }
-  
-  /*
+
+  /**
    * Creates a new object.
    */
   public ObjectValue createObject(Env env, QuercusClass cls)
@@ -220,8 +348,8 @@ abstract public class ClassDef {
       throw env.createErrorException(
         L.l("interface '{0}' cannot be instantiated.", getName()));
     }
-    
-    return new ObjectExtValue(cls);
+
+    return new ObjectExtValue(env, cls);
   }
 
   /**
@@ -243,14 +371,16 @@ abstract public class ClassDef {
   /**
    * Returns value for instanceof.
    */
-  public boolean isA(String name)
+  public boolean isA(Env env, String name)
   {
-    if (_name.equalsIgnoreCase(name))
+    if (_name.equalsIgnoreCase(name)) {
       return true;
+    }
 
     for (int i = 0; i < _ifaceList.length; i++) {
-      if (_ifaceList[i].equalsIgnoreCase(name))
+      if (_ifaceList[i].equalsIgnoreCase(name)) {
         return true;
+      }
     }
 
     return false;
@@ -268,7 +398,7 @@ abstract public class ClassDef {
   {
     return null;
   }
-  
+
   /**
    * Returns the documentation for this class.
    */
@@ -276,7 +406,7 @@ abstract public class ClassDef {
   {
     return null;
   }
-  
+
   /**
    * Returns the comment for the specified field.
    */
@@ -284,15 +414,16 @@ abstract public class ClassDef {
   {
     return null;
   }
-  
+
   /**
    * Returns the comment for the specified static field.
    */
-  public String getStaticFieldComment(String name)
+  public String getStaticFieldComment(StringValue name)
   {
     return null;
   }
 
+  @Override
   public String toString()
   {
     return getClass().getSimpleName()
@@ -301,17 +432,17 @@ abstract public class ClassDef {
            + "[" + _name + "]";
   }
 
-  public Set<Map.Entry<StringValue, FieldEntry>> fieldSet()
+  public Set<Map.Entry<StringValue,ClassField>> fieldSet()
   {
     return null;
   }
-  
-  public Set<Map.Entry<String, StaticFieldEntry>> staticFieldSet()
+
+  public Set<Map.Entry<StringValue, StaticFieldEntry>> staticFieldSet()
   {
     return null;
   }
-  
-  public Set<Map.Entry<String, AbstractFunction>> functionSet()
+
+  public Set<Map.Entry<StringValue, AbstractFunction>> functionSet()
   {
     return null;
   }
@@ -328,7 +459,7 @@ abstract public class ClassDef {
       _visibility = visibility;
       _comment = null;
     }
-    
+
     public FieldEntry(Expr value, FieldVisibility visibility, String comment)
     {
       _value = value;
@@ -345,13 +476,13 @@ abstract public class ClassDef {
     {
       return _visibility;
     }
-    
+
     public String getComment()
     {
       return _comment;
     }
   }
-  
+
   public static class StaticFieldEntry {
     private final Expr _value;
     private final String _comment;
@@ -361,7 +492,7 @@ abstract public class ClassDef {
       _value = value;
       _comment = null;
     }
-    
+
     public StaticFieldEntry(Expr value, String comment)
     {
       _value = value;
@@ -372,7 +503,7 @@ abstract public class ClassDef {
     {
       return _value;
     }
-    
+
     public String getComment()
     {
       return _comment;

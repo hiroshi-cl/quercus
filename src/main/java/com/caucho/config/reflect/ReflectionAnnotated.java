@@ -44,7 +44,7 @@ import javax.enterprise.inject.spi.Annotated;
 public class ReflectionAnnotated implements Annotated, BaseTypeAnnotated
 {
   private static final LinkedHashSet<Annotation> _emptyAnnSet
-    = new  LinkedHashSet<Annotation>();
+    = new LinkedHashSet<Annotation>();
 
   private static final Annotation []_emptyAnnArray = new Annotation[0];
 
@@ -53,6 +53,7 @@ public class ReflectionAnnotated implements Annotated, BaseTypeAnnotated
   private Set<Type> _typeSet;
 
   private LinkedHashSet<Annotation> _annSet;
+  private AnnotationSet _analysisAnnSet;
 
   private Annotation []_annArray;
 
@@ -67,11 +68,15 @@ public class ReflectionAnnotated implements Annotated, BaseTypeAnnotated
       _annSet = new LinkedHashSet<Annotation>();
 
       for (Annotation ann : annList) {
-        _annSet.add(ann);
+        if (ann != null) {
+          _annSet.add(ann);
+        }
       }
 
-      _annArray = new Annotation[_annSet.size()];
-      _annSet.toArray(_annArray);
+      Annotation []annArray = new Annotation[_annSet.size()];
+      _annSet.toArray(annArray);
+      
+      _annArray = annArray;
     }
     else {
       _annSet = _emptyAnnSet;
@@ -126,6 +131,7 @@ public class ReflectionAnnotated implements Annotated, BaseTypeAnnotated
   /**
    * Returns the introspected annotations
    */
+  @Override
   public Set<Annotation> getAnnotations()
   {
     return _annSet;
@@ -134,11 +140,13 @@ public class ReflectionAnnotated implements Annotated, BaseTypeAnnotated
   /**
    * Returns the matching annotation
    */
+  @Override
   public <T extends Annotation> T getAnnotation(Class<T> annType)
   {
     for (Annotation ann : _annArray) {
-      if (annType.equals(ann.annotationType()))
+      if (annType.equals(ann.annotationType())) {
         return (T) ann;
+      }
     }
 
     return null;
@@ -146,12 +154,21 @@ public class ReflectionAnnotated implements Annotated, BaseTypeAnnotated
 
   protected void addAnnotation(Annotation ann)
   {
-    if (_annSet == _emptyAnnSet)
+    if (ann == null) {
+      return;
+    }
+    
+    if (_annSet == _emptyAnnSet) {
       _annSet = new LinkedHashSet<Annotation>();
+    }
 
-    _annSet.add(ann);
-    _annArray = new Annotation[_annSet.size()];
-    _annSet.toArray(_annArray);
+    synchronized (_annSet) {
+      _annSet.add(ann);
+      Annotation []annArray = new Annotation[_annSet.size()];
+      _annSet.toArray(annArray);
+      
+      _annArray = annArray;
+    }
   }
 
   /**
@@ -161,11 +178,44 @@ public class ReflectionAnnotated implements Annotated, BaseTypeAnnotated
   public boolean isAnnotationPresent(Class<? extends Annotation> annType)
   {
     for (Annotation ann : _annArray) {
-      if (annType.equals(ann.annotationType()))
+      if (ann == null) {
+        continue;
+      }
+      
+      if (annType.equals(ann.annotationType())) {
         return true;
+      }
     }
 
     return false;
+  }
+  
+  @Override
+  public void addOverrideAnnotation(Annotation ann)
+  {
+    addAnnotation(ann);
+  }
+  
+  @Override
+  public void addAnalysisAnnotation(Annotation ann)
+  {
+    if (_analysisAnnSet == null)
+      _analysisAnnSet = new AnnotationSet();
+    
+    _analysisAnnSet.add(ann);
+  }
+  
+  @Override
+  public <T extends Annotation> T getAnalysisAnnotation(Class<T> annType)
+  {
+    if (_analysisAnnSet != null) {
+      T ann = (T) _analysisAnnSet.getAnnotation(annType);
+      
+      if (ann != null)
+        return ann;
+    }
+    
+    return getAnnotation(annType);
   }
 
   @Override

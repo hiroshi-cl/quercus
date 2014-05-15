@@ -31,6 +31,7 @@ package com.caucho.quercus.env;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.Locale;
 
 /**
  * Represents a StringValue that is never modified.
@@ -49,6 +50,8 @@ public class ConstStringValue
   private ValueType _valueType;
   private char []_serializeValue;
 
+  private StringValue _lowerCase;
+
   public ConstStringValue()
   {
     super();
@@ -56,7 +59,7 @@ public class ConstStringValue
 
   public ConstStringValue(StringBuilderValue sb)
   {
-    super(sb.getBuffer(), 0, sb.getOffset());
+    super(sb.getBuffer(), 0, sb.length());
   }
 
   public ConstStringValue(byte []buffer, int offset, int length)
@@ -84,7 +87,19 @@ public class ConstStringValue
 
   public ConstStringValue(char ch)
   {
-    super(ch);
+    super(1, true);
+    setLength(1);
+
+    byte[] buffer = getBuffer();
+    buffer[0] = (byte) (ch & 0xff);
+  }
+
+  public ConstStringValue(byte ch) {
+    super(1, true);
+    setLength(1);
+
+    byte[] buffer = getBuffer();
+    buffer[0] = (byte) (ch & 0xff);
   }
 
   public ConstStringValue(String s)
@@ -133,27 +148,32 @@ public class ConstStringValue
   {
     _longValue = value;
   }
-  
+
   protected void setDoubleValue(DoubleValue value)
   {
     _doubleValue = value;
   }
-  
+
   protected void setString(String value)
   {
     _string = value;
   }
-  
+
   protected void setKey(Value value)
   {
     _key = value;
   }
-  
+
   protected void setValueType(ValueType valueType)
   {
     _valueType = valueType;
   }
- 
+
+  protected void setLowerCase(StringValue lowerCase)
+  {
+    _lowerCase = lowerCase;
+  }
+
   /**
    * Converts to a long vaule
    */
@@ -202,8 +222,9 @@ public class ConstStringValue
   @Override
   public ValueType getValueType()
   {
-    if (_valueType == null)
+    if (_valueType == null) {
       _valueType = super.getValueType();
+    }
 
     return _valueType;
   }
@@ -214,10 +235,21 @@ public class ConstStringValue
   @Override
   public Value toKey()
   {
-    if (_key == null)
+    if (_key == null) {
       _key = super.toKey();
+    }
 
     return _key;
+  }
+
+  @Override
+  public StringValue toLowerCase(Locale locale)
+  {
+    if (_lowerCase == null) {
+      _lowerCase = super.toLowerCase(locale);
+    }
+
+    return _lowerCase;
   }
 
   /**
@@ -245,57 +277,60 @@ public class ConstStringValue
    *
    * @param out the writer to the Java source code.
    */
-  @Override
   public void generate(PrintWriter out)
+    throws IOException
+  {
+    generateImpl(out, this);
+  }
+
+  /**
+   * Generates code to recreate the expression.
+   *
+   * @param out the writer to the Java source code.
+   */
+  public static void generateImpl(PrintWriter out, StringBuilderValue value)
     throws IOException
   {
     // max JVM constant string length
     int maxSublen = 0xFFFE;
 
-    int len = length();
+    int len = value.length();
 
     if (len == 1) {
       out.print("(ConstStringValue.create((char) '");
-      printJavaChar(out, charAt(0));
+      printJavaChar(out, value.charAt(0));
       out.print("'))");
     }
-    /*
-    else if (len < maxSublen) {
-      out.print("(new ConstStringValue(\"");
-      printJavaString(out, this);
-      out.print("\"))");
-    }
-    */
     else if (len < maxSublen) {
       out.print("(new CompiledConstStringValue (\"");
-      printJavaString(out, this);
+      printJavaString(out, value);
       out.print("\", ");
-      toLongValue().generate(out);
+      value.toLongValue().generate(out);
       out.print(", ");
-      toDoubleValue().generate(out);
+      value.toDoubleValue().generate(out);
       out.print(", ");
-      out.print(getValueType());
+      out.print(value.getValueType());
       out.print(", ");
 
-      Value key = toKey();
+      Value key = value.toKey();
 
       if (key instanceof LongValue) {
         key.generate(out);
         out.print(", ");
       }
 
-      out.print(hashCode());
+      out.print(value.hashCode());
       out.print("))");
     }
     else {
-      out.print("(new ConstStringValue(new StringBuilderValue (\"");
+      out.print("(new ConstStringValue(new StringBuilderValue(\"");
 
       // php/313u
       for (int i = 0; i < len; i += maxSublen) {
         if (i != 0)
           out.print("\").append(\"");
 
-        printJavaString(out, substring(i, Math.min(i + maxSublen, len)));
+        printJavaString(out, value.substring(i, Math.min(i + maxSublen, len)));
       }
 
       out.print("\")))");

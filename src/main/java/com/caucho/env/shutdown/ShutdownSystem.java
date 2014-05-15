@@ -30,6 +30,7 @@
 package com.caucho.env.shutdown;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import java.util.logging.*;
@@ -38,6 +39,7 @@ import com.caucho.env.service.*;
 import com.caucho.env.warning.WarningService;
 import com.caucho.lifecycle.*;
 import com.caucho.util.*;
+import com.caucho.vfs.TempBuffer;
 
 /**
  * The ShutdownSystem manages the Resin shutdown and includes a timeout
@@ -47,6 +49,7 @@ import com.caucho.util.*;
 public class ShutdownSystem extends AbstractResinSubSystem
 {
   public static final int START_PRIORITY = 1;
+  public static final long shutdownWaitMax = 120000L;
 
   private static final Logger log = 
     Logger.getLogger(ShutdownSystem.class.getName());
@@ -55,8 +58,8 @@ public class ShutdownSystem extends AbstractResinSubSystem
   private static final AtomicReference<ShutdownSystem> _activeService
     = new AtomicReference<ShutdownSystem>();
   
-  private long _shutdownWaitMax = 120000L;
-  
+  private long _shutdownWaitMax = shutdownWaitMax;
+
   private boolean _isShutdownOnOutOfMemory = true;
 
   private WeakReference<ResinSystem> _resinSystemRef;
@@ -65,12 +68,15 @@ public class ShutdownSystem extends AbstractResinSubSystem
   private Lifecycle _lifecycle = new Lifecycle();
   
   private FailSafeHaltThread _failSafeHaltThread;
+  private FailSafeMemoryFreeThread _failSafeMemoryFreeThread;
   private ShutdownThread _shutdownThread;
   
   private boolean _isEmbedded;
   
   private AtomicReference<ExitCode> _exitCode = 
     new AtomicReference<ExitCode>();
+  
+  private ArrayList<Runnable> _memoryFreeTasks = new ArrayList<Runnable>();
   
   private ShutdownSystem(boolean isEmbedded)
   {
@@ -89,7 +95,7 @@ public class ShutdownSystem extends AbstractResinSubSystem
   
   public static ShutdownSystem createAndAddService()
   {
-    return createAndAddService(Alarm.isTest());
+    return createAndAddService(CurrentTime.isTest());
   }
 
   public static ShutdownSystem createAndAddService(boolean isEmbedded)
@@ -140,11 +146,18 @@ public class ShutdownSystem extends AbstractResinSubSystem
     return _exitCode.get();
   }
   
+  public void addMemoryFreeTask(Runnable task)
+  {
+    _memoryFreeTasks.add(task);
+  }
+  
   /**
    * Start the server shutdown
    */
   public static void shutdownOutOfMemory(String msg)
   {
+    freeMemoryBuffers();
+    
     ShutdownSystem shutdown = _activeService.get();
     
     if (shutdown != null && ! shutdown.isShutdownOnOutOfMemory()) {
@@ -154,6 +167,15 @@ public class ShutdownSystem extends AbstractResinSubSystem
     else {
       shutdownActive(ExitCode.MEMORY, msg);
     }
+  }
+  
+  /**
+   * Attempt to free as much memory as possible for OOM handling.
+   * These calls must not allocate memory.
+   */
+  private static void freeMemoryBuffers()
+  {
+    TempBuffer.clearFreeLists();
   }
   
   public static void startFailsafe(String msg)
@@ -235,6 +257,12 @@ public class ShutdownSystem extends AbstractResinSubSystem
 
     if (haltThread != null) {
       haltThread.startShutdown(period);
+    }
+    
+    FailSafeMemoryFreeThread memoryFreeThread = _failSafeMemoryFreeThread;
+    
+    if (memoryFreeThread != null) {
+      memoryFreeThread.startShutdown();
     }
 
     try {
@@ -326,9 +354,12 @@ public class ShutdownSystem extends AbstractResinSubSystem
       _activeService.set(this);
     }
     
-    if (! Alarm.isTest() && ! _isEmbedded) {
+    if (! CurrentTime.isTest() && ! _isEmbedded) {
       _failSafeHaltThread = new FailSafeHaltThread();
       _failSafeHaltThread.start();
+      
+      _failSafeMemoryFreeThread = new FailSafeMemoryFreeThread();
+      _failSafeMemoryFreeThread.start();
     }
 
     if (! _isEmbedded) {
@@ -352,6 +383,11 @@ public class ShutdownSystem extends AbstractResinSubSystem
     
     if (failSafeThread != null)
       failSafeThread.wake();
+    
+    FailSafeMemoryFreeThread memoryFreeThread = _failSafeMemoryFreeThread;
+    
+    if (memoryFreeThread != null)
+      memoryFreeThread.startShutdown();
     
     ShutdownThread shutdownThread = _shutdownThread;
     
@@ -441,6 +477,51 @@ public class ShutdownSystem extends AbstractResinSubSystem
       if (exitCode != null) {
         shutdownImpl(exitCode);
       }
+    }
+  }
+
+  class FailSafeMemoryFreeThread extends Thread {
+    private volatile boolean _isShutdown;
+
+    FailSafeMemoryFreeThread()
+    {
+      setName("resin-fail-safe-memory-free");
+      setDaemon(true);
+    }
+
+    /**
+     * Starts the shutdown sequence
+     */
+    void startShutdown()
+    {
+      _isShutdown = true;
+
+      LockSupport.unpark(this);
+    }
+
+    @Override
+    public void run()
+    {
+      while (! _isShutdown && _lifecycle.isActive()) {
+        try {
+          Thread.interrupted();
+          LockSupport.park();
+        } catch (Exception e) {
+        }
+      }
+      
+      for (int i = 0; i < _memoryFreeTasks.size(); i++) {
+        Runnable task = _memoryFreeTasks.get(i);
+        
+        try {
+          task.run();
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      }
+      
+      if (! _lifecycle.isActive())
+        return;
     }
   }
 

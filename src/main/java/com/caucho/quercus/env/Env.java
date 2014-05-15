@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,31 +29,6 @@
 
 package com.caucho.quercus.env;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.lang.ref.WeakReference;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.Locale;
-import java.util.Map;
-import java.util.TimeZone;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import javax.script.Bindings;
-import javax.script.ScriptContext;
-import javax.servlet.ServletContext;
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
-import javax.sql.DataSource;
-
 import com.caucho.java.WorkDir;
 import com.caucho.quercus.Location;
 import com.caucho.quercus.QuercusContext;
@@ -66,12 +41,14 @@ import com.caucho.quercus.QuercusRuntimeException;
 import com.caucho.quercus.expr.Expr;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.quercus.lib.ErrorModule;
-import com.caucho.quercus.lib.OptionsModule;
 import com.caucho.quercus.lib.VariableModule;
 import com.caucho.quercus.lib.file.FileModule;
+import com.caucho.quercus.lib.file.PhpProtocolWrapper;
 import com.caucho.quercus.lib.file.PhpStderr;
 import com.caucho.quercus.lib.file.PhpStdin;
 import com.caucho.quercus.lib.file.PhpStdout;
+import com.caucho.quercus.lib.file.ProtocolWrapper;
+import com.caucho.quercus.lib.file.ZlibProtocolWrapper;
 import com.caucho.quercus.lib.regexp.RegexpState;
 import com.caucho.quercus.lib.string.StringModule;
 import com.caucho.quercus.lib.string.StringUtility;
@@ -84,6 +61,11 @@ import com.caucho.quercus.program.JavaClassDef;
 import com.caucho.quercus.program.QuercusProgram;
 import com.caucho.quercus.program.UndefinedFunction;
 import com.caucho.quercus.resources.StreamContextResource;
+import com.caucho.quercus.servlet.api.QuercusCookie;
+import com.caucho.quercus.servlet.api.QuercusHttpServletRequest;
+import com.caucho.quercus.servlet.api.QuercusHttpServletResponse;
+import com.caucho.quercus.servlet.api.QuercusHttpSession;
+import com.caucho.quercus.servlet.api.QuercusServletContext;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.FreeList;
 import com.caucho.util.IntMap;
@@ -101,14 +83,32 @@ import com.caucho.vfs.TempBuffer;
 import com.caucho.vfs.WriteStream;
 import com.caucho.vfs.i18n.EncodingReader;
 
+import javax.script.Bindings;
+import javax.script.ScriptContext;
+import javax.sql.DataSource;
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.ref.WeakReference;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TimeZone;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 /**
  * Represents the Quercus environment.
  */
 public class Env
 {
   private static final L10N L = new L10N(Env.class);
-  private static final Logger log
-    = Logger.getLogger(Env.class.getName());
+  private static final Logger log = Logger.getLogger(Env.class.getName());
 
   public static final int B_ERROR = 0;
   public static final int B_WARNING = 1;
@@ -123,6 +123,8 @@ public class Env
   public static final int B_USER_NOTICE = 10;
   public static final int B_STRICT = 11;
   public static final int B_RECOVERABLE_ERROR = 12;
+  public static final int B_DEPRECATED = 13;
+  public static final int B_USER_DEPRECATED = 14;
 
   public static final int B_LAST = B_RECOVERABLE_ERROR;
 
@@ -137,9 +139,11 @@ public class Env
   public static final int E_USER_ERROR = 1 << B_USER_ERROR;
   public static final int E_USER_WARNING = 1 << B_USER_WARNING;
   public static final int E_USER_NOTICE = 1 << B_USER_NOTICE;
-  public static final int E_ALL = 6143; //(4096 + 2048 - 1)
+  public static final int E_ALL = 32767; //(0x1111 1111 1111 11)
   public static final int E_STRICT = 1 << B_STRICT;
   public static final int E_RECOVERABLE_ERROR = 1 << B_RECOVERABLE_ERROR;
+  public static final int E_DEPRECATED = 1 << B_DEPRECATED;
+  public static final int E_USER_DEPRECATED = 1 << B_USER_DEPRECATED;
 
   public static final int E_DEFAULT = E_ALL & ~E_NOTICE;
 
@@ -160,32 +164,62 @@ public class Env
   private static final int HTTP_SERVER_VARS = 15;
   private static final int HTTP_RAW_POST_DATA = 16;
 
+  private static final int ARGC = 17;
+  private static final int ARGV = 18;
+
   private static final IntMap SPECIAL_VARS
+    = new IntMap();
+
+  private static final IntMap SPECIAL_VARS_U
     = new IntMap();
 
   private static final StringValue PHP_SELF_STRING
     = new ConstStringValue("PHP_SELF");
 
-  private static final StringValue UTF8_STRING
-    = new ConstStringValue("utf-8");
-  
+  private static final StringValue PHP_SELF_STRING_U
+    = new UnicodeBuilderValue("PHP_SELF");
+
   private static final StringValue S_GET
     = new ConstStringValue("_GET");
-  
+
+  private static final StringValue S_GET_U
+    = new UnicodeBuilderValue("_GET");
+
   private static final StringValue S_POST
     = new ConstStringValue("_POST");
-  
+
+  private static final StringValue S_POST_U
+    = new UnicodeBuilderValue("_POST");
+
   private static final StringValue S_SESSION
     = new ConstStringValue("_SESSION");
-  
+
+  private static final StringValue S_SESSION_U
+    = new UnicodeBuilderValue("_SESSION");
+
   private static final StringValue S_SERVER
     = new ConstStringValue("_SERVER");
-  
+
+  private static final StringValue S_SERVER_U
+    = new UnicodeBuilderValue("_SERVER");
+
   private static final StringValue S_COOKIE
     = new ConstStringValue("_COOKIE");
-  
+
+  private static final StringValue S_COOKIE_U
+    = new UnicodeBuilderValue("_COOKIE");
+
   private static final StringValue S_FILES
     = new ConstStringValue("_FILES");
+
+  private static final StringValue S_FILES_U
+    = new UnicodeBuilderValue("_FILES");
+
+  private static final StringValue S_ARGV
+    = new ConstStringValue("argv");
+
+  private static final StringValue S_ARGV_U
+    = new UnicodeBuilderValue("argv");
 
   public static final Value []EMPTY_VALUE = new Value[0];
 
@@ -223,11 +257,13 @@ public class Env
   public AbstractFunction []_fun;
 
   // anonymous functions created by create_function()
-  public HashMap<String, AbstractFunction> _anonymousFunMap;
+  public HashMap<StringValue, AbstractFunction> _anonymousFunMap;
 
   // Class map
   public ClassDef []_classDef;
   public QuercusClass []_qClass;
+
+  public HashMap<String,QuercusClass> _classAliasMap;
 
   // Constant map
   public Value []_const;
@@ -237,7 +273,7 @@ public class Env
     = new HashMap<StringValue, EnvVar>();
 
   private EnvVar []_globalList;
-  
+
   // Statics
   private Map<StringValue, Var> _staticMap
     = new HashMap<StringValue, Var>();
@@ -258,7 +294,7 @@ public class Env
   private int _iniCount = 1;
 
   private ArrayList<EnvCleanup> _cleanupList;
-  private ArrayList<ObjectExtValue> _objCleanupList;
+  private ArrayList<ObjectValue> _objCleanupList;
   private ArrayList<Shutdown> _shutdownList;
 
   private String _defaultIncludePath;
@@ -272,6 +308,8 @@ public class Env
     = new HashMap<Path,QuercusPage>();
 
   private Value _this = NullThisValue.NULL;
+
+  private Closure _closure;
 
   private final boolean _isUnicodeSemantics;
   private boolean _isAllowUrlInclude;
@@ -318,7 +356,6 @@ public class Env
 
   public enum OVERLOADING_TYPES {INVALID_FIRST, FIELDGET, FIELDSET, ISSET, UNSET, INVALID_LAST};
 
-
   private Path _selfPath;
   private Path _selfDirectory;
   private Path _pwd;
@@ -328,15 +365,21 @@ public class Env
 
   private final boolean _isStrict;
 
-  private HttpServletRequest _request;
-  private HttpServletResponse _response;
+  private QuercusHttpServletRequest _request;
+  private QuercusHttpServletResponse _response;
 
-  private ArrayValue _postArray = new ArrayValueImpl();
+  private ArrayValue _inputGet;
+  private ArrayValue _inputCookie;
+  private ArrayValue _inputEnv;
+  private ArrayValue _inputServer;
+
+  private ArrayValue _inputPost = new ArrayValueImpl();
   private ArrayValue _files = new ArrayValueImpl();
+
   private StringValue _inputData;
 
   private SessionArrayValue _session;
-  private HttpSession _javaSession;
+  private QuercusHttpSession _javaSession;
 
   private ScriptContext _scriptContext;
 
@@ -356,6 +399,8 @@ public class Env
   private SessionCallback _sessionCallback;
 
   private StreamContextResource _defaultStreamContext;
+  private HashMap<StringValue,ProtocolWrapper> _wrappedStreamMap;
+  private HashMap<StringValue,ProtocolWrapper> _unregisteredWrappedStreamMap;
 
   private int _objectId = 0;
 
@@ -371,7 +416,7 @@ public class Env
   private Object _gzStream;
 
   private Env _oldThreadEnv;
-  
+
   private boolean _isTimeout;
 
   private long _firstMicroTime;
@@ -383,16 +428,20 @@ public class Env
 
   private StringValue _variablesOrder;
   private int []_querySeparatorMap;
-  
+
   public static final int []DEFAULT_QUERY_SEPARATOR_MAP;
-  
+
   private CharBuffer _cb = new CharBuffer();
+
+  private int _lastErrorType = -1;
+  private String _lastErrorMessage = null;
+  private Location _lastErrorLocation = null;
 
   public Env(QuercusContext quercus,
              QuercusPage page,
              WriteStream out,
-             HttpServletRequest request,
-             HttpServletResponse response)
+             QuercusHttpServletRequest request,
+             QuercusHttpServletResponse response)
   {
     _quercus = quercus;
 
@@ -401,26 +450,26 @@ public class Env
 
     _isAllowUrlInclude = quercus.isAllowUrlInclude();
     _isAllowUrlFopen = quercus.isAllowUrlFopen();
-    
+
     _variablesOrder
       = _quercus.getIniValue("variables_order").toStringValue(this);
 
-    StringValue querySeparators 
+    StringValue querySeparators
       = _quercus.getIniValue("arg_separator.input").toStringValue(this);
-  
+
     int len = querySeparators.length();
     if (len == 0)
       _querySeparatorMap = DEFAULT_QUERY_SEPARATOR_MAP;
     else {
       _querySeparatorMap = new int[128];
-      
+
       for (int i = 0; i < len; i++) {
         char ch = querySeparators.charAt(i);
-      
+
         _querySeparatorMap[ch] = 1;
       }
     }
-    
+
     _page = page;
 
     // XXX: grab initial from page
@@ -465,11 +514,17 @@ public class Env
     _request = request;
     _response = response;
 
-    if (_page != null) {
-      pageInit(_page);
+    if (page != null) {
+      pageInit(page);
     }
 
-    setPwd(_quercus.getPwd());
+    // we need it for running scripts like the PDF generation
+    if (request != null && page != null) {
+      setPwd(page.getPwd(null));
+    }
+    else {
+      setPwd(_quercus.getPwd());
+    }
 
     if (_page != null) {
       setSelfPath(_page.getSelfPath(null));
@@ -483,7 +538,8 @@ public class Env
 
     // Define the constant string PHP_VERSION
 
-    addConstant("PHP_VERSION", OptionsModule.phpversion(this, null), true);
+    String version = quercus.getPhpVersion();
+    addConstant("PHP_VERSION", createString(version), true);
 
     // STDIN, STDOUT, STDERR
     // php://stdin, php://stdout, php://stderr
@@ -501,14 +557,14 @@ public class Env
 
   public static Env getCurrent()
   {
-    return  _threadEnv.get();
+    return _threadEnv.get();
   }
 
   public static Env getInstance()
   {
     return getCurrent();
   }
-  
+
   private void fillGet(ArrayValue array, boolean isMagicQuotes)
   {
     String queryString = getQueryString();
@@ -522,8 +578,9 @@ public class Env
                            true,
                            getHttpInputEncoding(),
                            isMagicQuotes,
+                           true,
                            _querySeparatorMap);
-    
+
     /*
     try {
       String encoding = getHttpInputEncoding();
@@ -567,13 +624,13 @@ public class Env
         array.put(entry.getKey(), entry.getValue().copy());
     }
   }
-  
+
   private void fillCookies(ArrayValue array,
-                           Cookie []cookies,
+                           QuercusCookie []cookies,
                            boolean isMagicQuotes)
   {
     for (int i = 0; cookies != null && i < cookies.length; i++) {
-      Cookie cookie = cookies[i];
+      QuercusCookie cookie = cookies[i];
 
       String decodedValue = decodeValue(cookie.getValue());
 
@@ -581,13 +638,14 @@ public class Env
                         array,
                         cookie.getName(),
                         new String[] { decodedValue },
-                        isMagicQuotes);
+                        isMagicQuotes,
+                        true);
     }
   }
-  
+
   protected void fillPost(ArrayValue postArray,
                           ArrayValue files,
-                          HttpServletRequest request,
+                          QuercusHttpServletRequest request,
                           boolean isMagicQuotes)
   {
     if (request != null && request.getMethod().equals("POST")) {
@@ -698,12 +756,14 @@ public class Env
 
     if (encoding.length() == 0) {
       encoding = getIni("unicode.fallback_encoding");
-
-      if (encoding.length() == 0)
-        encoding = UTF8_STRING;
     }
 
-    return encoding.toString();
+    if (encoding.length() > 0) {
+      return encoding.toString();
+    }
+    else {
+      return "utf-8";
+    }
   }
 
   /**
@@ -736,12 +796,14 @@ public class Env
 
     if (encoding.length() == 0) {
       encoding = getIni("unicode.fallback_encoding");
-
-      if (encoding.length() == 0)
-        encoding = UTF8_STRING;
     }
 
-    return encoding.toString();
+    if (encoding.length() > 0) {
+      return encoding.toString();
+    }
+    else {
+      return "utf-8";
+    }
   }
 
   /**
@@ -749,19 +811,7 @@ public class Env
    */
   public String getOutputEncoding()
   {
-    if (! _isUnicodeSemantics)
-      return null;
-
-    String encoding = QuercusContext.INI_UNICODE_OUTPUT_ENCODING
-      .getAsString(this);
-
-    if (encoding == null)
-      encoding = QuercusContext.INI_UNICODE_FALLBACK_ENCODING.getAsString(this);
-
-    if (encoding == null)
-      encoding = "utf-8";
-
-    return encoding;
+    return _quercus.getOutputEncoding();
   }
 
   /**
@@ -813,6 +863,9 @@ public class Env
    */
   public StringValue createBinaryBuilder(byte []buffer)
   {
+    if (buffer == null)
+      return StringBuilderValue.EMPTY;
+
     if (_isUnicodeSemantics)
       return new BinaryBuilderValue(buffer, 0, buffer.length);
     else
@@ -834,9 +887,9 @@ public class Env
   {
     if (_defaultTimeZone != null)
       return _defaultTimeZone;
-    
+
     String timeZone = getIniString("date.timezone");
-    
+
     if (timeZone != null)
       return TimeZone.getTimeZone(timeZone);
     else
@@ -866,11 +919,11 @@ public class Env
 
     return _localDate;
   }
-  
+
   public QDate getDate()
   {
     TimeZone zone = getDefaultTimeZone();
-    
+
     if (zone.getID().equals("GMT"))
       return getGmtDate();
     else if (zone.equals(TimeZone.getDefault()))
@@ -889,15 +942,15 @@ public class Env
     _defaultTimeZone = zone;
   }
 
-  /*
+  /**
    * Returns the ServletContext.
    */
-  public ServletContext getServletContext()
+  public QuercusServletContext getServletContext()
   {
     return _quercus.getServletContext();
   }
 
-  /*
+  /**
    * Sets the ScriptContext.
    */
   public void setScriptContext(ScriptContext context)
@@ -905,7 +958,64 @@ public class Env
     _scriptContext = context;
   }
 
-  /*
+  public ArrayValue getInputGetArray()
+  {
+    ArrayValue array = _inputGet;
+
+    if (array == null) {
+      array = new ArrayValueImpl();
+      fillGet(array, getIniBoolean("magic_quotes_gpc"));
+
+      _inputGet = array;
+    }
+
+    return array;
+  }
+
+  public ArrayValue getInputPostArray()
+  {
+    return _inputPost;
+  }
+
+  public ArrayValue getInputCookieArray()
+  {
+    ArrayValue array = _inputCookie;
+
+    if (array == null) {
+      array = new ArrayValueImpl();
+      fillCookies(array, _request.getCookies(), getIniBoolean("magic_quotes_gpc"));
+
+      _inputCookie = array;
+    }
+
+    return array;
+  }
+
+  public ArrayValue getInputEnvArray()
+  {
+    ArrayValue array = _inputEnv;
+
+    if (array == null) {
+      array = new ArrayValueImpl();
+      _inputEnv = array;
+    }
+
+    return array;
+  }
+
+  public ArrayValue getInputServerArray()
+  {
+    ArrayValue array = _inputServer;
+
+    if (array == null) {
+      array = new ServerArrayValue(this);
+      _inputServer = array;
+    }
+
+    return array;
+  }
+
+  /**
    * Returns the input (POST, PUT) data.
    */
   public StringValue getInputData()
@@ -913,7 +1023,7 @@ public class Env
     return _inputData;
   }
 
-  /*
+  /**
    * Sets the post data.
    */
   public void setInputData(StringValue data)
@@ -937,7 +1047,7 @@ public class Env
     return _isAllowUrlInclude;
   }
 
-  /*
+  /**
    * Returns true if allowed to fopen urls.
    */
   public boolean isAllowUrlFopen()
@@ -967,8 +1077,8 @@ public class Env
       _endTime = Long.MAX_VALUE / 2;
 
     _threadEnv.set(this);
-    
-    fillPost(_postArray,
+
+    fillPost(_inputPost,
              _files,
              _request,
              getIniBoolean("magic_quotes_gpc"));
@@ -996,12 +1106,13 @@ public class Env
     HashSet<ModuleStartupListener> listeners
       = _quercus.getModuleStartupListeners();
 
-    for (ModuleStartupListener listener : listeners)
+    for (ModuleStartupListener listener : listeners) {
       listener.startup(this);
-    
+    }
+
     _quercus.startEnv(this);
   }
-  
+
   /**
    * Returns the current time (may be cached).
    */
@@ -1009,7 +1120,7 @@ public class Env
   {
     return getQuercus().getCurrentTime();
   }
-  
+
   /**
    * Returns the current time (not cached).
    */
@@ -1034,10 +1145,10 @@ public class Env
    * add an object with a destructor to the list of references that are
    * cleaned up when finished with this environment.
    */
-  public void addObjectCleanup(ObjectExtValue objCleanup)
+  public void addObjectCleanup(ObjectValue objCleanup)
   {
     if (_objCleanupList == null)
-      _objCleanupList = new ArrayList<ObjectExtValue>();
+      _objCleanupList = new ArrayList<ObjectValue>();
 
     _objCleanupList.add(objCleanup);
   }
@@ -1112,6 +1223,7 @@ public class Env
     DataSource database = _quercus.getDatabase();
 
     if (database != null) {
+      // php/4360 - if configured database, don't use PHP names
       userName = null;
       password = null;
     }
@@ -1127,16 +1239,19 @@ public class Env
 
     ConnectionEntry oldEntry = null;
 
-    if (isReuse)
+    if (isReuse) {
       oldEntry = _connMap.get(entry);
+    }
 
-    if (oldEntry != null && oldEntry.isReusable())
+    if (oldEntry != null && oldEntry.isReusable()) {
       return oldEntry;
+    }
 
     entry.connect(isReuse);
 
-    if (isReuse)
+    if (isReuse) {
       _connMap.put(entry, entry);
+    }
 
     return entry;
   }
@@ -1172,7 +1287,7 @@ public class Env
   public void checkTimeout()
   {
     /*
-    long now = Alarm.getCurrentTime();
+    long now = CurrentTime.getCurrentTime();
 
     if (_endTime < now)
       throw new QuercusRuntimeException(L.l("script timed out"));
@@ -1180,15 +1295,15 @@ public class Env
     if (_isTimeout)
       throw new QuercusRuntimeException(L.l("script timed out"));
   }
- 
+
   public void updateTimeout()
   {
     long now = _quercus.getCurrentTime();
-    
+
     if (_endTime < now)
       _isTimeout = true;
   }
-  
+
   public void resetTimeout()
   {
     _startTime = _quercus.getCurrentTime();
@@ -1452,6 +1567,7 @@ public class Env
   public void setPwd(Path path)
   {
     _pwd = path;
+
     _lookupCache.clear();
   }
 
@@ -1487,15 +1603,18 @@ public class Env
   {
     if (_uploadPath == null) {
       String realPath = getIniString("upload_tmp_dir");
-      
+
       if (realPath != null) {
+        _uploadPath = _quercus.getPwd().lookup(realPath);
       }
-      else if (getRequest() != null)
-        realPath = "WEB-INF/upload";
-      else
+      else if (getRequest() != null) {
+        _uploadPath = _quercus.getWebInfDir().lookup("upload");
+      }
+      else {
         realPath = WorkDir.getTmpWorkDir().lookup("upload").getNativePath();
-      
-      _uploadPath = _quercus.getPwd().lookup(realPath);
+
+        _uploadPath = _quercus.getPwd().lookup(realPath);
+      }
 
       try {
         if (! _uploadPath.isDirectory())
@@ -1534,16 +1653,19 @@ public class Env
     String realPath;
 
     if (_tmpPath == null) {
-      if (getRequest() != null)
+      if (getRequest() != null) {
         realPath = getRequest().getRealPath("/WEB-INF/tmp");
-      else
+      }
+      else {
         realPath = "file:/tmp";
+      }
 
       _tmpPath = getPwd().lookup(realPath);
 
       try {
-        if (! _tmpPath.isDirectory())
+        if (! _tmpPath.isDirectory()) {
           _tmpPath.mkdirs();
+        }
       }
       catch (IOException e) {
         log.log(Level.FINE, e.toString(), e);
@@ -1558,8 +1680,9 @@ public class Env
    */
   public void addRemovePath(Path path)
   {
-    if (_removePaths == null)
+    if (_removePaths == null) {
       _removePaths = new ArrayList<Path>();
+    }
 
     _removePaths.add(path);
   }
@@ -1567,7 +1690,7 @@ public class Env
   /**
    * Returns the request.
    */
-  public HttpServletRequest getRequest()
+  public QuercusHttpServletRequest getRequest()
   {
     return _request;
   }
@@ -1602,7 +1725,7 @@ public class Env
   /**
    * Returns the response.
    */
-  public HttpServletResponse getResponse()
+  public QuercusHttpServletResponse getResponse()
   {
     return _response;
   }
@@ -1634,7 +1757,7 @@ public class Env
   /**
    * Returns the Java Http session.
    */
-  public HttpSession getJavaSession()
+  public QuercusHttpSession getJavaSession()
   {
     return _javaSession;
   }
@@ -1646,12 +1769,21 @@ public class Env
   {
     _session = session;
 
+    StringValue sessionStr;
+
+    if (isUnicodeSemantics()) {
+      sessionStr = S_SESSION_U;
+    }
+    else {
+      sessionStr = S_SESSION;
+    }
+
     if (session != null) {
-      Value var = getGlobalVar(S_SESSION);
+      Value var = getGlobalVar(sessionStr);
 
       if (! (var instanceof SessionVar)) {
         var = new SessionVar();
-        setGlobalValue(S_SESSION, var);
+        setGlobalValue(sessionStr, var);
       }
 
       var.set(session);
@@ -1662,7 +1794,7 @@ public class Env
     }
     else {
       // php/1k0v
-      Value v = getGlobalVar(S_SESSION);
+      Value v = getGlobalVar(sessionStr);
 
       if (v != null)
         v.set(UnsetValue.UNSET);
@@ -1699,7 +1831,7 @@ public class Env
 
     _javaSession = _request.getSession(true);
 
-    if (create 
+    if (create
         && _javaSession.getId().length() >= 3
         && sessionId.length() >= 3) {
       sessionId = _javaSession.getId().substring(0, 3) + sessionId.substring(3);
@@ -1876,13 +2008,33 @@ public class Env
   }
 
   /**
+   * Returns the current closure scope.
+   */
+  public Closure getClosure()
+  {
+    return _closure;
+  }
+
+  /**
+   * Sets the current closure scope and returns the old one.
+   */
+  public Closure setClosure(Closure closure)
+  {
+    Closure old = _closure;
+
+    _closure = closure;
+
+    return old;
+  }
+
+  /**
    * Gets a value.
    */
   public Value getValue(StringValue name)
   {
     return getValue(name, true, false);
   }
-  
+
   /**
    * Gets a value.
    */
@@ -1891,7 +2043,7 @@ public class Env
                         boolean isOutputNotice)
   {
     EnvVar var = getEnvVar(name, isAutoCreate, isOutputNotice);
-    
+
     if (var != null)
       return var.get();
     else
@@ -1922,7 +2074,7 @@ public class Env
   {
     return getGlobalValue(createString(name));
   }
-  
+
   /**
    * Gets a global
    */
@@ -2030,7 +2182,18 @@ public class Env
 
   public final EnvVar getEnvVar(StringValue name)
   {
-    return getEnvVar(name, true, false);
+    return getEnvVar(name, true, true);
+  }
+
+  public final EnvVar getLazyEnvVar(StringValue name)
+  {
+    EnvVar var = getEnvVar(name, false, false);
+
+    if (var == null) {
+      var = new LazyEnvVar(name);
+    }
+
+    return var;
   }
 
   /**
@@ -2048,24 +2211,28 @@ public class Env
     if (envVar != null)
       return envVar;
 
-    if (_map == _globalMap)
+    if (_map == _globalMap) {
       return getGlobalEnvVar(name, isAutoCreate, isOutputNotice);
+    }
 
     envVar = getSuperGlobalRef(name, true, false);
 
     // php/0809
-    if (envVar != null)
+    if (envVar != null) {
       _globalMap.put(name, envVar);
+    }
     else {
-      if (! isAutoCreate) {
-        // php/0206
-        if (isOutputNotice)
-          notice(L.l("${0} is an undefined variable", name));
+      // php/0205, php/0206
+      // XXX: optimize: don't create a string when the error is just going to be ignored
+      if (isOutputNotice) {
+        notice(L.l("${0} is an undefined variable", name));
+      }
 
+      if (! isAutoCreate) {
         return null;
       }
-      else
-        envVar = new EnvVarImpl(new Var());
+
+      envVar = new EnvVarImpl(new Var());
     }
 
     _map.put(name, envVar);
@@ -2095,8 +2262,9 @@ public class Env
   {
     EnvVar envVar = _globalMap.get(name);
 
-    if (envVar != null)
+    if (envVar != null) {
       return envVar;
+    }
 
     envVar = getSuperGlobalRef(name, true);
 
@@ -2115,11 +2283,11 @@ public class Env
       envVar = getGlobalScriptContextRef(name);
 
     if (envVar == null) {
+      if (isOutputNotice) {
+        notice(L.l("${0} is an undefined variable", name));
+      }
+
       if (! isAutoCreate) {
-        
-        if (isOutputNotice)
-          notice(L.l("${0} is an undefined variable", name));
-         
         return null;
       }
 
@@ -2191,12 +2359,12 @@ public class Env
   public final Var getStaticVar(StringValue name)
   {
     Var var = _staticMap.get(name);
-    
+
     if (var == null) {
       var = new Var();
       _staticMap.put(name, var);
     }
-    
+
     return var;
   }
 
@@ -2225,21 +2393,21 @@ public class Env
   {
     if (value.isVar()) {
       Var var = (Var) value;
-      
+
       _staticMap.put(name, var);
-      
+
       return var;
     }
-    
+
     Var var = _staticMap.get(name);
-    
+
     if (var == null) {
       var = new Var();
       _staticMap.put(name, var);
     }
-    
+
     var.set(value);
-    
+
     return var;
   }
 
@@ -2262,7 +2430,7 @@ public class Env
       className = callingClass.getName();
 
     StringValue varName = createString(className).append("::").append(name);
-    
+
     return getStaticVar(varName);
   }
   */
@@ -2275,7 +2443,7 @@ public class Env
   public final Var unsetVar(StringValue name)
   {
     EnvVar envVar = _map.get(name);
-    
+
     if (envVar != null)
       envVar.setVar(new Var());
 
@@ -2333,7 +2501,7 @@ public class Env
   public final Var unsetGlobalVar(StringValue name)
   {
     EnvVar envVar = _globalMap.get(name);
-    
+
     if (envVar != null)
       envVar.setVar(new Var());
 
@@ -2375,8 +2543,9 @@ public class Env
   {
     value = value.toValue();
 
-    if (var instanceof Var)
+    if (var instanceof Var) {
       var.set(value);
+    }
 
     return value;
   }
@@ -2393,14 +2562,19 @@ public class Env
                                    boolean isCheckGlobal,
                                    boolean isGlobal)
   {
-    Var var;
-    EnvVar envVar;
+    int specialVarId;
 
-    int specialVarId = SPECIAL_VARS.get(name);
+    if (isUnicodeSemantics()) {
+      specialVarId = SPECIAL_VARS_U.get(name);
+    }
+    else {
+      specialVarId = SPECIAL_VARS.get(name);
+
+    }
 
     if (isCheckGlobal) {
       if (specialVarId != IntMap.NULL) {
-        envVar = _globalMap.get(name);
+        EnvVar envVar = _globalMap.get(name);
 
         if (envVar != null)
           return envVar;
@@ -2409,25 +2583,63 @@ public class Env
 
     switch (specialVarId) {
       case _ENV: {
-        var = new Var();
-        envVar = new EnvVarImpl(var);
+        Var var = new Var();
+        EnvVar envVar = new EnvVarImpl(var);
 
         _globalMap.put(name, envVar);
 
-        envVar.set(new ArrayValueImpl());
+        ArrayValue array = new ArrayValueImpl(getInputEnvArray());
+        envVar.set(array);
 
         return envVar;
       }
 
-      case HTTP_POST_VARS:
+      case ARGV: {
+        if (! _quercus.isRegisterArgv()) {
+          return null;
+        }
+
+        Var var = new Var();
+        EnvVar envVar = new EnvVarImpl(var);
+
+        ArrayValue array = createArgv();
+        envVar.set(array);
+
+        _globalMap.put(name, envVar);
+
+        return envVar;
+      }
+
+      case ARGC: {
+        if (! _quercus.isRegisterArgv()) {
+          return null;
+        }
+
+        Var array = getGlobalEnvVar(isUnicodeSemantics() ? S_ARGV_U : S_ARGV).getVar();
+
+        int size = array.getSize();
+
+        Var var = new Var();
+        EnvVar envVar = new EnvVarImpl(var);
+
+        LongValue value = LongValue.create(size);
+        envVar.set(value);
+
+        _globalMap.put(name, envVar);
+
+        return envVar;
+      }
+
+      case HTTP_POST_VARS: {
         if (! QuercusContext.INI_REGISTER_LONG_ARRAYS.getAsBoolean(this))
           return null;
         else
-          return getGlobalEnvVar(S_POST);
+          return getGlobalEnvVar(isUnicodeSemantics() ? S_POST_U : S_POST);
+      }
 
       case _POST: {
-        var = new Var();
-        envVar = new EnvVarImpl(var);
+        Var var = new Var();
+        EnvVar envVar = new EnvVarImpl(var);
 
         _globalMap.put(name, envVar);
 
@@ -2436,8 +2648,8 @@ public class Env
         envVar.set(post);
 
         if (_variablesOrder.indexOf('P') >= 0
-            && _postArray.getSize() > 0) {
-          for (Map.Entry<Value, Value> entry : _postArray.entrySet()) {
+            && _inputPost.getSize() > 0) {
+          for (Map.Entry<Value, Value> entry : _inputPost.entrySet()) {
             post.put(entry.getKey(), entry.getValue());
           }
         }
@@ -2445,15 +2657,16 @@ public class Env
         return envVar;
       }
 
-      case HTTP_POST_FILES:
+      case HTTP_POST_FILES: {
         if (! QuercusContext.INI_REGISTER_LONG_ARRAYS.getAsBoolean(this))
           return null;
         else
-          return getGlobalEnvVar(S_FILES);
+          return getGlobalEnvVar(isUnicodeSemantics() ? S_FILES_U : S_FILES);
+      }
 
       case _FILES: {
-        var = new Var();
-        envVar = new EnvVarImpl(var);
+        Var var = new Var();
+        EnvVar envVar = new EnvVarImpl(var);
 
         _globalMap.put(name, envVar);
 
@@ -2470,13 +2683,14 @@ public class Env
         return envVar;
       }
 
-      case HTTP_GET_VARS:
+      case HTTP_GET_VARS: {
         if (! QuercusContext.INI_REGISTER_LONG_ARRAYS.getAsBoolean(this))
           return null;
         else if (! isGlobal)
           return null;
         else
-          return getGlobalEnvVar(S_GET);
+          return getGlobalEnvVar(isUnicodeSemantics() ? S_GET_U : S_GET);
+      }
 
       case _GET: {
         if (isCheckGlobal) {
@@ -2486,24 +2700,28 @@ public class Env
             return e;
         }
 
-        var = new Var();
-        envVar = new EnvVarImpl(var);
+        Var var = new Var();
+        EnvVar envVar = new EnvVarImpl(var);
 
         _globalMap.put(name, envVar);
 
-        ArrayValue array = new ArrayValueImpl();
-        envVar.set(array);
+        ArrayValue array;
 
         if (_variablesOrder.indexOf('G') >= 0) {
-          fillGet(array, getIniBoolean("magic_quotes_gpc"));
+          array = new ArrayValueImpl(getInputGetArray());
         }
+        else {
+          array = new ArrayValueImpl();
+        }
+
+        envVar.set(array);
 
         return envVar;
       }
 
       case _REQUEST: {
-        var = new Var();
-        envVar = new EnvVarImpl(var);
+        Var var = new Var();
+        EnvVar envVar = new EnvVarImpl(var);
 
         ArrayValue array = new ArrayValueImpl();
 
@@ -2513,22 +2731,20 @@ public class Env
 
         if (_request == null)
           return envVar;
-        
-        boolean isMagicQuotes = getIniBoolean("magic_quotes_gpc");
 
         int orderLen = _variablesOrder.length();
-        
+
         for (int i = 0; i < orderLen; i++) {
           switch (_variablesOrder.charAt(i)) {
             case 'G':
-              fillGet(array, isMagicQuotes);
+              array.putAll(getInputGetArray());
               break;
             case 'P':
-              if (_postArray.getSize() > 0)
-                fillPost(array, _postArray);
+              if (_inputPost.getSize() > 0)
+                fillPost(array, _inputPost);
               break;
             case 'C':
-              fillCookies(array, _request.getCookies(), isMagicQuotes);
+              array.putAll(getInputCookieArray());
               break;
           }
         }
@@ -2537,8 +2753,7 @@ public class Env
       }
 
       case HTTP_RAW_POST_DATA: {
-        if (!QuercusContext.INI_ALWAYS_POPULATE_RAW_POST_DATA
-          .getAsBoolean(this)) {
+        if (! QuercusContext.INI_ALWAYS_POPULATE_RAW_POST_DATA.getAsBoolean(this)) {
           String contentType = getContentType();
 
           if (contentType == null || ! contentType.startsWith("unknown/type"))
@@ -2548,8 +2763,8 @@ public class Env
         if (_inputData == null)
           return null;
 
-        var = new Var();
-        envVar = new EnvVarImpl(var);
+        Var var = new Var();
+        EnvVar envVar = new EnvVarImpl(var);
 
         _globalMap.put(name, envVar);
 
@@ -2558,41 +2773,26 @@ public class Env
         return envVar;
       }
 
-      case HTTP_SERVER_VARS:
+      case HTTP_SERVER_VARS: {
         if (! QuercusContext.INI_REGISTER_LONG_ARRAYS.getAsBoolean(this))
           return null;
         else
-          return getGlobalEnvVar(S_SERVER);
+          return getGlobalEnvVar(isUnicodeSemantics() ? S_SERVER_U : S_SERVER);
+      }
 
       case _SERVER: {
-        var = new Var();
-        envVar = new EnvVarImpl(var);
+        Var var = new Var();
+        EnvVar envVar = new EnvVarImpl(var);
 
         _globalMap.put(name, envVar);
 
         Value serverEnv;
 
         if (_variablesOrder.indexOf('S') >= 0) {
-          serverEnv = new ServerArrayValue(this);
-          
-          String query = getQueryString();
+          serverEnv = getInputServerArray().copy();
 
-          if (_quercus.getIniBoolean("register_argc_argv")
-              && query != null) {
-            ArrayValue argv = new ArrayValueImpl();
-
-            int i = 0;
-            int j = 0;
-            while ((j = query.indexOf('+', i)) >= 0) {
-              String sub = query.substring(i, j);
-
-              argv.put(sub);
-
-              i = j + 1;
-            }
-
-            if (i < query.length())
-              argv.put(query.substring(i));
+          if (_quercus.isRegisterArgv()) {
+            ArrayValue argv = createArgv();
 
             serverEnv.put(createString("argc"),
                           LongValue.create(argv.getSize()));
@@ -2600,8 +2800,9 @@ public class Env
             serverEnv.put(createString("argv"), argv);
           }
         }
-        else
+        else {
           serverEnv = new ArrayValueImpl();
+        }
 
         var.set(serverEnv);
 
@@ -2609,8 +2810,8 @@ public class Env
       }
 
       case _GLOBAL: {
-        var = new Var();
-        envVar = new EnvVarImpl(var);
+        Var var = new Var();
+        EnvVar envVar = new EnvVarImpl(var);
 
         _globalMap.put(name, envVar);
 
@@ -2623,11 +2824,11 @@ public class Env
         if (! QuercusContext.INI_REGISTER_LONG_ARRAYS.getAsBoolean(this))
           return null;
         else
-          return getGlobalEnvVar(S_COOKIE);
+          return getGlobalEnvVar(isUnicodeSemantics() ? S_COOKIE_U : S_COOKIE);
 
       case _COOKIE: {
-        var = new Var();
-        envVar = new EnvVarImpl(var);
+        Var var = new Var();
+        EnvVar envVar = new EnvVarImpl(var);
 
         _globalMap.put(name, envVar);
 
@@ -2640,25 +2841,25 @@ public class Env
       }
 
       case _SESSION: {
-        envVar = _globalMap.get("_SESSION");
+        EnvVar envVar = _globalMap.get("_SESSION");
 
         if (envVar == null) {
-          var = new SessionVar();
+          Var var = new SessionVar();
           envVar = new EnvVarImpl(var);
 
           _globalMap.put(name, envVar);
         }
-        
+
         return envVar;
       }
 
       case PHP_SELF: {
-        var = new Var();
-        envVar = new EnvVarImpl(var);
+        Var var = new Var();
+        EnvVar envVar = new EnvVarImpl(var);
 
         _globalMap.put(name, envVar);
 
-        var.set(getGlobalVar("_SERVER").get(PHP_SELF_STRING));
+        var.set(getGlobalVar("_SERVER").get(isUnicodeSemantics() ? PHP_SELF_STRING_U : PHP_SELF_STRING));
 
         return envVar;
       }
@@ -2666,6 +2867,31 @@ public class Env
       default:
         return null;
     }
+  }
+
+  protected ArrayValue createArgv() {
+    ArrayValue array = new ArrayValueImpl();
+
+    String query = getQueryString();
+
+    if (query == null) {
+      return array;
+    }
+
+    int i = 0;
+    int j = 0;
+    while ((j = query.indexOf('+', i)) >= 0) {
+      String sub = query.substring(i, j);
+
+      array.put(sub);
+
+      i = j + 1;
+    }
+
+    if (i < query.length())
+      array.put(query.substring(i));
+
+    return array;
   }
 
   protected String getQueryString()
@@ -2687,12 +2913,17 @@ public class Env
   protected ArrayValue getCookies()
   {
     ArrayValue array = new ArrayValueImpl();
+
+    if (_request == null) {
+      return array;
+    }
+
     boolean isMagicQuotes = getIniBoolean("magic_quotes_gpc");
 
-    Cookie []cookies = _request.getCookies();
+    QuercusCookie []cookies = _request.getCookies();
     if (cookies != null) {
       for (int i = 0; i < cookies.length; i++) {
-        Cookie cookie = cookies[i];
+        QuercusCookie cookie = cookies[i];
 
         String value = decodeValue(cookie.getValue());
 
@@ -2708,9 +2939,9 @@ public class Env
     return array;
   }
 
-  public void setArgs(String []args)
+  public void setArgv(String []args)
   {
-    if (_quercus.getIniBoolean("register_argc_argv")) {
+    if (_quercus.isRegisterArgv()) {
       ArrayValue argv = new ArrayValueImpl();
 
       for (String arg : args) {
@@ -2828,12 +3059,30 @@ public class Env
   {
     return getVar(createString(name));
   }
+
+  /**
+   * Gets a value.
+   */
+  public Var getVar(StringValue name,
+                    boolean isAutoCreate,
+                    boolean isOutputNotice)
+  {
+    EnvVar envVar = getEnvVar(name, isAutoCreate, isOutputNotice);
+
+    if (envVar != null) {
+      return envVar.getVar();
+    }
+    else {
+      return null;
+    }
+  }
+
   /**
    * Gets a value.
    */
   public Var getVar(StringValue name)
   {
-    EnvVar envVar = getEnvVar(name);
+    EnvVar envVar = getEnvVar(name, true, false);
 
     return envVar.getVar();
   }
@@ -2854,7 +3103,7 @@ public class Env
   public Var getGlobalVar(StringValue name)
   {
     EnvVar envVar = getGlobalEnvVar(name);
-    
+
     return envVar.getVar();
   }
 
@@ -2868,7 +3117,7 @@ public class Env
    */
   public Value setValue(StringValue name, Value value)
   {
-    EnvVar envVar = getEnvVar(name);
+    EnvVar envVar = getEnvVar(name, true, false);
 
     envVar.set(value);
 
@@ -2880,7 +3129,7 @@ public class Env
    */
   public Var setVar(StringValue name, Var var)
   {
-    EnvVar envVar = getEnvVar(name);
+    EnvVar envVar = getEnvVar(name, true, false);
 
     envVar.setVar(var);
 
@@ -2892,7 +3141,7 @@ public class Env
    */
   public Var setRef(StringValue name, Value value)
   {
-    EnvVar envVar = getEnvVar(name);
+    EnvVar envVar = getEnvVar(name, true, false);
 
     return envVar.setRef(value);
   }
@@ -3088,31 +3337,33 @@ public class Env
   {
     FieldGetEntry entry = new FieldGetEntry(className, fieldName);
 
-      LinkedList<FieldGetEntry> list = null;
-      switch (type) {
-          case FIELDGET:
-              list = _fieldGetList;
-              break;
-          case FIELDSET:
-              list = _fieldSetList;
-              break;
-          case ISSET:
-              list = _issetList;
-              break;
-          case UNSET:
-              list = _unsetList;
-              break;
-          case INVALID_FIRST:
-          case INVALID_LAST:
-              // defensive programming according to &quot;Code Complete 2nd Edition, MS Press&quot;
-              throw new IllegalStateException("IllegalState: pushFieldGet with FIRST/LAST Element");
-      }
+    LinkedList<FieldGetEntry> list = null;
+    switch (type) {
+    case FIELDGET:
+      list = _fieldGetList;
+      break;
+    case FIELDSET:
+      list = _fieldSetList;
+      break;
+    case ISSET:
+      list = _issetList;
+      break;
+    case UNSET:
+      list = _unsetList;
+      break;
+    case INVALID_FIRST:
+    case INVALID_LAST:
+      // defensive programming according to &quot;Code Complete 2nd Edition, MS Press&quot;
+      throw new IllegalStateException("IllegalState: pushFieldGet with FIRST/LAST Element");
+    }
 
-      if(list == null)
-        return false;
-
-    if (list.contains(entry))
+    if (list == null) {
       return false;
+    }
+
+    if (list.contains(entry)) {
+      return false;
+    }
     else {
       list.push(entry);
 
@@ -3122,43 +3373,39 @@ public class Env
 
   public void popFieldGet(Env.OVERLOADING_TYPES type)
   {
-      switch (type) {
-          case FIELDGET:
-              _fieldGetList.pop();
-              break;
-          case FIELDSET:
-              _fieldSetList.pop();
-              break;
-          case ISSET:
-              _issetList.pop();
-              break;
-          case UNSET:
-              _unsetList.pop();
-              break;
-          case INVALID_FIRST:
-          case INVALID_LAST:
-              // defensive programming according to &quot;Code Complete 2nd Edition, MS Press&quot;
-              throw new IllegalStateException("IllegalState: popFieldGet with FIRST/LAST Element");
-      }
+    switch (type) {
+    case FIELDGET:
+      _fieldGetList.pop();
+      break;
+    case FIELDSET:
+      _fieldSetList.pop();
+      break;
+    case ISSET:
+      _issetList.pop();
+      break;
+    case UNSET:
+      _unsetList.pop();
+      break;
+    case INVALID_FIRST:
+    case INVALID_LAST:
+      throw new IllegalStateException("IllegalState: popFieldGet with FIRST/LAST Element");
+    }
   }
 
-  /*
-   * Returns the calling class.
-   */
   public QuercusClass getCallingClass()
   {
     return _callingClass;
   }
-  
+
   public Value getCallingClassName()
   {
     QuercusClass qClass = _callingClass;
-  
+
     if (qClass != null)
       return createString(qClass.getName());
     else {
       warning(L.l("get_called_class() must be called from a class-context."));
-    
+
       return NullValue.NULL;
     }
   }
@@ -3169,7 +3416,7 @@ public class Env
   public QuercusClass getCallingClass(Value qThis)
   {
     QuercusClass cls = qThis.getQuercusClass();
-    
+
     if (cls == null)
       cls = _callingClass;
 
@@ -3186,6 +3433,52 @@ public class Env
     _callingClass = cls;
 
     return oldCallingClass;
+  }
+
+  public String getStackTraceAsString()
+  {
+    return getStackTraceAsString(getLocation());
+  }
+
+  public String getStackTraceAsString(Location loc)
+  {
+    ArrayValue value = ErrorModule.debug_backtrace(this, 0, 0);
+
+    return getStackTraceAsString(value, loc);
+  }
+
+  public String getStackTraceAsString(Throwable e, Location loc)
+  {
+    ArrayValue value = ErrorModule.debug_backtrace_exception(this, e, 0);
+
+    return getStackTraceAsString(value, loc);
+  }
+
+  public String getStackTraceAsString(ArrayValue value, Location location)
+  {
+    StringBuilder sb = new StringBuilder();
+
+    for (Value item : value.values()) {
+      String function = item.get(createString("function")).toJavaString();
+      String file = item.get(createString("file")).toJavaString();
+      int line = item.get(createString("line")).toInt();
+
+      if (function == null || "".equals(function))
+        continue;
+
+      sb.append("\n  at ");
+      sb.append(function);
+
+      if (file != null && ! "".equals(file)) {
+        sb.append(" (" + file + ":" + line + ")");
+      }
+    }
+
+    if (sb.length() == 0 && location != null) {
+      return "\n  " + String.valueOf(location);
+    }
+
+    return sb.toString();
   }
 
   public ArrayList<String> getStackTrace()
@@ -3289,16 +3582,16 @@ public class Env
   public Value getConstant(String name, boolean isAutoCreateString)
   {
     Value value = getConstantImpl(name);
-    
+
     if (value != null)
       return value;
-    
+
     int ns = name.lastIndexOf('\\');
-    
+
     if (ns >= 0) {
       name = name.substring(ns + 1);
       value = getConstantImpl(name);
-      
+
       if (value != null)
         return value;
     }
@@ -3395,20 +3688,20 @@ public class Env
 
       return value;
     }
-    
+
     Value nameValue = _quercus.getConstantName(id);
-    
+
     String name = nameValue.toString();
-    
+
     int ns = name.lastIndexOf('\\');
     if (ns >= 0) {
       name = name.substring(ns + 1);
-      
+
       value = getConstantImpl(name);
-      
+
       if (value != null) {
         _const[id] = value;
-      
+
         return value;
       }
     }
@@ -3455,7 +3748,7 @@ public class Env
     int id;
 
     if (isCaseInsensitive)
-      id = _quercus.addLowerConstantId(new ConstStringValue(name));
+      id = _quercus.addLowerConstantId(createString(name));
     else
       id = _quercus.getConstantId(name);
 
@@ -3567,6 +3860,71 @@ public class Env
     return _defaultStreamContext;
   }
 
+  public HashMap<StringValue,ProtocolWrapper> getStreamWrappers()
+  {
+    if (_wrappedStreamMap == null) {
+      _wrappedStreamMap = new HashMap<StringValue,ProtocolWrapper>();
+
+      ProtocolWrapper zlibProtocolWrapper = new ZlibProtocolWrapper();
+      _wrappedStreamMap.put(createString("compress.zlib"), zlibProtocolWrapper);
+      _wrappedStreamMap.put(createString("zlib"), zlibProtocolWrapper);
+      _wrappedStreamMap.put(createString("php"), new PhpProtocolWrapper());
+    }
+
+    return _wrappedStreamMap;
+  }
+
+  public void addStreamWrapper(StringValue name, ProtocolWrapper wrapper)
+  {
+    HashMap<StringValue,ProtocolWrapper> streamMap = getStreamWrappers();
+
+    streamMap.put(name, wrapper);
+  }
+
+  public ProtocolWrapper getStreamWrapper(StringValue name)
+  {
+    HashMap<StringValue,ProtocolWrapper> wrapperMap = getStreamWrappers();
+
+    return wrapperMap.get(name);
+  }
+
+  public boolean unregisterStreamWrapper(StringValue name)
+  {
+    HashMap<StringValue,ProtocolWrapper> wrapperMap = getStreamWrappers();
+
+    ProtocolWrapper wrapper = wrapperMap.remove(name);
+
+    if (wrapper == null) {
+      return false;
+    }
+
+    if (_unregisteredWrappedStreamMap == null) {
+      _unregisteredWrappedStreamMap = new HashMap<StringValue,ProtocolWrapper>();
+    }
+
+    _unregisteredWrappedStreamMap.put(name, wrapper);
+    return true;
+  }
+
+  public boolean restoreStreamWrapper(StringValue name)
+  {
+    if (_unregisteredWrappedStreamMap == null) {
+      return false;
+    }
+
+    ProtocolWrapper wrapper = _unregisteredWrappedStreamMap.remove(name);
+
+    if (wrapper == null) {
+      return false;
+    }
+
+    HashMap<StringValue,ProtocolWrapper> wrapperMap = getStreamWrappers();
+
+    wrapperMap.put(name, wrapper);
+
+    return true;
+  }
+
   //
   // function handling
   //
@@ -3604,7 +3962,7 @@ public class Env
    * Compiled mode normally uses the _fun array directly, so this call
    * is rare.
    */
-  public int findFunctionId(String name)
+  public int findFunctionId(StringValue name)
   {
     return _quercus.findFunctionId(name);
   }
@@ -3615,7 +3973,7 @@ public class Env
    * Compiled mode normally uses the _fun array directly, so this call
    * is rare.
    */
-  public AbstractFunction findFunction(String name)
+  public AbstractFunction findFunction(StringValue name)
   {
     int id = _quercus.findFunctionId(name);
 
@@ -3660,34 +4018,21 @@ public class Env
       return null;
   }
 
-  /**
-   * Returns the function with a given name.
-   *
-   * Compiled mode normally uses the _fun array directly, so this call
-   * is rare.
-   */
-  public AbstractFunction findFunction(int id)
+  public AbstractFunction getFunction(int id)
   {
-    if (id >= 0) {
-      if (id < _fun.length && ! (_fun[id] instanceof UndefinedFunction)) {
-        return _fun[id];
-      }
-      else {
-        return null;
-      }
-    }
-
-    return null;
+    return _fun[id];
   }
 
-  public AbstractFunction getFunction(String name)
+  public AbstractFunction getFunction(StringValue name)
   {
     AbstractFunction fun = findFunction(name);
 
-    if (fun != null)
+    if (fun != null) {
       return fun;
-    else
+    }
+    else {
       throw createErrorException(L.l("'{0}' is an unknown function.", name));
+    }
   }
 
   public void updateFunction(int id, AbstractFunction fun)
@@ -3699,8 +4044,9 @@ public class Env
       System.arraycopy(oldFun, 0, _fun, 0, oldFun.length);
     }
 
-    if (_fun[id] == null)
+    if (_fun[id] == null) {
       _fun[id] = fun;
+    }
   }
 
   /*
@@ -3739,10 +4085,11 @@ public class Env
   {
     name = name.toValue();
 
-    if (name instanceof CallbackFunction)
+    if (name instanceof CallbackFunction) {
       return ((CallbackFunction) name).getFunction(this);
+    }
 
-    return getFunction(name.toString());
+    return getFunction(name.toStringValue());
   }
 
   /*
@@ -3753,6 +4100,11 @@ public class Env
   */
 
   public Value addFunction(String name, AbstractFunction fun)
+  {
+    return addFunction(createString(name), fun);
+  }
+
+  public Value addFunction(StringValue name, AbstractFunction fun)
   {
     AbstractFunction staticFun
       = _quercus.findLowerFunctionImpl(name.toLowerCase(Locale.ENGLISH));
@@ -3781,13 +4133,28 @@ public class Env
   public AbstractFunction createAnonymousFunction(String args, String code)
     throws IOException
   {
-    if (_anonymousFunMap == null)
-      _anonymousFunMap = new HashMap<String, AbstractFunction>();
+    if (_anonymousFunMap == null) {
+      _anonymousFunMap = new HashMap<StringValue, AbstractFunction>();
+    }
+
+    StringValue sb = createStringBuilder();
 
     // PHP naming style for anonymous functions
-    String name = "\u0000lambda_" + (_anonymousFunMap.size() + 1);
+    sb.append("\u0000lambda_");
+    sb.append(_anonymousFunMap.size() + 1);
 
-    AbstractFunction fun = getQuercus().parseFunction(name, args, code);
+    StringValue name = sb;
+
+    if (args == null) {
+      args = "";
+    }
+
+    if (code == null) {
+      code = "";
+    }
+
+    AbstractFunction fun
+      = getQuercus().parseFunction(name.toString(), args, code);
 
     _anonymousFunMap.put(name, fun);
     return fun;
@@ -3824,37 +4191,6 @@ public class Env
   }
 
   //
-  // method handling
-  //
-
-  /**
-   * Finds the java reflection method for the function with the given name.
-   *
-   * @param className the class name
-   * @param methodName the method name
-   * @return the found method or null if no method found.
-   */
-  public AbstractFunction findMethod(String className, String methodName)
-  {
-    QuercusClass cl = findClass(className);
-
-    if (cl == null) {
-      error(L.l("'{0}' is an unknown class.", className));
-      return null;
-    }
-
-    AbstractFunction fun = cl.findFunction(methodName);
-
-    if (fun == null) {
-      error(L.l("'{0}::{1}' is an unknown method.",
-                className, methodName));
-      return null;
-    }
-
-    return fun;
-  }
-
-  //
   // evaluation
   //
 
@@ -3864,11 +4200,12 @@ public class Env
    * @param code the code to evalute
    * @return the result
    */
-  public Value evalCode(String code)
+  public Value evalCode(StringValue code)
     throws IOException
   {
-    if (log.isLoggable(Level.FINER))
-      log.finer(code);
+    if (log.isLoggable(Level.FINER)) {
+      log.finer(code.toString());
+    }
 
     QuercusContext quercus = getQuercus();
 
@@ -3926,11 +4263,6 @@ public class Env
    */
   public Value executeTop()
   {
-    Path oldPwd = getPwd();
-
-    Path pwd = _page.getPwd(this);
-
-    setPwd(pwd);
     try {
       return executePageTop(_page);
     } catch (QuercusLanguageException e) {
@@ -3938,7 +4270,7 @@ public class Env
 
       if (getExceptionHandler() != null) {
         try {
-          getExceptionHandler().call(this, e.getValue());
+          getExceptionHandler().call(this, e.toException(this));
         }
         catch (QuercusLanguageException e2) {
           uncaughtExceptionError(e2);
@@ -3949,8 +4281,6 @@ public class Env
       }
 
       return NullValue.NULL;
-    } finally {
-      setPwd(oldPwd);
     }
   }
 
@@ -3963,10 +4293,8 @@ public class Env
     String type = e.getValue().getClassName();
     String message = e.getMessage(this);
 
-    error(location,
-          L.l("Uncaught exception of type '{0}' with message '{1}'",
-              type,
-              message));
+    error(L.l("Uncaught exception of type '{0}' with message '{1}'", type, message),
+          location);
   }
 
   /**
@@ -3976,7 +4304,7 @@ public class Env
   {
     if (log.isLoggable(Level.FINEST))
       log.finest(this + " executePage " + page);
-    
+
     if (page.getCompiledPage() != null)
       return page.getCompiledPage().execute(this);
     else
@@ -4000,7 +4328,7 @@ public class Env
    * @param name the function name
    * @return the function value
    */
-  public Value call(String name)
+  public Value call(StringValue name)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4021,7 +4349,7 @@ public class Env
    * @param a0 the first argument
    * @return the function value
    */
-  public Value call(String name, Value a0)
+  public Value call(StringValue name, Value a0)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4039,7 +4367,7 @@ public class Env
    * @param a1 the second argument
    * @return the function value
    */
-  public Value call(String name, Value a0, Value a1)
+  public Value call(StringValue name, Value a0, Value a1)
   {
     return getFunction(name).call(this, a0, a1);
   }
@@ -4053,7 +4381,7 @@ public class Env
    * @param a2 the third argument
    * @return the function value
    */
-  public Value call(String name, Value a0, Value a1, Value a2)
+  public Value call(StringValue name, Value a0, Value a1, Value a2)
   {
     return getFunction(name).call(this, a0, a1, a2);
   }
@@ -4068,7 +4396,7 @@ public class Env
    * @param a3 the fourth argument
    * @return the function value
    */
-  public Value call(String name, Value a0, Value a1, Value a2, Value a3)
+  public Value call(StringValue name, Value a0, Value a1, Value a2, Value a3)
   {
     return getFunction(name).call(this, a0, a1, a2, a3);
   }
@@ -4084,7 +4412,7 @@ public class Env
    * @param a4 the fifth argument
    * @return the function value
    */
-  public Value call(String name, Value a0, Value a1,
+  public Value call(StringValue name, Value a0, Value a1,
                     Value a2, Value a3, Value a4)
   {
     return getFunction(name).call(this, a0, a1, a2, a3, a4);
@@ -4097,7 +4425,7 @@ public class Env
    * @param args the arguments
    * @return the function value
    */
-  public Value call(String name, Value []args)
+  public Value call(StringValue name, Value []args)
   {
     return getFunction(name).call(this, args);
   }
@@ -4108,7 +4436,7 @@ public class Env
    * @param name the function name
    * @return the function value
    */
-  public Value callRef(String name)
+  public Value callRef(StringValue name)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4125,7 +4453,7 @@ public class Env
    * @param a0 the first argument
    * @return the function value
    */
-  public Value callRef(String name, Value a0)
+  public Value callRef(StringValue name, Value a0)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4143,7 +4471,7 @@ public class Env
    * @param a1 the second argument
    * @return the function value
    */
-  public Value callRef(String name, Value a0, Value a1)
+  public Value callRef(StringValue name, Value a0, Value a1)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4162,7 +4490,7 @@ public class Env
    * @param a2 the third argument
    * @return the function value
    */
-  public Value callRef(String name, Value a0, Value a1, Value a2)
+  public Value callRef(StringValue name, Value a0, Value a1, Value a2)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4182,7 +4510,7 @@ public class Env
    * @param a3 the fourth argument
    * @return the function value
    */
-  public Value callRef(String name, Value a0, Value a1, Value a2, Value a3)
+  public Value callRef(StringValue name, Value a0, Value a1, Value a2, Value a3)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4203,7 +4531,7 @@ public class Env
    * @param a4 the fifth argument
    * @return the function value
    */
-  public Value callRef(String name, Value a0, Value a1,
+  public Value callRef(StringValue name, Value a0, Value a1,
                        Value a2, Value a3, Value a4)
   {
     AbstractFunction fun = findFunction(name);
@@ -4221,7 +4549,7 @@ public class Env
    * @param args the arguments
    * @return the function value
    */
-  public Value callRef(String name, Value []args)
+  public Value callRef(StringValue name, Value []args)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4289,7 +4617,7 @@ public class Env
    */
   boolean isSpecialVar(StringValue name)
   {
-    if (_quercus.isSuperGlobal(name))
+    if (QuercusContext.isSuperGlobal(name))
       return true;
     else if (_scriptGlobalMap.get(name) != null)
       return true;
@@ -4328,9 +4656,9 @@ public class Env
 
     IntMap staticNameMap = saveState.getStaticNameMap();
     Value []staticList = saveState.getStaticList();
-    
+
     _staticMap = new LazyStaticMap(staticNameMap, staticList);
-    
+
     IntMap globalNameMap = saveState.getGlobalNameMap();
     Value []globalList = saveState.getGlobalList();
 
@@ -4405,7 +4733,7 @@ public class Env
       return ConstStringValue.EMPTY;
   }
 
-  /*
+  /**
    * Creates an empty string builder.
    */
   public StringValue createStringBuilder()
@@ -4450,6 +4778,18 @@ public class Env
   }
 
   /**
+   * Creates a PHP string from a long.
+   */
+  public StringValue createString(long value) {
+    String s = String.valueOf(value);
+
+    if (_isUnicodeSemantics)
+      return new UnicodeValueImpl(s);
+    else
+      return new ConstStringValue(s);
+  }
+
+  /**
    * Creates a PHP string from a java String.
    */
   public StringValue createString(String s)
@@ -4465,8 +4805,9 @@ public class Env
       else
         return ConstStringValue.create(s.charAt(0));
     }
-    else if (_isUnicodeSemantics)
+    else if (_isUnicodeSemantics) {
       return new UnicodeBuilderValue(s);
+    }
     else if (s.length() < 256) {
       StringValue stringValue = _internStringMap.get(s);
 
@@ -4527,7 +4868,28 @@ public class Env
 
     value.putField(this, "file", createString(location.getFileName()));
     value.putField(this, "line", LongValue.create(location.getLineNumber()));
-    value.putField(this, "trace", ErrorModule.debug_backtrace(this));
+    value.putField(this, "trace", ErrorModule.debug_backtrace(this, 0, 0));
+
+    return value;
+  }
+
+  public Value createException(String exceptionClass, String ...args)
+  {
+    QuercusClass cls = getClass(exceptionClass);
+
+    Value[] argsV = new Value[args.length];
+
+    for (int i = 0; i < args.length; i++) {
+      argsV[i] = createString(args[i]);
+    }
+
+    Value value = cls.callNew(this, argsV);
+
+    Location location = getLocation();
+
+    value.putField(this, "file", createString(location.getFileName()));
+    value.putField(this, "line", LongValue.create(location.getLineNumber()));
+    value.putField(this, "trace", ErrorModule.debug_backtrace(this, 0, 0));
 
     return value;
   }
@@ -4548,11 +4910,11 @@ public class Env
 
     value.putField(this, "file", createString(elt.getFileName()));
     value.putField(this, "line", LongValue.create(elt.getLineNumber()));
-    value.putField(this, "trace", ErrorModule.debug_backtrace(this));
-    
+    value.putField(this, "trace", ErrorModule.debug_backtrace(this, 0, 0));
+
     if ((e instanceof QuercusException) && e.getCause() != null)
       e = e.getCause();
-    
+
     value.putField(this, "__javaException", wrapJava(e));
 
     return value;
@@ -4561,7 +4923,7 @@ public class Env
   /**
    * Generate an object id.
    */
-  public int generateId()
+  public int generateObjectId()
   {
     return ++_objectId;
   }
@@ -4604,19 +4966,16 @@ public class Env
       }
     }
     catch (Throwable e) {
-      if (log.isLoggable(Level.FINEST))
+      if (log.isLoggable(Level.FINEST)) {
         log.log(Level.FINEST, e.toString(), e);
-      
+      }
+
       if (useImport) {
         def = importJavaClass(className);
-        
+
         if (def != null)
           return def;
       }
-      /*
-      else
-        throw createErrorException(e);
-        */
     }
 
     return def;
@@ -4646,7 +5005,7 @@ public class Env
         fullName = entry + '.' + className;
 
         JavaClassDef def;
-        
+
         try {
           def = getJavaClassDefinition(fullName, false);
 
@@ -4750,11 +5109,13 @@ public class Env
    */
   public Value wrapJava(Object obj, JavaClassDef def)
   {
-    if (obj == null)
+    if (obj == null) {
       return NullValue.NULL;
+    }
 
-    if (obj instanceof Value)
+    if (obj instanceof Value) {
       return (Value) obj;
+    }
 
     // XXX: why is this logic here?  The def should be correct on the call
     // logic is for JavaMarshal, where can avoid the lookup call
@@ -4770,6 +5131,30 @@ public class Env
   }
 
   /**
+   * Adds a class alias.
+   */
+  public void addClassAlias(String alias, QuercusClass cls)
+  {
+    if (_classAliasMap == null) {
+      _classAliasMap = new HashMap<String,QuercusClass>();
+    }
+
+    _classAliasMap.put(alias, cls);
+  }
+
+  /**
+   * Finds the class with the given alias name.
+   */
+  public QuercusClass findClassByAlias(String alias)
+  {
+    if (_classAliasMap == null) {
+      return null;
+    }
+
+    return _classAliasMap.get(alias);
+  }
+
+  /**
    * Finds the class with the given name.
    *
    * @param name the class name
@@ -4777,7 +5162,7 @@ public class Env
    */
   public QuercusClass findClass(String name)
   {
-    return findClass(name, true, true);
+    return findClass(name, -1, true, true, true);
   }
 
   /**
@@ -4789,21 +5174,60 @@ public class Env
    */
   public QuercusClass findClass(String name,
                                 boolean useAutoload,
-                                boolean useImport)
+                                boolean useImport,
+                                boolean useAliasMap)
   {
-    int id = _quercus.getClassId(name);
-
-    return findClass(id, useAutoload, useImport);
+    return findClass(name, -1, useAutoload, useImport, useAliasMap);
   }
 
+  /**
+   * Finds the class with the given name id.
+   *
+   * @param name the class name
+   * @return the found class or null if no class found.
+   */
+  public QuercusClass findClass(int id)
+  {
+    return findClass(null, id, true, true, true);
+  }
+
+  /**
+   * Finds the class with the given name.
+   *
+   * @param name the class name
+   * @param useAutoload use autoload to locate the class if necessary
+   * @return the found class or null if no class found.
+   */
   public QuercusClass findClass(int id,
                                 boolean useAutoload,
-                                boolean useImport)
+                                boolean useImport,
+                                boolean useAliasMap)
   {
-    if (id < _qClass.length && _qClass[id] != null)
-      return _qClass[id];
+    return findClass(null, id, useAutoload, useImport, useAliasMap);
+  }
 
-    QuercusClass cl = createClassFromCache(id, useAutoload, useImport);
+  /**
+   * Finds the class with the given name.
+   *
+   * @param name the class name
+   * @param useAutoload use autoload to locate the class if necessary
+   * @return the found class or null if no class found.
+   */
+  public QuercusClass findClass(String name,
+                                int id,
+                                boolean useAutoload,
+                                boolean useImport,
+                                boolean useAliasMap)
+  {
+    if (id < 0) {
+      id = _quercus.getClassId(name);
+    }
+
+    if (id < _qClass.length && _qClass[id] != null) {
+      return _qClass[id];
+    }
+
+    QuercusClass cl = createClassFromCache(id, useAutoload, useImport, useAliasMap);
 
     if (cl != null) {
       _qClass[id] = cl;
@@ -4814,31 +5238,47 @@ public class Env
       return cl;
     }
     else {
-      String name = _quercus.getClassName(id);
+      if (name == null) {
+        name = _quercus.getClassName(id);
+      }
 
-      QuercusClass qcl = findClassExt(name, useAutoload, useImport);
-      
-      if (qcl != null)
+      QuercusClass qcl = null;
+
+      if (useAliasMap) {
+        qcl = findClassByAlias(name);
+      }
+
+      if (qcl == null) {
+        qcl = findClassExt(name, id, useAutoload, useImport, useAliasMap);
+      }
+
+      if (qcl != null) {
         _qClass[id] = qcl;
-      else
+      }
+      else {
         return null;
+      }
 
       return qcl;
     }
   }
 
   private QuercusClass findClassExt(String name,
+                                    int id,
                                     boolean useAutoload,
-                                    boolean useImport)
+                                    boolean useImport,
+                                    boolean useAliasMap)
   {
-    int id = _quercus.getClassId(name);
+    if (id < 0) {
+      id = _quercus.getClassId(name);
+    }
 
     if (useAutoload) {
-      StringValue nameString = createString(name);
-
       if (! _autoloadClasses.contains(name)) {
         try {
           _autoloadClasses.add(name);
+
+          StringValue nameString = createString(name);
 
           int size = _autoloadList != null ? _autoloadList.size() : 0;
 
@@ -4848,7 +5288,7 @@ public class Env
             cb.call(this, nameString);
 
             // php/0977
-            QuercusClass cls = findClass(name, false, useImport);
+            QuercusClass cls = findClass(name, id, false, useImport, useAliasMap);
 
             if (cls != null)
               return cls;
@@ -4856,13 +5296,13 @@ public class Env
 
           if (size == 0) {
             if (_autoload == null)
-              _autoload = findFunction("__autoload");
-            
+              _autoload = findFunction(createString("__autoload"));
+
             if (_autoload != null) {
               _autoload.call(this, nameString);
 
               // php/0976
-              QuercusClass cls = findClass(name, false, useImport);
+              QuercusClass cls = findClass(name, id, false, useImport, useAliasMap);
 
               if (cls != null)
                 return cls;
@@ -4876,7 +5316,7 @@ public class Env
 
     if (useImport) {
       if (importPhpClass(name)) {
-        return findClass(name, false, false);
+        return findClass(name, id, false, false, useAliasMap);
       }
       else {
         try {
@@ -4932,7 +5372,7 @@ public class Env
     ClassDef def = _classDef[classId];
 
     if (def == null) {
-      QuercusClass cl = findClass(classId, true, true);
+      QuercusClass cl = findClass(null, classId, true, true, true);
 
       if (cl != null)
         return cl;
@@ -5025,7 +5465,8 @@ public class Env
    */
   private QuercusClass createClassFromCache(int id,
                                             boolean useAutoload,
-                                            boolean useImport)
+                                            boolean useImport,
+                                            boolean useAliasMap)
   {
     if (id < _classDef.length && _classDef[id] != null) {
       ClassDef classDef = _classDef[id];
@@ -5034,27 +5475,32 @@ public class Env
 
       QuercusClass parent = null;
 
-      if (parentName != null)
-        parent = findClass(parentName);
+      if (parentName != null) {
+        parent = findClass(parentName, -1, useAutoload, useImport, useAliasMap);
+      }
 
-      if (parentName == null || parent != null)
+      if (parentName == null || parent != null) {
         return createQuercusClass(id, classDef, parent);
-      else
+      }
+      else {
         return null; // php/
+      }
     }
 
     ClassDef staticClass = _quercus.getClassDef(id);
 
-    if (staticClass != null)
+    if (staticClass != null) {
       return createQuercusClass(id, staticClass, null); // XXX: cache
-    else
+    }
+    else {
       return null;
+    }
   }
 
-  /*
+  /**
    * Registers an SPL autoload function.
    */
-  public void addAutoloadFunction(Callable fun)
+  public void addAutoloadFunction(Callable fun, boolean isPrepend)
   {
     if (fun == null)
       throw new NullPointerException();
@@ -5062,10 +5508,15 @@ public class Env
     if (_autoloadList == null)
       _autoloadList = new ArrayList<Callable>();
 
-    _autoloadList.add(fun);
+    if (isPrepend) {
+      _autoloadList.add(0, fun);
+    }
+    else {
+      _autoloadList.add(fun);
+    }
   }
 
-  /*
+  /**
    * Unregisters an SPL autoload function.
    */
   public void removeAutoloadFunction(Callable fun)
@@ -5079,7 +5530,7 @@ public class Env
     }
   }
 
-  /*
+  /**
    * Returns the registered SPL autoload functions.
    */
   public ArrayList<Callable> getAutoloadFunctions()
@@ -5118,7 +5569,7 @@ public class Env
     }
 
     if (url != null) {
-      includeOnce(new StringBuilderValue(url.toString()));
+      includeOnce(createString(url.toString()));
       return true;
     }
     else {
@@ -5166,10 +5617,11 @@ public class Env
    */
   public QuercusClass findAbstractClass(String name)
   {
-    QuercusClass cl = findClass(name, true, true);
+    QuercusClass cl = findClass(name, -1, true, true, true);
 
-    if (cl != null)
+    if (cl != null) {
       return cl;
+    }
 
     throw createErrorException(L.l("'{0}' is an unknown class name.", name));
     /*
@@ -5475,7 +5927,7 @@ public class Env
     if (log.isLoggable(Level.FINEST)) {
       log.finest(this + " execute " + path);
     }
- 
+
     try {
       QuercusPage page = _quercus.parse(path);
 
@@ -5487,7 +5939,7 @@ public class Env
     }
   }
 
-  /*
+  /**
    * Returns true if this path is likely to be a URL.
    */
   private boolean isUrl(Path path)
@@ -5528,6 +5980,7 @@ public class Env
 
     if (path == null) {
       path = getPwd().lookup(normalizePath(relPath));
+
       _lookupCache.put(relPath, path);
     }
 
@@ -5684,11 +6137,13 @@ public class Env
     if (pathList == null) {
       pathList = new ArrayList<Path>();
 
-      for (int i = 0; i < _includePathList.size(); i++) {
-        pathList.add(pwd.lookup(_includePathList.get(i)));
-      }
+      if (pwd != null) {
+        for (int i = 0; i < _includePathList.size(); i++) {
+          pathList.add(pwd.lookup(_includePathList.get(i)));
+        }
 
-      _includePathMap.put(pwd, pathList);
+        _includePathMap.put(pwd, pathList);
+      }
     }
 
     return pathList;
@@ -5742,79 +6197,6 @@ public class Env
     }
 
     return path.toString();
-
-
-      /*
-
-
-
-
-      if (len >= 3) {
-        char ch = path.charAt(0);
-        char ch2 = path.charAt(1);
-        char ch3 = path.charAt(2);
-
-        _cb.append(ch);
-        _cb.append(ch2);
-        offset += 2;
-
-        if (ch == '/') {
-          if (('a' <= ch2 && ch2 <= 'z' || 'A' <= ch2 && ch2 <= 'Z')
-              && ch3 == ':') {
-            _cb.append(ch3);
-            offset += 1;
-
-            char ch4;
-
-            if (len >= 4 && (ch4 = path.charAt(3)) != '/' && ch4 != '\\') {
-              _cb.append('/');
-              _cb.append(ch4);
-              offset += 1;
-            }
-          }
-          else if (ch2 == ':' && ch3 != '/' && ch3 != '\\') {
-            _cb.append('/');
-            _cb.append(ch3);
-            offset += 1;
-          }
-        }
-
-        if (ch == '/'
-            && ('a' <= ch2 && ch2 <= 'z' || 'A' <= ch2 && ch2 <= 'Z')
-            && ch3 == ':') {
-
-          _cb.append(ch3);
-          offset += 1;
-
-          char ch4;
-
-          if (len >= 4
-              && (ch4 = path.charAt(3)) != '/' && ch4 != '\\') {
-            _cb.append('/');
-            _cb.append(ch4);
-            offset += 1;
-          }
-        }
-        else if (('a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z')
-                 && ch2 == ':'
-                 && ch3 != '/' && ch3 != '\\') {
-          _cb.append('/');
-          _cb.append(ch3);
-          offset += 1;
-        }
-      }
-
-      for (; offset < len; offset++) {
-        _cb.append(path.charAt(offset));
-      }
-
-      return _cb.toString();
-
-    }
-    else
-      return path.toString();
-
-    */
   }
 
   /**
@@ -5871,7 +6253,8 @@ public class Env
       log.log(Level.WARNING, e.toString(), e);
     }
 
-    throw new QuercusExitException(msg.toString());
+    throw new QuercusExitException(msg.toString()
+                                   + "\n" + getStackTraceAsString());
   }
 
   /**
@@ -5879,7 +6262,7 @@ public class Env
    */
   public Value exit()
   {
-    throw new QuercusExitException();
+    throw new QuercusExitException(getStackTraceAsString());
   }
 
   /**
@@ -5893,7 +6276,7 @@ public class Env
       log.log(Level.WARNING, e.toString(), e);
     }
 
-    throw new QuercusDieException(msg);
+    throw new QuercusDieException(msg + "\n" + getStackTraceAsString());
   }
 
   /**
@@ -5901,13 +6284,13 @@ public class Env
    */
   public Value die()
   {
-    throw new QuercusDieException();
+    throw new QuercusDieException(getStackTraceAsString());
   }
 
   /**
    * Handles exit/die
    */
-  public Value cast(Class cl, Value value)
+  public Value cast(Class<?> cl, Value value)
   {
     value = value.toValue();
 
@@ -5975,6 +6358,14 @@ public class Env
   /**
    * Returns the first value
    */
+  public static long first(long value, long a1)
+  {
+    return value;
+  }
+
+  /**
+   * Returns the first value
+   */
   public static double first(double value, double a1)
   {
     return value;
@@ -6013,7 +6404,7 @@ public class Env
   {
     return value;
   }
-  
+
   /**
    * Check for expected type.
    */
@@ -6026,13 +6417,13 @@ public class Env
         && ! value.isNull()) {
       //warning(L.l("argument must be a string, but {0} given",
       //            value.getType()));
-      
+
       return new UnexpectedValue(value);
     }
-    
+
     return value;
   }
-  
+
   /**
    * Check for expected type.
    */
@@ -6042,13 +6433,13 @@ public class Env
         && ! value.isLongConvertible()) {
       //warning(L.l("argument must be numeric, but {0} given",
       //            value.getType()));
-      
+
       return new UnexpectedValue(value);
     }
-    
+
     return value;
   }
-  
+
   /**
    * Check for expected type.
    */
@@ -6062,7 +6453,7 @@ public class Env
       //            value.getType()));
       return new UnexpectedValue(value);
     }
-    
+
     return value;
   }
 
@@ -6086,27 +6477,36 @@ public class Env
   }
 
   /**
+   * Error when using $this not inside an object context.
+   */
+  public Value thisError(Location location)
+  {
+    return error(L.l("Cannot use '$this' when not in object context."),
+                 location);
+  }
+
+  /**
+   * Error when using $this not inside an object context.
+   */
+  public Value thisError()
+  {
+    return thisError(getLocation());
+  }
+
+  /**
    * A fatal runtime error.
    */
   public Value error(String msg)
   {
-    return error(B_ERROR, "", msg + getFunctionLocation());
+    return error(B_ERROR, msg, getLocation());
   }
 
   /**
    * A fatal runtime error.
    */
-  public Value error(Location location, String msg)
+  public Value error(String msg, Location location)
   {
-    return error(B_ERROR, location, msg + getFunctionLocation());
-  }
-
-  /**
-   * A fatal runtime error.
-   */
-  public Value error(String loc, String msg)
-  {
-    return error(B_ERROR, loc, msg + getFunctionLocation());
+    return error(B_ERROR, msg, location);
   }
 
   /**
@@ -6152,9 +6552,9 @@ public class Env
 
     String fullMsg = msg + getFunctionLocation();
 
-    error(B_ERROR, location, fullMsg);
+    error(B_ERROR, fullMsg, location);
 
-    String exMsg = prefix + fullMsg;
+    //String exMsg = prefix + fullMsg;
 
     return new QuercusRuntimeException(fullMsg);
   }
@@ -6171,11 +6571,11 @@ public class Env
 
     String fullMsg = e.toString() + getFunctionLocation();
 
-    error(B_ERROR, location, fullMsg);
+    error(B_ERROR, fullMsg, location);
 
-    String exMsg = prefix + fullMsg;
+    String exMsg = prefix + fullMsg + getStackTraceAsString(e, null);
 
-    return new QuercusRuntimeException(fullMsg, e);
+    return new QuercusRuntimeException(exMsg, e);
   }
 
   /**
@@ -6187,19 +6587,38 @@ public class Env
 
     if ((getErrorMask() & mask) != 0) {
       if (log.isLoggable(Level.FINER)) {
-        QuercusException e = new QuercusException(msg);
+        QuercusException e = new QuercusException(getExceptionLocation(msg));
 
         log.log(Level.FINER, e.toString(), e);
       }
     }
 
-    return error(B_WARNING, "", msg + getFunctionLocation());
+    return error(B_WARNING, msg, getLocation());
+  }
+
+  private String getExceptionLocation(String msg)
+  {
+    return getExceptionLocation(msg, getLocation());
+  }
+
+  private String getExceptionLocation(String msg, Location loc)
+  {
+    if (loc != null && ! loc.isUnknown()) {
+      return (loc.getFileName() + ":" + loc.getLineNumber() + ": " + msg
+          + getFunctionLocation()
+          + getStackTraceAsString(null));
+    }
+    else {
+      return (msg
+              + getFunctionLocation()
+              + getStackTraceAsString());
+    }
   }
 
   /**
    * A runtime warning.
    */
-  public Value warning(Location location, String msg)
+  public Value warning(String msg, Location location)
   {
     int mask = 1 << B_WARNING;
 
@@ -6211,7 +6630,7 @@ public class Env
       }
     }
 
-    return error(B_WARNING, location, "", msg + getFunctionLocation());
+    return error(B_WARNING, msg, location);
   }
 
   /**
@@ -6227,11 +6646,11 @@ public class Env
   /**
    * A warning with an exception.
    */
-  public Value warning(Location location, String msg, Throwable e)
+  public Value warning(String msg, Location location, Throwable e)
   {
     log.log(Level.FINE, e.toString(), e);
 
-    return warning(location, msg);
+    return warning(msg, location);
   }
 
   /**
@@ -6245,9 +6664,9 @@ public class Env
   /**
    * A warning with an exception.
    */
-  public Value warning(Location location, Throwable e)
+  public Value warning(Throwable e, Location location)
   {
-    return warning(location, e.toString(), e);
+    return warning(e.toString(), location, e);
   }
 
   /**
@@ -6261,7 +6680,7 @@ public class Env
       log.log(Level.FINER, e.toString(), e);
     }
 
-    return error(B_STRICT, "", msg + getFunctionLocation());
+    return error(B_STRICT, msg, getLocation());
   }
 
   /**
@@ -6285,7 +6704,17 @@ public class Env
    */
   public Value notice(String msg)
   {
-    return error(B_NOTICE, "", msg + getFunctionLocation());
+    return error(B_NOTICE, msg, getLocation());
+  }
+
+  /**
+   * A warning with an exception.
+   */
+  public Value notice(Throwable e)
+  {
+    log.log(Level.FINE, e.toString(), e);
+
+    return notice(e.toString());
   }
 
   /**
@@ -6303,8 +6732,9 @@ public class Env
    */
   public Value stub(String msg)
   {
-    if (log.isLoggable(Level.FINE))
+    if (log.isLoggable(Level.FINE)) {
       log.fine(getLocation().getMessagePrefix() + msg);
+    }
 
     return NullValue.NULL;
   }
@@ -6320,7 +6750,7 @@ public class Env
   public Value parse(String msg)
     throws Exception
   {
-    return error(B_PARSE, "", msg);
+    return error(B_PARSE, msg);
   }
 
   /**
@@ -6328,7 +6758,7 @@ public class Env
    */
   public Value compileError(String msg)
   {
-    return error(B_COMPILE_ERROR, "", msg);
+    return error(B_COMPILE_ERROR, msg);
   }
 
   /**
@@ -6336,7 +6766,7 @@ public class Env
    */
   public Value compileWarning(String msg)
   {
-    return error(B_COMPILE_WARNING, "", msg);
+    return error(B_COMPILE_WARNING, msg);
   }
 
   /**
@@ -6353,9 +6783,9 @@ public class Env
   public int setErrorMask(int mask)
   {
     int oldMask = getErrorMask();
-    
+
     setIni("error_reporting", LongValue.create(mask));
-    
+
     return oldMask;
   }
 
@@ -6422,7 +6852,7 @@ public class Env
     _exceptionHandler = fun;
 
     if (_prevExceptionHandler != null) {
-      // 
+      //
       return ((Value) _prevExceptionHandler).toStringValue();
     }
     else
@@ -6437,40 +6867,44 @@ public class Env
     _exceptionHandler = _prevExceptionHandler;
   }
 
-  /*
+  /**
    * Writes an error.
    */
-  public Value error(int code, String locString, String msg)
+  public Value error(int code, String msg)
   {
-    return error(code, null, locString, msg);
-  }
-
-  /*
-   * Writes an error.
-   */
-  public Value error(int code, Location location, String msg)
-  {
-    return error(code, location, "", msg);
+    return error(code, msg, getLocation());
   }
 
   /**
    * Writes an error.
    */
-  public Value error(int code, Location location, String loc, String msg)
+  public Value error(int code, String msg, Location location)
   {
+    //System.err.println("Env.error0: " + code + " . " + msg + " . " + location);
+    //Thread.dumpStack();
+
+    if (location == null || location.isUnknown()) {
+      location = getLocation();
+    }
+
     int mask = 1 << code;
 
+    _lastErrorType = mask;
+    _lastErrorMessage = msg;
+    _lastErrorLocation = location;
+
     int errorMask = getErrorMask();
-    
+
     if (log.isLoggable(Level.FINEST)) {
-      QuercusException e = new QuercusException(loc + msg);
+      QuercusException e = new QuercusException(location.getMessagePrefix() + msg);
 
       log.log(Level.FINEST, e.toString(), e);
     }
 
     if ((errorMask & mask) != 0) {
-      if (log.isLoggable(Level.FINE))
-        log.fine(this + " " + loc + msg);
+      if (log.isLoggable(Level.FINE)) {
+        log.fine(this + " " + location.getMessagePrefix() + getExceptionLocation(msg));
+      }
     }
 
     if (code >= 0 && code < _errorHandlers.length
@@ -6482,11 +6916,8 @@ public class Env
 
         Value fileNameV = NullValue.NULL;
 
-        if (location == null || location.isUnknown())
-          location = getLocation();
-
         String fileName = location.getFileName();
-        
+
         if (fileName != null)
           fileNameV = createString(fileName);
 
@@ -6515,11 +6946,23 @@ public class Env
 
     if ((errorMask & mask) != 0) {
       try {
-        String fullMsg = (getLocationPrefix(location, loc)
-                          + getCodeName(mask) + msg);
+        String fullMsg;
 
-        if (getIniBoolean("track_errors"))
+        if (log.isLoggable(Level.FINE)) {
+          fullMsg = location.getMessagePrefix()
+              + getCodeName(mask)
+              + getExceptionLocation(msg);
+        }
+        else {
+          fullMsg = location.getMessagePrefix()
+              + getCodeName(mask)
+              + msg
+              + getFunctionLocation();
+        }
+
+        if (getIniBoolean("track_errors")) {
           setGlobalValue("php_errormsg", createString(fullMsg));
+        }
 
         if ("stderr".equals(getIniString("display_errors"))) {
           // initial newline to match PHP
@@ -6538,49 +6981,43 @@ public class Env
       }
     }
 
-    if ((mask & (E_ERROR | E_CORE_ERROR | E_COMPILE_ERROR | E_USER_ERROR)) != 0)
-    {
-      String locPrefix = getLocationPrefix(location, loc);
-      QuercusErrorException exn;
+    if ((mask & (E_ERROR | E_CORE_ERROR | E_COMPILE_ERROR | E_USER_ERROR)) != 0) {
+      QuercusErrorException exn = new QuercusErrorException(msg);
 
-      if (! "".equals(locPrefix)) {
-        /*
-        throw new QuercusLineExitException(getLocation() +
-                                              getCodeName(mask) +
-                                              msg);
-        */
-        exn = new QuercusErrorException(locPrefix
-                                        + getCodeName(mask)
-                                        + msg);
-      }
-      else
-        exn = new QuercusErrorException(msg);
-      
       exn.fillInStackTrace();
-      
+
       if (log.isLoggable(Level.FINER)) {
         log.log(Level.FINER, exn.toString(), exn);
       }
-      
+
       throw exn;
     }
 
     return NullValue.NULL;
   }
 
-  /**
-   * Returns the displayable location prefix.  This may be slow
-   * for compiled-mode because of the need to match line numbers.
-   */
-  private String getLocationPrefix(Location location, String loc)
+  public Value getLastError()
   {
-    if (loc != null && ! "".equals(loc))
-      return loc;
+    if (_lastErrorType < 0) {
+      return NullValue.NULL;
+    }
 
-    if (location == null || location.isUnknown())
-      location = getLocation();
+    ArrayValueImpl array = new ArrayValueImpl();
 
-    return location.getMessagePrefix();
+    array.put(createString("type"), LongValue.create(_lastErrorType));
+    array.put(createString("message"), createString(_lastErrorMessage));
+
+    String file = "";
+    int line = -1;
+    if (_lastErrorLocation != null) {
+      file = _lastErrorLocation.getFileName();
+      line = _lastErrorLocation.getLineNumber();
+    }
+
+    array.put(createString("file"), createString(file));
+    array.put(createString("line"), LongValue.create(line));
+
+    return array;
   }
 
   /**
@@ -6633,7 +7070,7 @@ public class Env
       // XXX: not too pretty
       return null;
     }
-    
+
     ReadStream is = null;
 
     try {
@@ -6644,7 +7081,7 @@ public class Env
 
       for (; line < sourceLine; line++) {
         lineString = is.readLine();
-        
+
         if (lineString == null)
           return null;
       }
@@ -7026,7 +7463,7 @@ public class Env
   public void close()
   {
     _quercus.completeEnv(this);
-    
+
     /*
     if (_duplex != null) {
       log.fine(this + " skipping close for duplex mode");
@@ -7053,19 +7490,6 @@ public class Env
   {
     // cleanup is in reverse order of creation
 
-    if (_objCleanupList != null) {
-      for (int i = _objCleanupList.size() - 1; i >= 0; i--) {
-        ObjectExtValue objCleanup = _objCleanupList.get(i);
-        try {
-          if (objCleanup != null)
-            objCleanup.cleanup(this);
-        }
-        catch (Throwable e) {
-          log.log(Level.FINER, e.toString(), e);
-        }
-      }
-    }
-
     if (_shutdownList != null) {
       for (int i = 0; i < _shutdownList.size(); i++) {
         try {
@@ -7081,6 +7505,37 @@ public class Env
       sessionWriteClose();
     } catch (Throwable e) {
       log.log(Level.FINE, e.toString(), e);
+    }
+
+    int count = 0;
+
+    if (_objCleanupList != null) {
+      int size;
+
+      // may result in an infinite loop but that would be user error
+      while ((size = _objCleanupList.size()) > 0) {
+        count++;
+
+        if (count % 100 == 0){
+          updateTimeout();
+
+          if (_isTimeout) {
+            log.log(Level.WARNING, "script has timed out while calling __destruct()");
+
+            break;
+          }
+        }
+
+        ObjectValue obj = _objCleanupList.remove(size - 1);
+
+        try {
+          if (obj != null)
+            obj.cleanup(this);
+        }
+        catch (Throwable e) {
+          log.log(Level.FINER, e.toString(), e);
+        }
+      }
     }
 
     if (_cleanupList != null) {
@@ -7307,24 +7762,48 @@ public class Env
   }
 
   static {
-    SPECIAL_VARS.put(MethodIntern.intern("GLOBALS"), _GLOBAL);
-    SPECIAL_VARS.put(MethodIntern.intern("_SERVER"), _SERVER);
-    SPECIAL_VARS.put(MethodIntern.intern("_GET"), _GET);
-    SPECIAL_VARS.put(MethodIntern.intern("_POST"), _POST);
-    SPECIAL_VARS.put(MethodIntern.intern("_FILES"), _FILES);
-    SPECIAL_VARS.put(MethodIntern.intern("_REQUEST"), _REQUEST);
-    SPECIAL_VARS.put(MethodIntern.intern("_COOKIE"), _COOKIE);
-    SPECIAL_VARS.put(MethodIntern.intern("_SESSION"), _SESSION);
-    SPECIAL_VARS.put(MethodIntern.intern("_ENV"), _ENV);
-    SPECIAL_VARS.put(MethodIntern.intern("HTTP_GET_VARS"), HTTP_GET_VARS);
-    SPECIAL_VARS.put(MethodIntern.intern("HTTP_POST_VARS"), HTTP_POST_VARS);
-    SPECIAL_VARS.put(MethodIntern.intern("HTTP_POST_FILES"), HTTP_POST_FILES);
-    SPECIAL_VARS.put(MethodIntern.intern("HTTP_COOKIE_VARS"), HTTP_COOKIE_VARS);
-    SPECIAL_VARS.put(MethodIntern.intern("HTTP_SERVER_VARS"), HTTP_SERVER_VARS);
-    SPECIAL_VARS.put(MethodIntern.intern("PHP_SELF"), PHP_SELF);
-    SPECIAL_VARS.put(MethodIntern.intern("HTTP_RAW_POST_DATA"),
-                     HTTP_RAW_POST_DATA);
-    
+    SPECIAL_VARS.put(new ConstStringValue("GLOBALS"), _GLOBAL);
+    SPECIAL_VARS.put(new ConstStringValue("_SERVER"), _SERVER);
+    SPECIAL_VARS.put(new ConstStringValue("_GET"), _GET);
+    SPECIAL_VARS.put(new ConstStringValue("_POST"), _POST);
+    SPECIAL_VARS.put(new ConstStringValue("_FILES"), _FILES);
+    SPECIAL_VARS.put(new ConstStringValue("_REQUEST"), _REQUEST);
+    SPECIAL_VARS.put(new ConstStringValue("_COOKIE"), _COOKIE);
+    SPECIAL_VARS.put(new ConstStringValue("_SESSION"), _SESSION);
+    SPECIAL_VARS.put(new ConstStringValue("_ENV"), _ENV);
+
+    SPECIAL_VARS.put(new ConstStringValue("argc"), ARGC);
+    SPECIAL_VARS.put(new ConstStringValue("argv"), ARGV);
+
+    SPECIAL_VARS.put(new ConstStringValue("HTTP_GET_VARS"), HTTP_GET_VARS);
+    SPECIAL_VARS.put(new ConstStringValue("HTTP_POST_VARS"), HTTP_POST_VARS);
+    SPECIAL_VARS.put(new ConstStringValue("HTTP_POST_FILES"), HTTP_POST_FILES);
+    SPECIAL_VARS.put(new ConstStringValue("HTTP_COOKIE_VARS"), HTTP_COOKIE_VARS);
+    SPECIAL_VARS.put(new ConstStringValue("HTTP_SERVER_VARS"), HTTP_SERVER_VARS);
+    SPECIAL_VARS.put(new ConstStringValue("PHP_SELF"), PHP_SELF);
+    SPECIAL_VARS.put(new ConstStringValue("HTTP_RAW_POST_DATA"), HTTP_RAW_POST_DATA);
+
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("GLOBALS"), _GLOBAL);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("_SERVER"), _SERVER);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("_GET"), _GET);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("_POST"), _POST);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("_FILES"), _FILES);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("_REQUEST"), _REQUEST);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("_COOKIE"), _COOKIE);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("_SESSION"), _SESSION);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("_ENV"), _ENV);
+
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("argc"), ARGC);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("argv"), ARGV);
+
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("HTTP_GET_VARS"), HTTP_GET_VARS);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("HTTP_POST_VARS"), HTTP_POST_VARS);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("HTTP_POST_FILES"), HTTP_POST_FILES);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("HTTP_COOKIE_VARS"), HTTP_COOKIE_VARS);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("HTTP_SERVER_VARS"), HTTP_SERVER_VARS);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("PHP_SELF"), PHP_SELF);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("HTTP_RAW_POST_DATA"), HTTP_RAW_POST_DATA);
+
     DEFAULT_QUERY_SEPARATOR_MAP = new int[128];
     DEFAULT_QUERY_SEPARATOR_MAP['&'] = 1;
   }

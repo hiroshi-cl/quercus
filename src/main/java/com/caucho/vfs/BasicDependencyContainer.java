@@ -29,7 +29,7 @@
 
 package com.caucho.vfs;
 
-import com.caucho.util.Alarm;
+import com.caucho.util.CurrentTime;
 
 import java.util.ArrayList;
 import java.util.logging.Logger;
@@ -41,7 +41,7 @@ public class BasicDependencyContainer
   implements Dependency
 {
   private static Logger _log;
-  
+
   private ArrayList<Dependency> _dependencyList = new ArrayList<Dependency>();
 
   // Marks if the last check returned modified
@@ -54,7 +54,7 @@ public class BasicDependencyContainer
   private long _lastCheckTime = 0;
 
   private volatile boolean _isChecking;
-  
+
   /**
    * Adds a dependency.
    */
@@ -62,7 +62,7 @@ public class BasicDependencyContainer
   {
     if (dependency == this)
       throw new IllegalArgumentException("Can't add self as a dependency.");
-    
+
     if (! _dependencyList.contains(dependency))
       _dependencyList.add(dependency);
 
@@ -71,7 +71,7 @@ public class BasicDependencyContainer
 
     return this;
   }
-  
+
   /**
    * Removes a dependency.
    */
@@ -79,7 +79,7 @@ public class BasicDependencyContainer
   {
     if (dependency == this)
       throw new IllegalArgumentException("Can't remove self as a dependency.");
-    
+
     _dependencyList.remove(dependency);
 
     return this;
@@ -118,7 +118,7 @@ public class BasicDependencyContainer
     _isModified = isModified;
     _lastCheckTime = 0;
   }
-      
+
   /**
    * Resets the check interval.
    */
@@ -133,8 +133,8 @@ public class BasicDependencyContainer
   public void clearModified()
   {
     _isModified = false;
-    
-    _lastCheckTime = Alarm.getCurrentTime();
+
+    _lastCheckTime = CurrentTime.getCurrentTime();
   }
 
   /**
@@ -152,8 +152,8 @@ public class BasicDependencyContainer
 
     try {
       long now;
-      
-      now = Alarm.getCurrentTime();
+
+      now = CurrentTime.getCurrentTime();
 
       if (now < _lastCheckTime + _checkInterval)
         return _isModified;
@@ -162,18 +162,18 @@ public class BasicDependencyContainer
 
       for (int i = _dependencyList.size() - 1; i >= 0; i--) {
         Dependency dependency = _dependencyList.get(i);
-        
+
         if (dependency.isModified()) {
           dependency.logModified(log());
 
           _isModified = true;
-            
+
           return _isModified;
         }
       }
 
       // _isModified = false;
-      
+
       return _isModified;
     } finally {
       _isChecking = false;
@@ -212,7 +212,7 @@ public class BasicDependencyContainer
 
     return _log;
   }
-  
+
   public String toString()
   {
     return "BasicDependencyContainer" + _dependencyList;

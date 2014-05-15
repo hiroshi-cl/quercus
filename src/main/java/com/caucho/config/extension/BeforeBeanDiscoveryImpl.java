@@ -29,17 +29,13 @@
 
 package com.caucho.config.extension;
 
-import java.lang.annotation.Annotation;
-
-import javax.enterprise.inject.spi.Annotated;
-import javax.enterprise.inject.spi.AnnotatedType;
-import javax.enterprise.inject.spi.Bean;
-import javax.enterprise.inject.spi.BeforeBeanDiscovery;
-import javax.enterprise.inject.spi.ProcessBean;
-
-import com.caucho.config.ConfigException;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.inject.Module;
+
+import javax.enterprise.inject.spi.AnnotatedType;
+import javax.enterprise.inject.spi.BeforeBeanDiscovery;
+import java.lang.annotation.Annotation;
 
 @Module
 public class BeforeBeanDiscoveryImpl implements BeforeBeanDiscovery
@@ -54,7 +50,10 @@ public class BeforeBeanDiscoveryImpl implements BeforeBeanDiscovery
   @Override
   public void addAnnotatedType(AnnotatedType<?> annType)
   {
-    // _cdiManager.addAnnotatedType(annType);
+    // ioc/0069
+    ManagedBeanImpl bean = _cdiManager.createManagedBean(annType);
+    
+    _cdiManager.addBean(bean, annType);
   }
   
   @Override
@@ -78,14 +77,14 @@ public class BeforeBeanDiscoveryImpl implements BeforeBeanDiscovery
     _cdiManager.addStereotype(stereotype, stereotypeDef);
   }
 
-  @Override
-  public void addInterceptorBinding(Class<? extends Annotation> arg0) {
-  }
+    @Override
+    public void addInterceptorBinding(Class<? extends Annotation> aClass) {
+        
+    }
 
   @Override
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _cdiManager + "]";
   }
-
 }

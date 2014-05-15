@@ -57,9 +57,6 @@ public class AlarmClock {
   
   private long _lastTime;
   
-  private ArrayList<Alarm> _overflow
-    = new ArrayList<Alarm>();
-  
   private Object _lock = new Object();
   
   private ThreadPool _threadPool = ThreadPool.getThreadPool();
@@ -69,7 +66,7 @@ public class AlarmClock {
    *
    * @param delta time in milliseconds to wake
    */
-  boolean queueAt(Alarm alarm, long wakeTime)
+  public boolean queueAt(Alarm alarm, long wakeTime)
   {
     boolean isEarliest = false;
     
@@ -232,8 +229,9 @@ public class AlarmClock {
     
     long nextTime = _nextAlarmTime.get();
     
-    if (now < nextTime)
+    if (now < nextTime) {
       return nextTime;
+    }
     
     _nextAlarmTime.set(now + CLOCK_NEXT);
     
@@ -288,7 +286,7 @@ public class AlarmClock {
   {
     long nextTime = _nextAlarmTime.get();
     
-    long delta = nextTime - now;
+    long delta = Math.min(nextTime - now, CLOCK_PERIOD);
 
     for (int i = 0; i < delta; i++) {
       long time = now + i;
@@ -318,9 +316,9 @@ public class AlarmClock {
     boolean isStressTest = false;
     
     if (isStressTest)
-      now = Alarm.getExactTime();
+      now = CurrentTime.getExactTime();
     else
-      now = Alarm.getCurrentTime();
+      now = CurrentTime.getCurrentTime();
     
     long wakeTime = alarm.getAndSetWakeTime(0);
 
@@ -342,15 +340,17 @@ public class AlarmClock {
         e.printStackTrace();
       }
     }
-    else if (alarm.isPriority())
+    else if (alarm.isPriority()) {
       _threadPool.schedulePriority(alarm);
-    else
+    }
+    else {
       _threadPool.schedule(alarm);
+    }
   }
   
   private int getBucket(long time)
   {
-    return (int) (time / CLOCK_INTERVAL % CLOCK_PERIOD);
+    return (int) ((time + CLOCK_INTERVAL - 1) / CLOCK_INTERVAL % CLOCK_PERIOD);
   }
 
   /**

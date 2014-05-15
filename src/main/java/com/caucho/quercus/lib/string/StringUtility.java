@@ -37,6 +37,7 @@ import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.NullValue;
 import com.caucho.quercus.env.Post;
+import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.lib.ArrayModule;
 import com.caucho.util.L10N;
@@ -50,27 +51,30 @@ public class StringUtility
                                CharSequence str,
                                ArrayValue result,
                                boolean isRef,
-                               String encoding)
+                               String encoding,
+                               boolean isReplaceSpacesWithUnderscores)
   {
     return parseStr(env, str, result, isRef, encoding,
                     env.getIniBoolean("magic_quotes_gpc"),
+                    isReplaceSpacesWithUnderscores,
                     Env.DEFAULT_QUERY_SEPARATOR_MAP);
   }
-  
+
   public static Value parseStr(Env env,
                                CharSequence str,
                                ArrayValue result,
                                boolean isRef,
                                String encoding,
                                boolean isMagicQuotes,
+                               boolean isReplaceSpacesWithUnderscores,
                                int []querySeparatorMap)
   {
     try {
       ByteToChar byteToChar = env.getByteToChar();
-      
+
       if (encoding != null)
         byteToChar.setEncoding(encoding);
-      
+
       int len = str.length();
 
       for (int i = 0; i < len; i++) {
@@ -81,10 +85,12 @@ public class StringUtility
              i < len && isSeparator(querySeparatorMap, ch = str.charAt(i));
              i++) {
         }
-      
-        for (; i < len && (ch = str.charAt(i)) != '='
-             && ! isSeparator(querySeparatorMap, ch); i++) {
-          i = addQueryChar(byteToChar, str, len, i, ch);
+
+        for (; i < len
+               && (ch = str.charAt(i)) != '='
+               && ! isSeparator(querySeparatorMap, ch);
+            i++) {
+          i = addQueryChar(byteToChar, str, len, i, ch, querySeparatorMap);
         }
 
         String key = byteToChar.getConvertedString();
@@ -95,28 +101,42 @@ public class StringUtility
         if (ch == '=') {
           for (i++; i < len
                && ! isSeparator(querySeparatorMap, (ch = str.charAt(i))); i++) {
-            i = addQueryChar(byteToChar, str, len, i, ch);
+            i = addQueryChar(byteToChar, str, len, i, ch, querySeparatorMap);
           }
 
           value = byteToChar.getConvertedString();
         }
-        else
+        else {
           value = "";
+        }
 
-        if (isRef) {
+        if (key.length() == 0) {
+          // php/php/080d
+          // http://bugs.caucho.com/view.php?id=4998
+
+          continue;
+        }
+        else if (isRef) {
           Post.addFormValue(env, result, key,
-                            new String[] { value }, isMagicQuotes);
-        } else {
+                            new String[] { value },
+                            isMagicQuotes, isReplaceSpacesWithUnderscores);
+        }
+        else {
           // If key is an exsiting array, then append
           // this value to existing array
           // Only use extract(EXTR_OVERWRITE) on non-array variables or
           // non-existing arrays
           int openBracketIndex = key.indexOf('[');
           int closeBracketIndex = key.indexOf(']');
-          if (openBracketIndex > 0) {
+          if (openBracketIndex == 0) {
+            // http://bugs.caucho.com/view.php?id=4998
+
+            continue;
+          }
+          else if (openBracketIndex > 0) {
             String arrayName = key.substring(0, openBracketIndex);
-            arrayName = arrayName.replaceAll("\\.", "_");
-            
+            arrayName = arrayName.replace('.', '_');
+
             Value v = env.getVar(arrayName).getRawValue();
             if (v instanceof ArrayValue) {
               //Check to make sure valid string (ie: foo[...])
@@ -126,19 +146,21 @@ public class StringUtility
               }
 
               if (closeBracketIndex > openBracketIndex + 1) {
-                String index = key
-                    .substring(key.indexOf('[') + 1, key.indexOf(']'));
+                String index = key.substring(key.indexOf('[') + 1,
+                                             key.indexOf(']'));
                 v.put(env.createString(index), env.createString(value));
               } else {
                 v.put(env.createString(value));
               }
             } else {
               Post.addFormValue(env, result, key,
-                                new String[] { value }, isMagicQuotes);
+                                new String[] { value },
+                                isMagicQuotes, isReplaceSpacesWithUnderscores);
             }
           } else {
             Post.addFormValue(env, result, key,
-                              new String[] { value }, isMagicQuotes);
+                              new String[] { value },
+                              isMagicQuotes, isReplaceSpacesWithUnderscores);
           }
         }
       }
@@ -154,7 +176,7 @@ public class StringUtility
       throw new QuercusModuleException(e);
     }
   }
-  
+
   private static boolean isSeparator(int []sep, int ch)
   {
     return (ch < sep.length && sep[ch] > 0);
@@ -164,7 +186,8 @@ public class StringUtility
                                     CharSequence str,
                                     int len,
                                     int i,
-                                    int ch)
+                                    int ch,
+                                    int[] querySeparatorMap)
     throws IOException
   {
     if (str == null)
@@ -176,9 +199,16 @@ public class StringUtility
       return i;
 
     case '%':
-      if (i + 2 < len) {
-        int d1 = StringModule.hexToDigit(str.charAt(i + 1));
-        int d2 = StringModule.hexToDigit(str.charAt(i + 2));
+      char ch1;
+      char ch2;
+
+      if (i + 2 < len
+          && (ch1 = str.charAt(i + 1)) != '='
+          && ! isSeparator(querySeparatorMap, ch1)
+          && (ch2 = str.charAt(i + 2)) != '='
+          && ! isSeparator(querySeparatorMap, ch2)) {
+        int d1 = StringModule.hexToDigit(ch1);
+        int d2 = StringModule.hexToDigit(ch2);
 
         // XXX: d1 and d2 may be -1 if not valid hex chars
         byteToChar.addByte(d1 * 16 + d2);
@@ -201,10 +231,10 @@ public class StringUtility
   {
     if (key == null)
       key = "";
-    
+
     if (valueStr == null)
       valueStr = "";
-    
+
     int p;
 
     Value value = env.createString(valueStr);
@@ -213,14 +243,14 @@ public class StringUtility
       String index = key.substring(p + 1, key.length() - 1);
       key = key.substring(0, p);
 
-      Value keyValue = env.createString(key);
+      StringValue keyValue = env.createString(key);
 
       Value part;
 
       if (array != null)
         part = array.get(keyValue);
       else
-        part = env.getVar(key);
+        part = env.getVar(keyValue);
 
       if (! part.isArray())
         part = new ArrayValueImpl();

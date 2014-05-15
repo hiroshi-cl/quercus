@@ -29,7 +29,14 @@
 
 package com.caucho.quercus.lib;
 
-import com.caucho.quercus.env.*;
+import com.caucho.quercus.env.Callable;
+import com.caucho.quercus.env.CallbackFunction;
+import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.JavaMethod;
+import com.caucho.quercus.env.NullValue;
+import com.caucho.quercus.env.OutputBuffer;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.Value;
 import com.caucho.util.URLUtil;
 
 import java.lang.reflect.Method;
@@ -42,21 +49,24 @@ import java.util.HashMap;
  * Implements the built-in URL rewriter for passing session ids and other
  * variables.
  */
+@SuppressWarnings("serial")
 public class UrlRewriterCallback extends CallbackFunction {
   private StringBuilder _rewriterQuery = new StringBuilder();
   private ArrayList<String[]> _rewriterVars = new ArrayList<String[]>();
 
   public UrlRewriterCallback(Env env)
   {
-    super(env, "URL-Rewriter");
+    super(env, env.createString("URL-Rewriter"));
 
     try {
-      Method rewriterMethod = 
+      Method rewriterMethod =
         UrlRewriterCallback.class.getMethod("_internal_url_rewriter",
                                             Env.class, Value.class);
-      setFunction(new JavaMethod(env.getModuleContext(), rewriterMethod));
-    } catch (NoSuchMethodException e) {
-    } catch (SecurityException e) {
+      setFunction(new JavaMethod(env.getModuleContext(), null, rewriterMethod));
+    }
+    catch (NoSuchMethodException e) {
+    }
+    catch (SecurityException e) {
     }
   }
 
@@ -78,7 +88,7 @@ public class UrlRewriterCallback extends CallbackFunction {
   }
 
   /**
-   * Adds a rewrite variable.  Intended for 
+   * Adds a rewrite variable.  Intended for
    * <code>output_add_rewrite_var()</code>.
    */
   public void addRewriterVar(String var, String value)
@@ -86,15 +96,15 @@ public class UrlRewriterCallback extends CallbackFunction {
     if (_rewriterQuery.length() > 0)
       _rewriterQuery.append("&");
 
-    String encodedVar = URLUtil.encodeURL(var.replaceAll(" ", "+"));
-    String encodedValue = URLUtil.encodeURL(value.replaceAll(" ", "+"));
+    String encodedVar = URLUtil.encodeURL(var.replace(' ', '+'));
+    String encodedValue = URLUtil.encodeURL(value.replace(' ', '+'));
 
     _rewriterQuery.append(encodedVar + "=" + encodedValue);
     _rewriterVars.add(new String[] {encodedVar, encodedValue});
   }
 
   /**
-   * Resets (clears) all the rewrite variables.  Intended for 
+   * Resets (clears) all the rewrite variables.  Intended for
    * <code>output_reset_rewrite_vars()</code>.
    */
   public void resetRewriterVars()
@@ -102,7 +112,7 @@ public class UrlRewriterCallback extends CallbackFunction {
     _rewriterQuery = new StringBuilder();
     _rewriterVars.clear();
   }
-  
+
   /**
    * Callback function to rewrite URLs to include session information.
    * Note that this function should return BooleanValue.FALSE in the
@@ -113,7 +123,7 @@ public class UrlRewriterCallback extends CallbackFunction {
     Value result;
     UrlRewriterCallback rewriter = getInstance(env);
 
-    // We should never have been called in this case, but 
+    // We should never have been called in this case, but
     // return the buffer unmodified anyway.
 
     if (rewriter == null)
@@ -173,7 +183,7 @@ public class UrlRewriterCallback extends CallbackFunction {
       if (_includeSessionInfo == false && _rewriterVars.isEmpty())
         return NullValue.NULL;
 
-      String [] tagPairs = 
+      String [] tagPairs =
         _env.getIni("url_rewriter.tags").toString().split(",");
       HashMap<String,String> tags = new HashMap<String,String>();
 
@@ -197,12 +207,12 @@ public class UrlRewriterCallback extends CallbackFunction {
       for (String tag = getNextTag(); tag != null; tag = getNextTag()) {
         if (tags.containsKey(tag)) {
           String attribute = tags.get(tag);
-          
+
           if (attribute == null) {
             consumeToEndOfTag();
-            
+
             if (_includeSessionInfo) {
-              String phpSessionInputTag = 
+              String phpSessionInputTag =
                 "<input type=\"hidden\" name=\"" + _sessionName + "\""
                     + " value=\"" + _sessionId + "\" />";
 
@@ -210,7 +220,7 @@ public class UrlRewriterCallback extends CallbackFunction {
             }
 
             for (String[] entry : _rewriterVars) {
-              String inputTag = 
+              String inputTag =
                 "<input type=\"hidden\" name=\"" + entry[0] + "\""
                     + " value=\"" + entry[1] + "\" />";
               _output.append(inputTag);
@@ -256,7 +266,7 @@ public class UrlRewriterCallback extends CallbackFunction {
 
       // skip the '<'
       _index = tagStart + 1;
-      
+
       consumeNonWhiteSpace();
 
       return _input.substring(tagStart + 1, _index);
@@ -266,10 +276,10 @@ public class UrlRewriterCallback extends CallbackFunction {
      * Finds the next attribute matching the given name.
      *
      * @return -1 if no more valid attributes can be found, 0 if the next
-     * attribute is not the one sought, and 1 if the attribute was found.  
+     * attribute is not the one sought, and 1 if the attribute was found.
      *
      * The _index pointer will refer to the end position for the value
-     * in the _input in the final case, but only those characters up to 
+     * in the _input in the final case, but only those characters up to
      * the beginning of the value will have been copied to the output.
      */
     private int getNextAttribute(String attribute)
@@ -281,7 +291,7 @@ public class UrlRewriterCallback extends CallbackFunction {
       while (_index < _input.length()
           && isValidAttributeCharacter(_input.charAt(_index)))
         consumeOneCharacter();
-        
+
       // no valid attribute was found (we're probably at the end of the tag)
       if (_index == attributeStart)
         return -1;
@@ -300,7 +310,7 @@ public class UrlRewriterCallback extends CallbackFunction {
 
       // check for quoting
       char quote = ' ';
-      
+
       if (_input.charAt(_index) == '"' || _input.charAt(_index) == '\'') {
         _quoted = true;
         quote = _input.charAt(_index);
@@ -309,22 +319,22 @@ public class UrlRewriterCallback extends CallbackFunction {
       }
 
       int valueEnd = _index;
-      
+
       if (_quoted) {
         valueEnd = _input.indexOf(quote, _index);
-      
+
         // try to account for unclosed quotes
         int tagEnd = _input.indexOf('>', _index);
 
         if (valueEnd < 0) {
-          if (tagEnd > 0) 
+          if (tagEnd > 0)
             valueEnd = tagEnd;
           else
             valueEnd = _input.length();
         }
       } else {
         // skip to the end of the value
-        for (valueEnd = _index; 
+        for (valueEnd = _index;
              valueEnd < _input.length()
                  && _input.charAt(valueEnd) != '/'
                  && _input.charAt(valueEnd) != '>'
@@ -420,7 +430,7 @@ public class UrlRewriterCallback extends CallbackFunction {
         query.append("?");
         query.append(uri.getQuery());
         query.append("&");
-      } 
+      }
       else
         query.append("?");
 

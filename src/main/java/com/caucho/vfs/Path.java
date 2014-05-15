@@ -71,7 +71,7 @@ public abstract class Path implements Comparable<Path> {
   protected final static L10N L = new L10N(Path.class);
 
   private static final Integer LOCK = new Integer(0);
-
+  
   private static final LruCache<PathKey,Path> _pathLookupCache
     = new LruCache<PathKey,Path>(8192);
 
@@ -83,8 +83,6 @@ public abstract class Path implements Comparable<Path> {
 
   private static final AtomicReference<PathKey> _key
     = new AtomicReference<PathKey>();
-
-  private static final SchemeMap DEFAULT_SCHEME_MAP = new SchemeMap();
 
   private static SchemeMap _defaultSchemeMap;
 
@@ -101,10 +99,21 @@ public abstract class Path implements Comparable<Path> {
   {
     if (root != null)
       _schemeMap = root._schemeMap;
-    else if (_defaultSchemeMap != null)
-      _schemeMap = _defaultSchemeMap;
     else
-      _schemeMap = DEFAULT_SCHEME_MAP;
+      _schemeMap = getDefaultSchemeMap();
+  }
+
+  private SchemeMap getDefaultSchemeMap()
+  {
+    synchronized (Path.class) {
+      if (_defaultSchemeMap == null) {
+        _defaultSchemeMap = new SchemeMap();
+        
+        createDefaultSchemeMap(_defaultSchemeMap);
+      }
+
+      return _defaultSchemeMap;
+    }
   }
 
   /**
@@ -129,12 +138,23 @@ public abstract class Path implements Comparable<Path> {
   }
 
   /**
+   * Looks up a new path based on the old path.
+   *
+   * @param name relative url to the new path
+   * @return The new path.
+   */
+  public final Path lookupChild(String name)
+  {
+    return lookupImpl(name, null, false);
+  }
+
+  /**
    * Looks up a path by a URL.
    */
   public final Path lookup(URL url)
   {
     String name = URLDecoder.decode(url.toString());
-  
+
     return lookup(name, null);
   }
 
@@ -152,16 +172,16 @@ public abstract class Path implements Comparable<Path> {
   public Path lookup(String userPath, Map<String,Object> newAttributes)
   {
     if (newAttributes != null)
-      return lookupImpl(userPath, newAttributes);
+      return lookupImpl(userPath, newAttributes, true);
     else if (userPath == null)
       return this;
 
     Path path = getCache(userPath);
-      
+
     if (path != null)
       return path;
 
-    path = lookupImpl(userPath, null);
+    path = lookupImpl(userPath, null, true);
 
     if (_startTime == 0) {
       _startTime = System.currentTimeMillis();
@@ -171,12 +191,12 @@ public abstract class Path implements Comparable<Path> {
 
     return path;
   }
-  
+
   protected Path getCache(String subPath)
   {
     if (! isPathCacheable())
       return null;
-    
+
     PathKey key = _key.getAndSet(null);
 
     if (key == null)
@@ -193,12 +213,12 @@ public abstract class Path implements Comparable<Path> {
     else
       return null;
   }
-  
+
   protected void putCache(String subPath, Path path)
   {
     if (! isPathCacheable())
       return;
-    
+
     Path copy = path.cacheCopy();
 
     if (copy != null) {
@@ -225,15 +245,23 @@ public abstract class Path implements Comparable<Path> {
    *
    * @return the new path or null if the scheme doesn't exist
    */
-  public Path lookupImpl(String userPath, Map<String,Object> newAttributes)
+  public Path lookupImpl(String userPath,
+                         Map<String,Object> newAttributes,
+                         boolean isAllowRoot)
   {
-    if (userPath == null)
-      return lookupImpl(getPath(), newAttributes);
+    if (userPath == null) {
+      return lookupImpl(getPath(), newAttributes, isAllowRoot);
+    }
+
+    if (! isAllowRoot) {
+      return schemeWalk(userPath, newAttributes, userPath, 0);
+    }
 
     String scheme = scanScheme(userPath);
 
-    if (scheme == null)
+    if (scheme == null) {
       return schemeWalk(userPath, newAttributes, userPath, 0);
+    }
 
     Path path;
 
@@ -969,7 +997,7 @@ public abstract class Path implements Comparable<Path> {
    */
   public boolean removeAll() throws IOException
   {
-    if (isDirectory()) {
+    if (isDirectory() && ! isLink()) {
       String []list = list();
 
       for (int i = 0; i < list.length; i++) {
@@ -1159,7 +1187,7 @@ public abstract class Path implements Comparable<Path> {
 
     StreamImpl impl = openReadWriteImpl();
     impl.setPath(this);
-    
+
     WriteStream writeStream = new WriteStream(impl);
     ReadStream readStream;
 
@@ -1167,7 +1195,7 @@ public abstract class Path implements Comparable<Path> {
       readStream = new ReadStream(impl, writeStream);
     else
       readStream = new ReadStream(impl, null);
-    
+
     return new ReadWritePair(readStream, writeStream);
   }
 
@@ -1205,7 +1233,7 @@ public abstract class Path implements Comparable<Path> {
   /**
    * Opens a random-access stream.
    */
-  public RandomAccessStream openMemoryMappedFile(long fileSize) 
+  public RandomAccessStream openMemoryMappedFile(long fileSize)
     throws IOException
   {
     return null;
@@ -1377,6 +1405,22 @@ public abstract class Path implements Comparable<Path> {
   }
 
   /**
+   * Utility to write the contents of this path to the destination stream.
+   *
+   * @param os destination stream.
+   */
+  public void sendfile(OutputStream os, long offset, long length)
+    throws IOException
+  {
+    if (os instanceof OutputStreamWithBuffer) {
+      writeToStream((OutputStreamWithBuffer) os);
+    }
+    else {
+      writeToStream(os);
+    }
+  }
+
+  /**
    * Returns the crc64 code.
    */
   public long getCrc64()
@@ -1516,7 +1560,7 @@ public abstract class Path implements Comparable<Path> {
         }
         cb.append("%25");
         break;
-        
+
       case '+':
         if (cb == null) {
           cb = new CharBuffer();
@@ -1538,7 +1582,12 @@ public abstract class Path implements Comparable<Path> {
       return rawURL;
   }
 
-  protected Path copy()
+  public Path copy()
+  {
+    return this;
+  }
+
+  public Path unwrap()
   {
     return this;
   }
@@ -1550,7 +1599,7 @@ public abstract class Path implements Comparable<Path> {
   {
     return this;
   }
-  
+
   @Override
   public int compareTo(Path path)
   {
@@ -1661,21 +1710,22 @@ public abstract class Path implements Comparable<Path> {
     }
   }
 
-  static {
-    DEFAULT_SCHEME_MAP.put("file", new FilePath(null));
+  private static void createDefaultSchemeMap(SchemeMap map)
+  {
+    map.put("file", new FilePath(null));
 
     //DEFAULT_SCHEME_MAP.put("jar", new JarScheme(null));
-    DEFAULT_SCHEME_MAP.put("http", new HttpPath("127.0.0.1", 0));
-    DEFAULT_SCHEME_MAP.put("https", new HttpsPath("127.0.0.1", 0));
-    DEFAULT_SCHEME_MAP.put("tcp", new TcpPath(null, null, null, "127.0.0.1", 0));
-    DEFAULT_SCHEME_MAP.put("tcps", new TcpsPath(null, null, null, "127.0.0.1", 0));
+    map.put("http", new HttpPath("127.0.0.1", 0));
+    map.put("https", new HttpsPath("127.0.0.1", 0));
+    map.put("tcp", new TcpPath(null, null, null, "127.0.0.1", 0));
+    map.put("tcps", new TcpsPath(null, null, null, "127.0.0.1", 0));
 
     StreamImpl stdout = StdoutStream.create();
     StreamImpl stderr = StderrStream.create();
-    DEFAULT_SCHEME_MAP.put("stdout", stdout.getPath());
-    DEFAULT_SCHEME_MAP.put("stderr", stderr.getPath());
+    map.put("stdout", stdout.getPath());
+    map.put("stderr", stderr.getPath());
     VfsStream nullStream = new VfsStream(null, null);
-    DEFAULT_SCHEME_MAP.put("null", new ConstPath(null, nullStream));
-    DEFAULT_SCHEME_MAP.put("jndi", new JndiPath());
+    map.put("null", new ConstPath(null, nullStream));
+    map.put("jndi", new JndiPath());
   }
 }

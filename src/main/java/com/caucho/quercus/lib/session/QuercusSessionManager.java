@@ -29,16 +29,6 @@
 
 package com.caucho.quercus.lib.session;
 
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import javax.cache.Cache;
-
 import com.caucho.config.ConfigException;
 import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.env.Env;
@@ -48,9 +38,19 @@ import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.Base64;
 import com.caucho.util.CharBuffer;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
 import com.caucho.util.RandomUtil;
+
+import javax.cache.Cache;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Stripped down version of com.caucho.server.session.SessionManager,
@@ -530,7 +530,7 @@ public class QuercusSessionManager
       if (_isClosed)
         return;
 
-      long now = Alarm.getCurrentTime();
+      long now = CurrentTime.getCurrentTime();
 
       synchronized (_sessions) {
         _sessionIter = _sessions.values(_sessionIter);

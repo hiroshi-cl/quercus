@@ -29,13 +29,12 @@
 
 package com.caucho.quercus.expr;
 
-import com.caucho.quercus.*;
+import com.caucho.quercus.Location;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.NullValue;
+import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.QuercusClass;
-import com.caucho.quercus.env.UnsetValue;
 import com.caucho.quercus.env.Value;
-import com.caucho.quercus.parser.QuercusParser;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.util.L10N;
 
@@ -46,41 +45,42 @@ import java.util.ArrayList;
  */
 public class CallExpr extends Expr {
   private static final L10N L = new L10N(CallExpr.class);
-  
-  protected final String _name;
-  protected final String _nsName;
+
+  protected final StringValue _name;
+  protected final StringValue _nsName;
   protected final Expr []_args;
-  
+
   private int _funId;
-  
+
   protected boolean _isRef;
 
-  public CallExpr(Location location, String name, ArrayList<Expr> args)
+  public CallExpr(Location location, StringValue name, ArrayList<Expr> args)
   {
     // quercus/120o
     super(location);
-    _name = name.intern();
-    
+    _name = name;
+
     int ns = _name.lastIndexOf('\\');
-    
+
     if (ns > 0) {
       _nsName = _name.substring(ns + 1);
     }
-    else
+    else {
       _nsName = null;
+    }
 
     _args = new Expr[args.size()];
     args.toArray(_args);
   }
 
-  public CallExpr(Location location, String name, Expr []args)
+  public CallExpr(Location location, StringValue name, Expr []args)
   {
     // quercus/120o
     super(location);
-    _name = name.intern();
-    
+    _name = name;
+
     int ns = _name.lastIndexOf('\\');
-    
+
     if (ns > 0) {
       _nsName = _name.substring(ns + 1);
     }
@@ -90,24 +90,14 @@ public class CallExpr extends Expr {
     _args = args;
   }
 
-  public CallExpr(String name, ArrayList<Expr> args)
-  {
-    this(Location.UNKNOWN, name, args);
-  }
-
-  public CallExpr(String name, Expr []args)
-  {
-    this(Location.UNKNOWN, name, args);
-  }
-
   /**
    * Returns the name.
    */
-  public String getName()
+  public StringValue getName()
   {
     return _name;
   }
-  
+
   /**
    * Returns the location if known.
    */
@@ -137,7 +127,7 @@ public class CallExpr extends Expr {
   {
     return this;
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -150,7 +140,7 @@ public class CallExpr extends Expr {
   {
     return evalImpl(env, false, false);
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -163,7 +153,7 @@ public class CallExpr extends Expr {
   {
     return evalImpl(env, false, true);
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -176,8 +166,8 @@ public class CallExpr extends Expr {
   {
     return evalImpl(env, true, true);
   }
-  
-  
+
+
   /**
    * Evaluates the expression.
    *
@@ -189,24 +179,24 @@ public class CallExpr extends Expr {
   {
     if (_funId <= 0) {
       _funId = env.findFunctionId(_name);
-    
+
       if (_funId <= 0) {
-        if (_nsName != null)
+        if (_nsName != null) {
           _funId = env.findFunctionId(_nsName);
-      
+        }
+
         if (_funId <= 0) {
-          env.error(getLocationLine(),
-                    L.l("'{0}' is an unknown function.", _name));
+          env.error(L.l("'{0}' is an unknown function.", _name), getLocation());
 
           return NullValue.NULL;
         }
       }
     }
-    
-    AbstractFunction fun = env.findFunction(_funId);
-    
+
+    AbstractFunction fun = env.getFunction(_funId);
+
     if (fun == null) {
-      env.error(getLocationLine(), L.l("'{0}' is an unknown function.", _name));
+      env.error(L.l("'{0}' is an unknown function.", _name), getLocation());
 
       return NullValue.NULL;
     }
@@ -214,10 +204,10 @@ public class CallExpr extends Expr {
     Value []args = evalArgs(env, _args);
 
     env.pushCall(this, NullValue.NULL, args);
-    
+
     // php/0249
     QuercusClass oldCallingClass = env.setCallingClass(null);
-    
+
     // XXX: qa/1d14 Value oldThis = env.setThis(UnsetValue.NULL);
     try {
       env.checkTimeout();
@@ -230,7 +220,7 @@ public class CallExpr extends Expr {
       else
         return fun.call(env, args);
         */
-      
+
       if (isRef)
         return fun.callRef(env, args);
       else if (isCopy)

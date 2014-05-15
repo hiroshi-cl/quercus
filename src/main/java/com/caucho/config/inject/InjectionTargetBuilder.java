@@ -65,6 +65,7 @@ import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.InjectionTarget;
+import javax.enterprise.util.AnnotationLiteral;
 import javax.inject.Inject;
 import javax.inject.Qualifier;
 import javax.interceptor.Interceptor;
@@ -72,6 +73,7 @@ import javax.interceptor.InvocationContext;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.SerializeHandle;
+import com.caucho.config.annotation.NoAspect;
 import com.caucho.config.bytecode.SerializationAdapter;
 import com.caucho.config.gen.CandiBeanGenerator;
 import com.caucho.config.inject.InjectManager.ReferenceFactory;
@@ -83,7 +85,10 @@ import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ResourceProgramManager;
 import com.caucho.config.reflect.AnnotatedConstructorImpl;
 import com.caucho.config.reflect.BaseType;
+import com.caucho.config.reflect.BaseTypeAnnotated;
+import com.caucho.config.reflect.ReflectionAnnotated;
 import com.caucho.config.reflect.ReflectionAnnotatedFactory;
+import com.caucho.config.reflect.ReflectionAnnotatedType;
 import com.caucho.inject.Module;
 import com.caucho.util.L10N;
 
@@ -137,6 +142,7 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     
     _rawClass= (Class<X>) baseType.getRawClass();
     
+    
     introspectInjectClass(_annotatedType);
   }
   
@@ -173,6 +179,9 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
   public Set<InjectionPoint> getInjectionPoints()
   {
     if (_producer == null) {
+      if (_cdiManager.isClosed()) {
+        return new HashSet();
+      }
       _producer = build();
       
       // bind();
@@ -289,7 +298,7 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
       
     try {
       thread.setContextClassLoader(getBeanManager().getClassLoader());
-
+      
       introspect();
       
       Class<X> cl = _rawClass;
@@ -306,14 +315,34 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
       }
 
       Class<X> instanceClass = null;
+      
+      boolean isNoAspect = false;
+      
+      BaseTypeAnnotated baseAnnType = null;
+      if (_annotatedType instanceof BaseTypeAnnotated) {
+        baseAnnType = (BaseTypeAnnotated) _annotatedType;
+        
+        if (baseAnnType.getAnalysisAnnotation(NoAspect.class) != null) {
+          isNoAspect = true;
+        }
+      }
+        
 
-      if (_isGenerateInterception) {
+      if (_isGenerateInterception && ! isNoAspect) {
         if (! _annotatedType.isAnnotationPresent(javax.interceptor.Interceptor.class)
             && ! _annotatedType.isAnnotationPresent(javax.decorator.Decorator.class)) {
           CandiBeanGenerator<X> bean = new CandiBeanGenerator<X>(getBeanManager(), _annotatedType);
           bean.introspect();
-
+          
           instanceClass = (Class<X>) bean.generateClass();
+          
+          if (instanceClass == cl) {
+            if (_annotatedType instanceof BaseTypeAnnotated) {
+              baseAnnType = (BaseTypeAnnotated) _annotatedType;
+              
+              baseAnnType.addAnalysisAnnotation(NoAspectLiteral.ANN);
+            }
+          }
         }
 
         if (instanceClass == cl && isSerializeHandle()) {

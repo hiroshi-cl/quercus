@@ -35,25 +35,24 @@ import java.util.ArrayList;
 import com.caucho.quercus.Location;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.QuercusClass;
+import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.parser.QuercusParser;
-import com.caucho.util.L10N;
 
 /**
  * Represents a PHP parent::FOO constant call expression.
  */
-public class ClassVarConstExpr extends Expr {
-  private static final L10N L = new L10N(ClassVarConstExpr.class);
-
+public class ClassVarConstExpr extends Expr
+{
   protected final Expr _className;
-  protected final String _name;
+  protected final StringValue _name;
 
-  public ClassVarConstExpr(Expr className, String name)
+  public ClassVarConstExpr(Expr className, StringValue name)
   {
     _className = className;
-    _name = name.intern();
+    _name = name;
   }
-  
+
   //
   // function call creation
   //
@@ -68,7 +67,7 @@ public class ClassVarConstExpr extends Expr {
     throws IOException
   {
     ExprFactory factory = parser.getExprFactory();
-    
+
     return factory.createClassMethodCall(location, _className, _name, args);
   }
 
@@ -81,9 +80,10 @@ public class ClassVarConstExpr extends Expr {
    */
   public Value eval(Env env)
   {
-    String className = _className.evalString(env);
+    // php/09d2
+    QuercusClass cls = _className.evalQuercusClass(env);
 
-    return env.getClass(className).getConstant(env, _name);
+    return cls.getConstant(env, _name);
   }
 
   public String toString()

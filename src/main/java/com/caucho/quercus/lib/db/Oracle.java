@@ -33,11 +33,8 @@ import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.env.ConnectionEntry;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.LongValue;
-import com.caucho.quercus.env.StringValue;
-import com.caucho.quercus.env.UnicodeValueImpl;
 import com.caucho.util.L10N;
 
-import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -63,24 +60,32 @@ public class Oracle extends JdbcConnectionResource {
     super(env);
 
     connectInternal(env, host, user, password, db, port, "", 0,
-                    driver, url, false);
+                    driver, url, false, false);
+  }
+
+  @Override
+  protected String getDriverName()
+  {
+    // XXX: check
+    return "oci";
   }
 
   /**
    * Connects to the underlying database.
    */
   @Override
-    protected ConnectionEntry connectImpl(Env env,
-                                          String host,
-                                          String userName,
-                                          String password,
-                                          String dbname,
-                                          int port,
-                                          String socket,
-                                          int flags,
-                                          String driver,
-                                          String url,
-                                          boolean isNewLink)
+  protected ConnectionEntry connectImpl(Env env,
+                                        String host,
+                                        String userName,
+                                        String password,
+                                        String dbname,
+                                        int port,
+                                        String socket,
+                                        int flags,
+                                        String driver,
+                                        String url,
+                                        boolean isNewLink,
+                                        boolean isEmulatePrepares)
   {
     if (isConnected()) {
       env.warning(L.l("Connection is already opened to '{0}'", this));
@@ -108,9 +113,9 @@ public class Oracle extends JdbcConnectionResource {
       }
 
       ConnectionEntry jConn;
-      
+
       jConn = env.getConnection(driver, url, userName, password, ! isNewLink);
-      
+
       return jConn;
 
     } catch (SQLException e) {
@@ -138,9 +143,9 @@ public class Oracle extends JdbcConnectionResource {
   /**
    * returns a prepared statement
    */
-  public OracleStatement prepare(Env env, StringValue query)
+  public OracleStatement prepare(Env env, String query)
   {
-    OracleStatement stmt = new OracleStatement((Oracle) validateConnection());
+    OracleStatement stmt = new OracleStatement((Oracle) validateConnection(env));
 
     stmt.prepare(env, query);
 
@@ -150,11 +155,11 @@ public class Oracle extends JdbcConnectionResource {
   /**
    * Creates a database-specific result.
    */
-  protected JdbcResultResource createResult(Env env,
-                                            Statement stmt,
+  @Override
+  protected JdbcResultResource createResult(Statement stmt,
                                             ResultSet rs)
   {
-    return new OracleResult(env, stmt, rs, this);
+    return new OracleResult(rs, this);
   }
 
 

@@ -29,21 +29,27 @@
 
 package com.caucho.quercus.lib.curl;
 
-import com.caucho.quercus.QuercusModuleException;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.*;
+import java.net.ConnectException;
+import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.ProtocolException;
+import java.net.Proxy;
+import java.net.SocketTimeoutException;
+import java.net.URL;
+import java.net.URLConnection;
 
 /**
  * Represents a HttpURLConnection wrapper.
  */
 public class CurlHttpConnection
 {
-  private HttpURLConnection _conn;
+  private URLConnection _conn;
+  private HttpURLConnection _httpConn;
 
-  private URL _URL;
+  private URL _url;
   private String _username;
   private String _password;
 
@@ -64,7 +70,7 @@ public class CurlHttpConnection
                            String password)
     throws IOException
   {
-    _URL = url;
+    _url = url;
     _username = username;
     _password = password;
   }
@@ -78,7 +84,7 @@ public class CurlHttpConnection
                               String proxyType)
     throws IOException
   {
-    _URL = url;
+    _url = url;
     _proxyURL = proxyURL;
     _proxyType = proxyType;
 
@@ -94,12 +100,11 @@ public class CurlHttpConnection
     Proxy proxy = getProxy();
 
     if (proxy != null)
-      _conn = (HttpURLConnection)_URL.openConnection(proxy);
+      setConnection(_url.openConnection(proxy));
     else
-      _conn = (HttpURLConnection)_URL.openConnection();
-    
+      setConnection(_url.openConnection());
   }
-  
+
   public final static CurlHttpConnection createConnection(URL url,
                                                       String username,
                                                       String password,
@@ -131,11 +136,11 @@ public class CurlHttpConnection
 
     return conn;
   }
-  
+
   public final static CurlHttpConnection createConnection(URL url,
-                                                      String username,
-                                                      String password,
-                                                      CurlResource curl)
+                                                          String username,
+                                                          String password,
+                                                          CurlResource curl)
     throws IOException
   {
     CurlHttpConnection conn;
@@ -151,10 +156,10 @@ public class CurlHttpConnection
     }
 
     conn.init(curl);
-    
+
     return conn;
   }
-  
+
   public void setConnectTimeout(int time)
   {
     _conn.setConnectTimeout(time);
@@ -167,25 +172,30 @@ public class CurlHttpConnection
 
   public void setInstanceFollowRedirects(boolean isToFollowRedirects)
   {
-    _conn.setInstanceFollowRedirects(isToFollowRedirects);
+    getHttpConnection().setInstanceFollowRedirects(isToFollowRedirects);
   }
 
   public void setReadTimeout(int time)
   {
-    _conn.setReadTimeout(time);
+    getConnection().setReadTimeout(time);
   }
 
   public void setRequestMethod(String method)
     throws ProtocolException
   {
-    _conn.setRequestMethod(method);
+    getHttpConnection().setRequestMethod(method);
+  }
+
+  public String getRequestProperty(String key)
+  {
+    return _conn.getRequestProperty(key);
   }
 
   public void setRequestProperty(String key, String value)
   {
     _conn.setRequestProperty(key, value);
   }
-  
+
   protected final Proxy getProxy()
   {
     if (_proxyURL == null || _proxyURL.getPort() < 0)
@@ -196,20 +206,32 @@ public class CurlHttpConnection
 
     return new Proxy(Proxy.Type.valueOf(_proxyType), address);
   }
-  
+
   protected final URL getURL()
   {
-    return _URL;
+    return _url;
   }
-  
-  protected final HttpURLConnection getConnection()
+
+  protected final URLConnection getConnection()
   {
     return _conn;
   }
-  
-  protected final void setConnection(HttpURLConnection conn)
+
+  protected final HttpURLConnection getHttpConnection()
+  {
+    if (_httpConn == null)
+      throw new ClassCastException(_conn + " is not a HttpURLConnection");
+
+    return _httpConn;
+  }
+
+  protected final void setConnection(URLConnection conn)
   {
     _conn = conn;
+
+    if (conn instanceof HttpURLConnection) {
+      _httpConn = (HttpURLConnection) conn;
+    }
   }
 
   /**
@@ -223,7 +245,7 @@ public class CurlHttpConnection
 
     _conn.connect();
   }
-  
+
   /**
    * Handles the authentication for this connection.
    */
@@ -239,7 +261,7 @@ public class CurlHttpConnection
     if (_authorization != null)
       _conn.setRequestProperty("Authorization", _authorization);
   }
-  
+
   /**
    * Handles the authentication for this connection.
    */
@@ -256,7 +278,7 @@ public class CurlHttpConnection
       proxy = new Proxy(Proxy.Type.valueOf(_proxyType), address);
     }
 
-    HttpURLConnection headConn = (HttpURLConnection)_URL.openConnection(proxy);
+    HttpURLConnection headConn = (HttpURLConnection)_url.openConnection(proxy);
     headConn.setRequestMethod("HEAD");
 
     if (_proxyAuthorization != null)
@@ -274,8 +296,8 @@ public class CurlHttpConnection
     {
       String header = headConn.getHeaderField("Proxy-Authenticate");
 
-      _proxyAuthorization = getAuthorization(_URL,
-                                            _conn.getRequestMethod(),
+      _proxyAuthorization = getAuthorization(_url,
+                                            getHttpConnection().getRequestMethod(),
                                             header,
                                             "Proxy-Authorization",
                                             _proxyUsername,
@@ -283,12 +305,12 @@ public class CurlHttpConnection
       authenticateImpl();
     }
     else if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED
-        && _authorization == null)
+             && _authorization == null)
     {
       String header = headConn.getHeaderField("WWW-Authenticate");
 
-      _authorization = getAuthorization(_URL,
-                                       _conn.getRequestMethod(),
+      _authorization = getAuthorization(_url,
+                                       getHttpConnection().getRequestMethod(),
                                        header,
                                        "Authorization",
                                        _username,
@@ -333,7 +355,7 @@ public class CurlHttpConnection
 
   public InputStream getErrorStream()
   {
-    return _conn.getErrorStream();
+    return getHttpConnection().getErrorStream();
   }
 
   public String getHeaderField(String key)
@@ -366,7 +388,13 @@ public class CurlHttpConnection
   public int getResponseCode()
     throws IOException
   {
-    return _conn.getResponseCode();
+    return getHttpConnection().getResponseCode();
+  }
+
+  public String getResponseMessage()
+    throws IOException
+  {
+    return getHttpConnection().getResponseMessage();
   }
 
   public void disconnect()
@@ -376,7 +404,7 @@ public class CurlHttpConnection
 
   public void close()
   {
-    if (_conn != null)
-      _conn.disconnect();
+    if (_httpConn != null)
+      _httpConn.disconnect();
   }
 }

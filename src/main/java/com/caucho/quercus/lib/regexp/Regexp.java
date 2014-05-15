@@ -36,31 +36,32 @@ import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.UnicodeBuilderValue;
+import com.caucho.quercus.env.UnicodeValue;
 import com.caucho.quercus.lib.i18n.Utf8Encoder;
 import com.caucho.util.*;
 
 public class Regexp {
   private static final Logger log
     = Logger.getLogger(Regexp.class.getName());
-  
+
   private static final L10N L = new L10N(Regexp.class);
-  
+
   public static final int FAIL = -1;
   public static final int SUCCESS = 0;
 
   final StringValue _rawRegexp;
   StringValue _pattern;
   int _flags;
-  
+
   RegexpNode _prog;
   boolean _ignoreCase;
   boolean _isGlobal;
 
   int _nLoop;
   int _nGroup;
-  
+
   // optim stuff
-  
+
   CharBuffer _prefix; // initial string
   int _minLength; // minimum length possible for this regexp
   int _firstChar;
@@ -68,45 +69,52 @@ public class Regexp {
   boolean _isAnchorBegin;
 
   StringValue []_groupNames;
-  
+
   boolean _isUnicode;
   boolean _isPHP5String;
-  
+
   boolean _isUtf8;
   boolean _isEval;
-  
+
+  private IllegalRegexpException _exception;
+
   public Regexp(StringValue rawRegexp)
-    throws IllegalRegexpException
   {
     _rawRegexp = rawRegexp;
     _pattern = rawRegexp;
 
-    init();
-    
-    Regcomp comp = new Regcomp(_flags);
-    _prog = comp.parse(new PeekString(_pattern));
+    try {
+      init();
 
-    compile(_prog, comp);
+      Regcomp comp = new Regcomp(_flags);
+      PeekStream peekString = new PeekString(_pattern);
+
+      _prog = comp.parse(peekString);
+
+      compile(_prog, comp);
+    }
+    catch (IllegalRegexpException e) {
+      _exception = e;
+    }
   }
-  
+
   protected void init()
+    throws IllegalRegexpException
   {
     StringValue rawRegexp = _rawRegexp;
-    
+
     if (rawRegexp.length() < 2) {
-      throw new IllegalStateException(L.l(
-          "Can't find delimiters in regexp '{0}'.",
-          rawRegexp));
+      throw new IllegalRegexpException(L.l("Can't find delimiters in regexp '{0}'.",
+                                           rawRegexp));
     }
 
     int head = 0;
-    
+
     char delim = '/';
 
-    for (;
-     head < rawRegexp.length()
-       && Character.isWhitespace((delim = rawRegexp.charAt(head)));
-     head++) {
+    for (; head < rawRegexp.length()
+           && Character.isWhitespace((delim = rawRegexp.charAt(head)));
+        head++) {
     }
 
     if (delim == '{')
@@ -118,28 +126,25 @@ public class Regexp {
     else if (delim == '<')
       delim = '>';
     else if (delim == '\\' || Character.isLetterOrDigit(delim)) {
-      throw new QuercusException(L.l(
-          "Delimiter {0} in regexp '{1}' must "
-              + "not be backslash or alphanumeric.",
-          String.valueOf(delim),
-          rawRegexp));
+      throw new IllegalRegexpException(L.l( "Delimiter {0} in regexp '{1}' must not be backslash or alphanumeric.",
+                                            String.valueOf(delim),
+                                            rawRegexp));
     }
 
     int tail = rawRegexp.lastIndexOf(delim);
 
     if (tail <= 0)
-      throw new QuercusException(L.l(
-          "Can't find second {0} in regexp '{1}'.",
-          String.valueOf(delim),
-          rawRegexp));
+      throw new IllegalRegexpException(L.l("Can't find second {0} in regexp '{1}'.",
+                                           String.valueOf(delim),
+                                           rawRegexp));
 
     StringValue sflags = rawRegexp.substring(tail + 1);
-    StringValue pattern = rawRegexp.substring(head + 1, tail); 
-    
+    StringValue pattern = rawRegexp.substring(head + 1, tail);
+
     _pattern = pattern;
-    
+
     int flags = 0;
-    
+
     for (int i = 0; sflags != null && i < sflags.length(); i++) {
       switch (sflags.charAt(i)) {
       case 'm': flags |= Regcomp.MULTILINE; break;
@@ -147,53 +152,60 @@ public class Regexp {
       case 'i': flags |= Regcomp.IGNORE_CASE; break;
       case 'x': flags |= Regcomp.IGNORE_WS; break;
       case 'g': flags |= Regcomp.GLOBAL; break;
-        
+
       case 'A': flags |= Regcomp.ANCHORED; break;
       case 'D': flags |= Regcomp.END_ONLY; break;
       case 'U': flags |= Regcomp.UNGREEDY; break;
       case 'X': flags |= Regcomp.STRICT; break;
       case 'S': /* speedup */; break;
-        
+
       case 'u': flags |= Regcomp.UTF8; break;
       case 'e': _isEval = true; break;
 
+      case ' ': case '\n': break;
+
       default:
-        throw new QuercusException(L.l("'{0}' is an unknown regexp flag in {1}",
-                                       (char) sflags.charAt(i), rawRegexp));
+        throw new IllegalRegexpException(L.l("'{0}' is an unknown regexp flag in {1}",
+                                             (char) sflags.charAt(i), rawRegexp));
       }
     }
-    
+
     _flags = flags;
 
     // XXX: what if unicode.semantics='true'?
-    
+
     if ((flags & Regcomp.UTF8) != 0) {
       _pattern = fromUtf8(pattern);
-      
-      if (pattern == null)
-        throw new QuercusException(
-            L.l("Regexp: error converting subject to utf8"));
+
+      if (_pattern == null) {
+        throw new IllegalRegexpException(L.l("Regexp: error converting subject to utf8"));
+      }
     }
   }
-  
+
   public StringValue getRawRegexp()
   {
     return _rawRegexp;
   }
-  
+
   public StringValue getPattern()
   {
     return _pattern;
   }
-  
+
   public boolean isUTF8()
   {
     return _isUtf8;
   }
-  
+
   public boolean isEval()
   {
     return _isEval;
+  }
+
+  public IllegalRegexpException getException()
+  {
+    return _exception;
   }
 
   public StringValue convertSubject(Env env, StringValue subject)
@@ -239,7 +251,7 @@ public class Regexp {
 
     _nGroup = comp._maxGroup;
     _nLoop = comp._nLoop;
-    
+
     _groupNames = new StringValue[_nGroup + 1];
     for (Map.Entry<Integer,StringValue> entry
            : comp._groupNameMap.entrySet()) {
@@ -247,8 +259,9 @@ public class Regexp {
 
       if (_isUnicode) {
       }
-      else if (isUTF8())
+      else if (isUTF8()) {
         groupName.toBinaryValue("UTF-8");
+      }
 
       _groupNames[entry.getKey().intValue()] = groupName;
     }
@@ -258,13 +271,13 @@ public class Regexp {
   {
     return _groupNames[i];
   }
-  
+
   public boolean isGlobal() { return _isGlobal; }
   public boolean isIgnoreCase() { return _ignoreCase; }
 
-  static StringValue fromUtf8(StringValue source)
+  static UnicodeValue fromUtf8(StringValue source)
   {
-    StringValue target = new UnicodeBuilderValue();
+    UnicodeValue target = new UnicodeBuilderValue();
     int len = source.length();
 
     for (int i = 0; i < len; i++) {
@@ -278,9 +291,9 @@ public class Regexp {
           log.fine(L.l("Regexp: bad UTF-8 sequence, saw EOF"));
           return null;
         }
-        
+
         char ch2 = source.charAt(++i);
-        
+
         target.append((char) (((ch & 0x1f) << 6)
                               + (ch2 & 0x3f)));
       }
@@ -289,10 +302,10 @@ public class Regexp {
           log.fine(L.l("Regexp: bad UTF-8 sequence, saw EOF"));
           return null;
         }
-        
+
         char ch2 = source.charAt(++i);
         char ch3 = source.charAt(++i);
-        
+
         target.append((char) (((ch & 0x0f) << 12)
                               + ((ch2 & 0x3f) << 6)
                               + (ch3 & 0x3f)));
@@ -302,19 +315,19 @@ public class Regexp {
           log.fine(L.l("Regexp: bad UTF-8 sequence, saw EOF"));
           return null;
         }
-        
+
         char ch2 = source.charAt(++i);
         char ch3 = source.charAt(++i);
         char ch4 = source.charAt(++i);
-        
+
         int codePoint = ((ch & 0x07) << 18)
                          + ((ch2 & 0x3F) << 12)
                          + ((ch3 & 0x3F) << 6)
                          + (ch4 & 0x3F);
-        
+
         int high = ((codePoint - 0x10000) >> 10) + 0xD800;
         int low = (codePoint & 0x3FF) + 0xDC00;
-        
+
         target.append((char) high);
         target.append((char) low);
       }
@@ -326,10 +339,11 @@ public class Regexp {
   static StringValue toUtf8(Env env, StringValue source)
   {
     Utf8Encoder encoder = new Utf8Encoder();
-    
-    return encoder.encode(env, source);
+
+    StringValue sb = env.createBinaryBuilder();
+    return encoder.encode(sb, source);
   }
-  
+
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _pattern + "]";

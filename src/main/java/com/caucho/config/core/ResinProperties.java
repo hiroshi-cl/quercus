@@ -32,6 +32,7 @@ package com.caucho.config.core;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.SchemaBean;
+import com.caucho.config.annotation.NoAspect;
 import com.caucho.config.type.FlowBean;
 import com.caucho.config.types.FileSetType;
 import com.caucho.loader.Environment;
@@ -52,6 +53,7 @@ import java.util.logging.Logger;
 /**
  * Imports properties values from a separate file.
  */
+@NoAspect
 public class ResinProperties extends ResinControl implements FlowBean
 {
   private static final L10N L = new L10N(ResinProperties.class);
@@ -165,6 +167,16 @@ public class ResinProperties extends ResinControl implements FlowBean
         loader = systemLoader;
       
       while ((line = is.readLine()) != null) {
+        while (line.endsWith("\\")) {
+          line = line.substring(0, line.length() - 1);
+
+          String contLine = is.readLine();
+          
+          if (contLine != null) {
+            line += contLine;
+          }
+        }
+        
         line = line.trim();
         
         int p = line.indexOf('#');
@@ -187,9 +199,10 @@ public class ResinProperties extends ResinControl implements FlowBean
         if (p < 0 || q >= 0 && q < p)
           p = q;
         
-        if (p < 0)
+        if (p < 0) {
           throw new ConfigException(L.l("invalid line in {0}\n  {1}",
                                         path, line));
+        }
         
         if ("".equals(mode) || mode.equals(_mode)) {
           String key = line.substring(0, p).trim();

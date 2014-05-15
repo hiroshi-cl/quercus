@@ -36,8 +36,6 @@ import java.io.PrintWriter;
 import java.io.Serializable;
 import java.util.IdentityHashMap;
 import java.util.Map;
-import java.util.logging.Logger;
-
 import com.caucho.util.RandomUtil;
 
 /**
@@ -46,12 +44,6 @@ import com.caucho.util.RandomUtil;
 public class ArrayValueImpl extends ArrayValue
   implements Serializable
 {
-  private static final Logger log
-    = Logger.getLogger(ArrayValueImpl.class.getName());
-
-  private static final StringValue KEY = new ConstStringValue("key");
-  private static final StringValue VALUE = new ConstStringValue("value");
-
   private static final int DEFAULT_SIZE = 16;
 
   private static final int SORT_REGULAR = 0;
@@ -117,7 +109,7 @@ public class ArrayValueImpl extends ArrayValue
   {
     copyFrom(source);
   }
-  
+
   protected void copyFrom(ArrayValueImpl source)
   {
     if (! source._isDirty)
@@ -223,22 +215,21 @@ public class ArrayValueImpl extends ArrayValue
       components[i].addTo(this);
     }
   }
-  
+
   protected Entry []getEntries()
   {
     return _entries;
   }
-  
+
   protected int getHashMask()
   {
     return _hashMask;
   }
-  
+
   protected long getNextAvailableIndex()
   {
     return _nextAvailableIndex;
   }
-  
 
   private void copyOnWrite()
   {
@@ -255,10 +246,9 @@ public class ArrayValueImpl extends ArrayValue
       entries = new Entry[entries.length];
     else
       entries = null;
-    
+
     Entry prev = null;
     for (Entry ptr = _head; ptr != null; ptr = ptr.getNext()) {
-      // Entry ptrCopy = new Entry(ptr._key, ptr._value.copyArrayItem());
       Entry ptrCopy = new Entry(ptr);
 
       if (entries != null) {
@@ -278,7 +268,7 @@ public class ArrayValueImpl extends ArrayValue
 
       if (prev == null) {
         setCurrent(ptrCopy);
-      
+
         _head = ptrCopy;
       }
       else {
@@ -330,6 +320,7 @@ public class ArrayValueImpl extends ArrayValue
   /**
    * Copy the value.
    */
+  @Override
   public Value copy()
   {
     // php/1704
@@ -337,7 +328,7 @@ public class ArrayValueImpl extends ArrayValue
 
     Value copy = new ArrayValueImpl(this);
     // copy.reset();
-    
+
     return copy;
   }
 
@@ -411,7 +402,7 @@ public class ArrayValueImpl extends ArrayValue
 
     Value copy = new ArrayValueImpl(this);
     copy.reset();
-    
+
     return copy;
   }
 
@@ -545,7 +536,7 @@ public class ArrayValueImpl extends ArrayValue
       }
       else if (index < end) {
         _size--;
-        
+
         Entry prev = ptr.getPrev();
         Entry next = ptr.getNext();
 
@@ -584,7 +575,7 @@ public class ArrayValueImpl extends ArrayValue
           addEntry(entry);
 
           Entry prev = ptr.getPrev();
-          
+
           entry.setNext(ptr);
           entry.setPrev(prev);
 
@@ -660,8 +651,10 @@ public class ArrayValueImpl extends ArrayValue
       // php/3d42
       if (! isTop && value.isset())
         return value;
-      else
-        return entry.toArg();
+      else {
+        // XXX: should probably have Entry extend ArgGetValue and return the Entry itself
+        return new ArgGetValue(this, index); // php/0d14, php/04b4
+      }
     }
     else {
       // php/3d49
@@ -738,7 +731,7 @@ public class ArrayValueImpl extends ArrayValue
       copyOnWrite();
 
     Value key = createTailKey();
-    
+
     append(key, value);
 
     return value;
@@ -747,6 +740,7 @@ public class ArrayValueImpl extends ArrayValue
   /**
    * Sets the array ref.
    */
+  @Override
   public Var putVar()
   {
     if (_isDirty)
@@ -756,6 +750,21 @@ public class ArrayValueImpl extends ArrayValue
     Value tailKey = createTailKey();
 
     return getVar(tailKey);
+  }
+
+  /**
+   * Sets the array tail, returning a reference to the tail.
+   */
+  @Override
+  public Value getArgTail(Env env, boolean isTop)
+  {
+    if (_isDirty) {
+      copyOnWrite();
+    }
+
+    Value tail = createTailKey();
+
+    return new ArgGetValue(this, tail);
   }
 
   /**
@@ -772,6 +781,7 @@ public class ArrayValueImpl extends ArrayValue
   /**
    * Gets a new value.
    */
+  @Override
   public Value get(Value key)
   {
     key = key.toKey();
@@ -906,7 +916,7 @@ public class ArrayValueImpl extends ArrayValue
 
     Entry []entries = _entries;
     Entry entry;
-    
+
     if (entries != null) {
       int hash = key.hashCode() & _hashMask;
 
@@ -914,7 +924,7 @@ public class ArrayValueImpl extends ArrayValue
     }
     else
       entry = _head;
-    
+
     for (; entry != null; entry = entry.getNextHash()) {
       Value entryKey = entry.getKey();
 
@@ -940,18 +950,18 @@ public class ArrayValueImpl extends ArrayValue
     Entry entry;
 
     int hash = key.hashCode() & _hashMask;
-    
+
     if (entries != null) {
       entry = entries[hash];
     }
     else
       entry = _head;
-    
+
     Entry prevHash = null;
 
     for (; entry != null; entry = entry.getNextHash()) {
       Value entryKey = entry.getKey();
-      
+
       if (key == entryKey || key.equals(entryKey)) {
         if (prevHash != null)
           prevHash.setNextHash(entry.getNextHash());
@@ -1178,9 +1188,9 @@ public class ArrayValueImpl extends ArrayValue
   private void addEntry(Entry entry)
   {
     Value key = entry.getKey();
-    
+
     Entry []entries = _entries;
-    
+
     if (entries != null) {
       int hash = key.hashCode() & _hashMask;
 

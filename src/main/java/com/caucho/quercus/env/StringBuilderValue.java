@@ -30,11 +30,19 @@
 package com.caucho.quercus.env;
 
 import com.caucho.util.CharBuffer;
-import com.caucho.vfs.*;
+import com.caucho.vfs.TempCharBuffer;
+import com.caucho.vfs.WriteStream;
 import com.caucho.quercus.QuercusModuleException;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.io.Reader;
 import java.util.IdentityHashMap;
+import java.util.Locale;
 import java.util.zip.CRC32;
 
 /**
@@ -63,6 +71,14 @@ public class StringBuilderValue
   public StringBuilderValue(int capacity)
   {
     if (capacity < MIN_LENGTH)
+      capacity = MIN_LENGTH;
+
+    _buffer = new byte[capacity];
+  }
+
+  public StringBuilderValue(int capacity, boolean isAbsolute)
+  {
+    if (! isAbsolute && capacity < MIN_LENGTH)
       capacity = MIN_LENGTH;
 
     _buffer = new byte[capacity];
@@ -298,6 +314,7 @@ public class StringBuilderValue
     ch = buffer[i];
 
     if (ch == '.') {
+      // XXX: this doesn't look right 2012-03-15
       for (i++; i < len && '0' <= (ch = buffer[i]) && ch <= '9'; i++) {
         return ValueType.DOUBLE_CMP;
       }
@@ -345,15 +362,6 @@ public class StringBuilderValue
    */
   @Override
   public final boolean isScalar()
-  {
-    return true;
-  }
-
-  /*
-   * Returns true if this is a PHP5 string.
-   */
-  @Override
-  public boolean isPHP5String()
   {
     return true;
   }
@@ -479,7 +487,7 @@ public class StringBuilderValue
   public String toString()
   {
     if (_length == 1)
-      return String.valueOf((char) (_buffer[0] & 0xFF));
+      return String.valueOf((char) (_buffer[0] & 0xff));
     else {
       CharBuffer buf = CharBuffer.allocate();
       buf.append(_buffer, 0, _length);
@@ -632,6 +640,9 @@ public class StringBuilderValue
     int i = 0;
     int ch = buffer[i];
     if (ch == '-') {
+      if (len == 1)
+        return this;
+
       sign = -1;
       i++;
     }
@@ -681,7 +692,7 @@ public class StringBuilderValue
   public Value put(Value index, Value value)
   {
     setCharValueAt(index.toLong(), value);
-    
+
     return value;
   }
 
@@ -725,7 +736,7 @@ public class StringBuilderValue
    * Returns the length of the string.
    */
   @Override
-  public int length()
+  public final int length()
   {
     return _length;
   }
@@ -879,22 +890,41 @@ public class StringBuilderValue
    * Convert to lower case.
    */
   @Override
-  public StringValue toLowerCase()
+  public StringValue toLowerCase(Locale locale)
   {
     int length = _length;
 
-    StringBuilderValue string = createStringBuilder(length);
+    boolean isUpperCase = false;
 
     byte []srcBuffer = _buffer;
+
+    for (int i = 0; i < length; i++) {
+      byte ch = srcBuffer[i];
+
+      if ('a' <= ch && ch <= 'z') {
+      }
+      else if ('A' <= ch && ch <= 'Z') {
+        isUpperCase = true;
+        break;
+      }
+    }
+
+    if (! isUpperCase) {
+      return this;
+    }
+
+    StringBuilderValue string = createStringBuilder(length);
     byte []dstBuffer = string._buffer;
 
     for (int i = 0; i < length; i++) {
       byte ch = srcBuffer[i];
 
-      if ('A' <= ch && ch <= 'Z')
+      if ('A' <= ch && ch <= 'Z') {
         dstBuffer[i] = (byte) (ch + 'a' - 'A');
-      else
+      }
+      else {
         dstBuffer[i] = ch;
+      }
     }
 
     string._length = length;
@@ -1330,10 +1360,12 @@ public class StringBuilderValue
   {
     final int matchLength = match.length();
 
-    if (matchLength <= 0)
+    if (matchLength <= 0) {
       return -1;
-    else if (head < 0)
+    }
+    else if (head < 0) {
       return -1;
+    }
 
     final int length = _length;
     final int end = length - matchLength;
@@ -1575,17 +1607,9 @@ public class StringBuilderValue
   }
 
   /**
-   * Returns the offset.
+   * Sets the length.
    */
-  public int getOffset()
-  {
-    return _length;
-  }
-
-  /**
-   * Sets the offset.
-   */
-  public void setOffset(int offset)
+  public final void setLength(int offset)
   {
     _length = offset;
   }
@@ -1593,7 +1617,7 @@ public class StringBuilderValue
   /**
    * Returns the current capacity.
    */
-  public int getBufferLength()
+  public final int getBufferLength()
   {
     return _buffer.length;
   }
@@ -1644,7 +1668,7 @@ public class StringBuilderValue
     sb.append(":\"");
 
     for (int i = 0; i < _length; i++) {
-      sb.append((char) (_buffer[i] & 0xFF));
+      sb.append((char) (_buffer[i] & 0xff));
     }
 
     sb.append("\";");
@@ -1695,9 +1719,7 @@ public class StringBuilderValue
     out.print("\"");
   }
 
-  /**
-   * Returns an OutputStream.
-   */
+  @Override
   public OutputStream getOutputStream()
   {
     return new BuilderOutputStream();
@@ -1853,14 +1875,14 @@ public class StringBuilderValue
     }
 
     ValueType typeA = getValueType();
+
     if (typeA.isNumberCmp() && typeB.isNumberCmp()) {
       double l = toDouble();
       double r = rValue.toDouble();
 
       return l == r;
     }
-
-    if (rValue instanceof StringBuilderValue) {
+    else if (rValue instanceof StringBuilderValue) {
       StringBuilderValue value = (StringBuilderValue) rValue;
 
       int length = _length;
@@ -1878,17 +1900,41 @@ public class StringBuilderValue
 
       return true;
     }
+    else if (rValue instanceof StringValue) {
+      StringValue value = (StringValue) rValue;
+
+      int length = _length;
+
+      if (length != value.length()) {
+        return false;
+      }
+
+      byte []buffer = _buffer;
+
+      for (int i = length - 1; i >= 0; i--) {
+        if ((buffer[i] & 0xff) != value.charAt(i)) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+    else if (rValue.isObject()) {
+      return super.eq(rValue);
+    }
     else {
       String rString = rValue.toString();
 
       int len = rString.length();
 
-      if (_length != len)
+      if (_length != len) {
         return false;
+      }
 
       for (int i = len - 1; i >= 0; i--) {
-        if (_buffer[i] != rString.charAt(i))
+        if ((_buffer[i] & 0xff) != rString.charAt(i)) {
           return false;
+        }
       }
 
       return true;
@@ -1898,8 +1944,9 @@ public class StringBuilderValue
   @Override
   public boolean equals(Object o)
   {
-    if (o == this)
+    if (o == this) {
       return true;
+    }
 
     if (o instanceof StringBuilderValue) {
       StringBuilderValue value = (StringBuilderValue) o;
@@ -1937,15 +1984,71 @@ public class StringBuilderValue
 
       return true;
     }
-    /*
-    else if (o instanceof UnicodeValue) {
-      UnicodeValue value = (UnicodeValue)o;
+    else if (o instanceof StringValue) {
+      StringValue str = (StringValue) o;
 
-      return value.equals(this);
+      int len = _length;
+
+      if (len != str.length()) {
+        return false;
+      }
+
+      byte []buffer = _buffer;
+
+      for (int i = len - 1; i >= 0; i--) {
+        if ((buffer[i] & 0xff) != str.charAt(i)) {
+          return false;
+        }
+      }
+
+      return true;
     }
-    */
-    else
+    else {
       return false;
+    }
+  }
+
+  /**
+   * Test for equality
+   */
+  public boolean equalsIgnoreCase(Object o)
+  {
+    if (this == o) {
+      return true;
+    }
+    else if (! (o instanceof StringBuilderValue)) {
+      return super.equalsIgnoreCase(o);
+    }
+
+    StringBuilderValue s = (StringBuilderValue) o;
+
+    int len = _length;
+
+    if (len != s._length) {
+      return false;
+    }
+
+    for (int i = len - 1; i >= 0; i--) {
+      int chA = _buffer[i];
+      int chB = s._buffer[i];
+
+      if (chA == chB) {
+        continue;
+      }
+
+      if ('A' <= chA && chA <= 'Z') {
+        chA = chA - 'A' + 'a';
+      }
+      else if ('A' <= chB && chB <= 'Z') {
+        chB = chB - 'A' + 'a';
+      }
+
+      if (chA != chB) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   @Override
@@ -1976,6 +2079,17 @@ public class StringBuilderValue
     }
     else
       return false;
+  }
+
+  /**
+   * Generates code to recreate the expression.
+   *
+   * @param out the writer to the Java source code.
+   */
+  public void generate(PrintWriter out)
+    throws IOException
+  {
+    ConstStringValue.generateImpl(out, this);
   }
 
   //
@@ -2009,7 +2123,7 @@ public class StringBuilderValue
     public int read()
     {
       if (_offset < _length)
-        return _buffer[_offset++] & 0xFF;
+        return _buffer[_offset++] & 0xff;
       else
         return -1;
     }
@@ -2043,7 +2157,7 @@ public class StringBuilderValue
     public int read()
     {
       if (_index < _length)
-        return _buffer[_index++] & 0xFF;
+        return _buffer[_index++] & 0xff;
       else
         return -1;
     }

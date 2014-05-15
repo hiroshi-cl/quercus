@@ -29,11 +29,9 @@
 
 package com.caucho.quercus.env;
 
-import com.caucho.quercus.expr.Expr;
-import com.caucho.quercus.expr.LiteralStringExpr;
 import com.caucho.quercus.function.AbstractFunction;
-import com.caucho.util.Primes;
-import com.caucho.util.Alarm;
+import com.caucho.quercus.program.ClassField;
+import com.caucho.util.CurrentTime;
 import com.caucho.vfs.WriteStream;
 
 import java.io.IOException;
@@ -41,11 +39,12 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.util.AbstractSet;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 
 /**
  * Represents a PHP object value.
@@ -54,56 +53,36 @@ import java.util.TreeSet;
 public class ObjectExtValue extends ObjectValue
   implements Serializable
 {
-  private static final int DEFAULT_SIZE = 16;
-  private static final int DEFAULT_PRIME = Primes.getBiggestPrime(DEFAULT_SIZE);
-
   private MethodMap<AbstractFunction> _methodMap;
 
-  private Entry []_entries;
-  private int _prime;
+  private LinkedHashMap<StringValue,Entry> _fieldMap
+    = new LinkedHashMap<StringValue,Entry>();
 
-  private int _size;
+  private HashMap<StringValue,Entry> _protectedFieldMap;
+
   private boolean _isFieldInit;
 
-  public ObjectExtValue(QuercusClass cl)
+  public ObjectExtValue(Env env, QuercusClass cl)
   {
-    super(cl);
+    super(env, cl);
 
     _methodMap = cl.getMethodMap();
-
-    _entries = new Entry[DEFAULT_SIZE];
-    _prime = DEFAULT_PRIME;
   }
 
   public ObjectExtValue(Env env, ObjectExtValue copy, CopyRoot root)
   {
-    super(copy.getQuercusClass());
+    super(env, copy.getQuercusClass());
 
     root.putCopy(copy, this);
 
     _methodMap = copy._methodMap;
 
-    _size = copy._size;
     _isFieldInit = copy._isFieldInit;
 
-    Entry []copyEntries = copy._entries;
+    for (Map.Entry<StringValue,Entry> entry : copy._fieldMap.entrySet()) {
+      Entry entryCopy = entry.getValue().copyTree(env, root);
 
-    _entries = new Entry[copyEntries.length];
-    _prime = copy._prime;
-
-    int len = copyEntries.length;
-    for (int i = 0; i < len; i++) {
-      Entry entry = copyEntries[i];
-
-      for (; entry != null; entry = entry._next) {
-        Entry entryCopy = entry.copyTree(env, root);
-
-        entryCopy._next = _entries[i];
-        if (_entries[i] != null)
-          _entries[i]._prev = entryCopy;
-
-        _entries[i] = entryCopy;
-      }
+      _fieldMap.put(entry.getKey(), entryCopy);
     }
 
     _incompleteObjectName = copy._incompleteObjectName;
@@ -113,31 +92,16 @@ public class ObjectExtValue extends ObjectValue
                         IdentityHashMap<Value,Value> copyMap,
                         ObjectExtValue copy)
   {
-    super(copy.getQuercusClass());
+    super(env, copy.getQuercusClass());
 
     _methodMap = copy._methodMap;
 
-    _size = copy._size;
     _isFieldInit = copy._isFieldInit;
 
-    Entry []copyEntries = copy._entries;
+    for (Map.Entry<StringValue,Entry> entry : copy._fieldMap.entrySet()) {
+      Entry entryCopy = new Entry(env, copyMap, entry.getValue());
 
-    _entries = new Entry[copyEntries.length];
-    _prime = copy._prime;
-
-    int len = copyEntries.length;
-    for (int i = 0; i < len; i++) {
-      Entry entry = copyEntries[i];
-
-      for (; entry != null; entry = entry._next) {
-        Entry entryCopy = new Entry(env, copyMap, entry);
-
-        entryCopy._next = _entries[i];
-        if (_entries[i] != null)
-          _entries[i]._prev = entryCopy;
-
-        _entries[i] = entryCopy;
-      }
+      _fieldMap.put(entry.getKey(), entryCopy);
     }
 
     _incompleteObjectName = copy._incompleteObjectName;
@@ -145,20 +109,18 @@ public class ObjectExtValue extends ObjectValue
 
   private void init()
   {
-    _entries = new Entry[DEFAULT_SIZE];
-    _prime = DEFAULT_PRIME;
-    _size = 0;
+    _fieldMap = new LinkedHashMap<StringValue,Entry>();
   }
 
   @Override
-  protected void setQuercusClass(QuercusClass cl)
+  public void setQuercusClass(QuercusClass cl)
   {
     super.setQuercusClass(cl);
 
     _methodMap = cl.getMethodMap();
   }
 
-  /*
+  /**
    * Initializes the incomplete class.
    */
   @Override
@@ -167,25 +129,29 @@ public class ObjectExtValue extends ObjectValue
     setQuercusClass(cls);
     _incompleteObjectName = null;
 
-    Entry []existingEntries = _entries;
-
-    _entries = new Entry[DEFAULT_SIZE];
-    _prime = DEFAULT_PRIME;
-    _size = 0;
+    LinkedHashMap<StringValue,Entry> existingFields = _fieldMap;
+    _fieldMap = new LinkedHashMap<StringValue,Entry>();
 
     cls.initObject(env, this);
 
-    EntryIterator iter = new EntryIterator(existingEntries);
+    Iterator<Entry> iter = existingFields.values().iterator();
 
     while (iter.hasNext()) {
       Entry newField = iter.next();
 
+      Entry entry = createEntryFromInit(newField.getKey());
+      entry._value = newField._value;
+
+      /*
       Entry entry = getThisEntry(newField._key);
 
-      if (entry != null)
+      if (entry != null) {
         entry._value = newField._value;
-      else
-        initField(newField._key, newField._value, newField._visibility);
+      }
+      else {
+        putThisField(env, newField._key, newField._value);
+      }
+      */
     }
   }
 
@@ -195,7 +161,7 @@ public class ObjectExtValue extends ObjectValue
   @Override
   public int getSize()
   {
-    return _size;
+    return _fieldMap.size();
   }
 
   /**
@@ -205,19 +171,15 @@ public class ObjectExtValue extends ObjectValue
   public final Value getField(Env env, StringValue name)
   {
     Value returnValue = getFieldExt(env, name);
-    if(returnValue == UnsetValue.UNSET)
-    {
-        // __get didn't work, lets look in the class itself
-        int hash = (name.hashCode() & 0x7fffffff) % _prime;
 
-        for (Entry entry = _entries[hash]; entry != null; entry = entry._next) {
-          StringValue entryKey = entry._key;
+    if (returnValue == UnsetValue.UNSET) {
+      // __get didn't work, lets look in the class itself
+      Entry entry = _fieldMap.get(name);
 
-          if (name == entryKey || name.equals(entryKey)) {
-            // php/09ks vs php/091m
-            returnValue = entry._value.toValue();
-          }
-        }
+      if (entry != null) {
+        // php/09ks vs php/091m
+        return entry._value.toValue();
+      }
     }
 
     return returnValue;
@@ -243,9 +205,13 @@ public class ObjectExtValue extends ObjectValue
    */
   protected Value getFieldExt(Env env, StringValue name)
   {
-      Entry e = this.getEntry(env, name);
-      if(e != null && e._value != NullValue.NULL && e._value != UnsetValue.UNSET)
-        return e._value;
+    Entry e = getEntry(env, name);
+
+    if (e != null
+        && e._value != NullValue.NULL
+        && e._value != UnsetValue.UNSET) {
+      return e._value;
+    }
 
     return _quercusClass.getField(env, this, name);
   }
@@ -280,7 +246,7 @@ public class ObjectExtValue extends ObjectValue
     }
 
     // php/3d28
-    entry = createEntry(name, FieldVisibility.PUBLIC);
+    entry = createEntry(name);
 
     value = entry._value;
 
@@ -323,12 +289,13 @@ public class ObjectExtValue extends ObjectValue
         return new Var(value);
     }
 
-    entry = createEntry(name, FieldVisibility.PUBLIC);
+    entry = createEntry(name);
 
     value = entry._value;
 
-    if (value instanceof Var)
+    if (value instanceof Var) {
       return (Var) value;
+    }
 
     Var var = new Var(value);
 
@@ -446,7 +413,7 @@ public class ObjectExtValue extends ObjectValue
         }
       }
 
-      entry = createEntry(name, FieldVisibility.PUBLIC);
+      entry = createEntry(name);
     }
 
     Value oldValue = entry._value;
@@ -506,7 +473,7 @@ public class ObjectExtValue extends ObjectValue
       }
     }
 
-    entry = createEntry(name, FieldVisibility.PUBLIC);
+    entry = createEntry(name);
 
     Value oldValue = entry._value;
 
@@ -553,11 +520,14 @@ public class ObjectExtValue extends ObjectValue
    * Adds a new value to the object.
    */
   @Override
-  public void initField(StringValue key,
-                        Value value,
-                        FieldVisibility visibility)
+  public void initField(Env env,
+                        StringValue name,
+                        StringValue canonicalName,
+                        Value value)
   {
-    Entry entry = createEntry(key, visibility);
+    Entry entry;
+
+    entry = createEntryFromInit(name, canonicalName);
 
     entry._value = value;
   }
@@ -568,41 +538,16 @@ public class ObjectExtValue extends ObjectValue
   @Override
   public void unsetField(StringValue name)
   {
-
-
     Value returnValue = _quercusClass.unsetField(Env.getCurrent(),this,name);
-    if(returnValue == UnsetValue.UNSET || returnValue == NullValue.NULL)
-    {
-        // __unset didn't work, lets look in the class itself
-        int hash = (name.hashCode() & 0x7fffffff) % _prime;
+    if(returnValue == UnsetValue.UNSET || returnValue == NullValue.NULL) {
+      // __unset didn't work, lets look in the class itself
 
-        for (Entry entry = _entries[hash];
-             entry != null;
-             entry = entry._next) {
-          if (name.equals(entry.getKey())) {
-            Entry prev = entry._prev;
-            Entry next = entry._next;
-
-            if (prev != null)
-              prev._next = next;
-            else
-              _entries[hash] = next;
-
-            if (next != null)
-              next._prev = prev;
-
-            _size--;
-
-            return;
-          }
-        }
+      _fieldMap.remove(name);
     }
 
     return;
 
   }
-
-
 
 
   /**
@@ -615,7 +560,7 @@ public class ObjectExtValue extends ObjectValue
     if (_quercusClass.getFieldGet() != null)
       return;
 
-    Entry entry = createEntry(name, FieldVisibility.PUBLIC);
+    Entry entry = createEntry(name);
 
     // XXX
     //if (entry._visibility == FieldVisibility.PRIVATE)
@@ -629,61 +574,53 @@ public class ObjectExtValue extends ObjectValue
    */
   public void unsetThisArray(Env env, StringValue name, Value index)
   {
-    if (_quercusClass.getFieldGet() != null)
+    if (_quercusClass.getFieldGet() != null) {
       return;
+    }
 
-    Entry entry = createEntry(name, FieldVisibility.PUBLIC);
+    Entry entry = createEntry(name);
 
     entry.toValue().remove(index);
   }
 
-  @Override
-  public Value get(Value key) {
-    return getThisField(Env.getCurrent(), (StringValue) StringValue.create(key));
-  }
-  
   /**
    * Gets a new value.
    */
   private Entry getEntry(Env env, StringValue name)
   {
-    int hash = (name.hashCode() & 0x7fffffff) % _prime;
+    Entry entry = _fieldMap.get(name);
 
-    for (Entry entry = _entries[hash]; entry != null; entry = entry._next) {
-      StringValue entryKey = entry._key;
-
-      if (name == entryKey || name.equals(entryKey)) {
-
-
-        if (entry._visibility == FieldVisibility.PRIVATE) {
-          QuercusClass cls = env.getCallingClass();
-
-          // XXX: this really only checks access from outside of class scope
-          // php/091m
-          if (cls != _quercusClass) {
-                env.notice(L.l("Can't access private field '{0}::${1}'",
-                        _quercusClass.getName(), name));
-              return null;
-          }
-        } else if (entry._visibility == FieldVisibility.PROTECTED)
-        {
-            QuercusClass cls = env.getCallingClass();
-
-            if (cls == null || (cls != _quercusClass && !cls.isA(_quercusClass.getName())))
-            {
-                env.notice(L.l("Can't access protected field '{0}::${1}'",
-                        _quercusClass.getName(), name
-                        ));
-                return null;
-            }
-        }
-
-
-        return entry;
-      }
+    if (entry == null) {
+      entry = getThisProtectedEntry(name);
     }
 
-    return null;
+    if (entry == null) {
+      return null;
+    }
+
+    if (entry.isPrivate()) {
+      QuercusClass cls = env.getCallingClass();
+
+      // XXX: this really only checks access from outside of class scope
+      // php/091m
+      if (cls != _quercusClass) {
+        return null;
+      }
+      /* nam: 2012-04-29 this doesn't work, commented out for drupal-7.12
+      else if (entry._visibility == FieldVisibility.PROTECTED) {
+        QuercusClass cls = env.getCallingClass();
+
+        if (cls == null || (cls != _quercusClass && ! cls.isA(_quercusClass.getName()))) {
+            env.notice(L.l("Can't access protected field '{0}::${1}'",
+                           _quercusClass.getName(), name));
+
+            return null;
+        }
+      }
+      */
+    }
+
+    return entry;
   }
 
   /**
@@ -691,47 +628,68 @@ public class ObjectExtValue extends ObjectValue
    */
   private Entry getThisEntry(StringValue name)
   {
-    int hash = (name.hashCode() & 0x7fffffff) % _prime;
+    Entry entry = _fieldMap.get(name);
 
-    for (Entry entry = _entries[hash]; entry != null; entry = entry._next) {
-      StringValue entryKey = entry._key;
-
-      if (name == entryKey || name.equals(entryKey))
-        return entry;
+    if (entry == null) {
+      entry = getThisProtectedEntry(name);
     }
 
-    return null;
+    return entry;
+  }
+
+  /**
+   * Returns the field with protected visibility.
+   */
+  private Entry getThisProtectedEntry(StringValue name)
+  {
+    if (_protectedFieldMap == null) {
+      return null;
+    }
+
+    return _protectedFieldMap.get(name);
+  }
+
+  private Entry createEntryFromInit(StringValue canonicalName)
+  {
+    StringValue name = ClassField.getOrdinaryName(canonicalName);
+
+    return createEntryFromInit(name, canonicalName);
+  }
+
+  private Entry createEntryFromInit(StringValue name,
+                                    StringValue canonicalName)
+  {
+    Entry entry = _fieldMap.get(canonicalName);
+
+    if (entry == null) {
+      entry = new Entry(canonicalName);
+      _fieldMap.put(canonicalName, entry);
+
+      if (ClassField.isProtected(canonicalName)) {
+        if (_protectedFieldMap == null) {
+          _protectedFieldMap = new HashMap<StringValue,Entry>();
+        }
+
+        _protectedFieldMap.put(name, entry);
+      }
+    }
+
+    return entry;
   }
 
   /**
    * Creates the entry for a key.
    */
-  private Entry createEntry(StringValue name, FieldVisibility visibility)
+  private Entry createEntry(StringValue canonicalName)
   {
-    int hash = (name.hashCode() & 0x7fffffff) % _prime;
+    Entry entry = _fieldMap.get(canonicalName);
 
-    for (Entry entry = _entries[hash];
-         entry != null;
-         entry = entry._next) {
-      if (name.equals(entry._key))
-        return entry;
+    if (entry == null) {
+      entry = new Entry(canonicalName);
+      _fieldMap.put(canonicalName, entry);
     }
 
-    _size++;
-
-    Entry newEntry = new Entry(name, visibility);
-    Entry next = _entries[hash];
-
-    if (next != null) {
-      newEntry._next = next;
-      next._prev = newEntry;
-    }
-
-    _entries[hash] = newEntry;
-
-    // XXX: possibly resize
-
-    return newEntry;
+    return entry;
   }
 
   //
@@ -758,7 +716,7 @@ public class ObjectExtValue extends ObjectValue
   @Override
   public Iterator<Map.Entry<Value, Value>> getBaseIterator(Env env)
   {
-    return new KeyValueIterator(_entries);
+    return new KeyValueIterator(_fieldMap.values().iterator());
   }
 
   /**
@@ -772,7 +730,7 @@ public class ObjectExtValue extends ObjectValue
     if (delegate != null)
       return delegate.getKeyIterator(env, this);
 
-    return new KeyIterator(_entries);
+    return new KeyIterator(_fieldMap.keySet().iterator());
   }
 
   /**
@@ -786,21 +744,12 @@ public class ObjectExtValue extends ObjectValue
     if (delegate != null)
       return delegate.getValueIterator(env, this);
 
-    return new ValueIterator(_entries);
+    return new ValueIterator(_fieldMap.values().iterator());
   }
 
   //
   // method calls
   //
-
-  /**
-   * Finds the method name.
-   */
-  @Override
-  public AbstractFunction findFunction(String methodName)
-  {
-    return _quercusClass.findFunction(methodName);
-  }
 
   /**
    * Evaluates a method.
@@ -1051,25 +1000,31 @@ public class ObjectExtValue extends ObjectValue
   @Override
   public Value clone(Env env)
   {
-    ObjectExtValue newObject = new ObjectExtValue(_quercusClass);
+    ObjectExtValue newObject = new ObjectExtValue(env, _quercusClass);
 
-    Iterator<Entry> iter = new EntryIterator(_entries);
-
-    while (iter.hasNext()) {
-      Entry entry = iter.next();
-
-      Entry copy = newObject.createEntry(entry.getKey(),
-                                         entry.getVisibility());
-
-      copy.setValue(entry.getValue().copy());
-    }
+    clone(env, newObject);
 
     return newObject;
   }
 
+  protected void clone(Env env, ObjectExtValue obj) {
+    _quercusClass.initObject(env, obj);
+
+    Iterator<Entry> iter = _fieldMap.values().iterator();
+
+    while (iter.hasNext()) {
+      Entry entry = iter.next();
+
+      StringValue canonicalName = entry.getKey();
+      Value value = entry.getValue().copy();
+
+      obj.initField(env, canonicalName, value);
+    }
+  }
+
   // XXX: need to check the other copy, e.g. for sessions
 
-  /*
+  /**
    * Serializes the value.
    *
    * @param sb holds result of serialization
@@ -1077,7 +1032,8 @@ public class ObjectExtValue extends ObjectValue
    */
   @Override
   public void serialize(Env env,
-                        StringBuilder sb, SerializeMap serializeMap)
+                        StringBuilder sb,
+                        SerializeMap serializeMap)
   {
     Integer index = serializeMap.get(this);
 
@@ -1100,7 +1056,7 @@ public class ObjectExtValue extends ObjectValue
     sb.append(getSize());
     sb.append(":{");
 
-    Iterator<Entry> iter = new EntryIterator(_entries);
+    Iterator<Entry> iter = _fieldMap.values().iterator();
 
     while (iter.hasNext()) {
       Entry entry = iter.next();
@@ -1110,26 +1066,14 @@ public class ObjectExtValue extends ObjectValue
       Value key = entry.getKey();
       int len = key.length();
 
-      if (entry._visibility == FieldVisibility.PROTECTED) {
-        sb.append(len + 3);
+      sb.append(len);
+      sb.append(':');
 
-        sb.append(":\"");
-        sb.append("\u0000*\u0000");
-      }
-      else if (entry._visibility == FieldVisibility.PRIVATE) {
-        sb.append(len + 3);
-
-        sb.append(":\"");
-        sb.append("\u0000A\u0000");
-      }
-      else {
-        sb.append(len);
-
-        sb.append(":\"");
-      }
-
+      sb.append('"');
       sb.append(key);
-      sb.append("\";");
+      sb.append('"');
+
+      sb.append(';');
 
       Value value = ((Entry) entry).getRawValue();
 
@@ -1143,53 +1087,42 @@ public class ObjectExtValue extends ObjectValue
    * Exports the value.
    */
   @Override
-  public void varExport(StringBuilder sb)
+  protected void varExportImpl(StringValue sb, int level)
   {
+    if (level != 0) {
+      sb.append('\n');
+    }
+
+    for (int i = 0; i < level; i++) {
+      sb.append("  ");
+    }
+
     sb.append(getName());
     sb.append("::__set_state(array(\n");
 
     for (Map.Entry<Value,Value> entry : entrySet()) {
+      Value key = entry.getKey();
+      Value value = entry.getValue();
+
+      for (int i = 0; i < level; i++) {
+        sb.append("  ");
+      }
+
       sb.append("   ");
-      entry.getKey().varExport(sb);
+
+      key.varExportImpl(sb, level + 1);
 
       sb.append(" => ");
-      entry.getValue().varExport(sb);
+
+      value.varExportImpl(sb, level + 1);
       sb.append(",\n");
     }
 
+    for (int i = 0; i < level; i++) {
+      sb.append("  ");
+    }
+
     sb.append("))");
-  }
-
-  /**
-   * Append to a string builder.
-   */
-  public StringValue appendTo(UnicodeBuilderValue sb)
-  {
-    return sb.append(toString(Env.getInstance()));
-  }
-
-  /**
-   * Append to a binary builder.
-   */
-  public StringValue appendTo(StringBuilderValue sb)
-  {
-    return sb.append(toString(Env.getInstance()));
-  }
-
-  /**
-   * Append to a binary builder.
-   */
-  public StringValue appendTo(BinaryBuilderValue sb)
-  {
-    return sb.appendBytes(toString(Env.getInstance()));
-  }
-
-  /**
-   * Append to a binary builder.
-   */
-  public StringValue appendTo(LargeStringBuilderValue sb)
-  {
-    return sb.append(toString(Env.getInstance()));
   }
 
   /**
@@ -1217,7 +1150,7 @@ public class ObjectExtValue extends ObjectValue
   public StringValue toString(Env env)
   {
     AbstractFunction toString = _quercusClass.getToString();
-    
+
     if (toString != null)
       return toString.callMethod(env, _quercusClass, this).toStringValue();
     else
@@ -1238,7 +1171,7 @@ public class ObjectExtValue extends ObjectValue
    * Converts to an array.
    */
   @Override
-  public Value toArray()
+  public ArrayValue toArray()
   {
     ArrayValue array = new ArrayValueImpl();
 
@@ -1273,14 +1206,6 @@ public class ObjectExtValue extends ObjectValue
     return new EntrySet();
   }
 
-  /**
-   * Returns a Set of entries, sorted by key.
-   */
-  public Set<? extends Map.Entry<Value,Value>> sortedEntrySet()
-  {
-    return new TreeSet<Map.Entry<Value, Value>>(entrySet());
-  }
-
   //
   // debugging
   //
@@ -1312,7 +1237,7 @@ public class ObjectExtValue extends ObjectValue
       out.println();
     }
 
-    for (Map.Entry<Value,Value> mapEntry : sortedEntrySet()) {
+    for (Map.Entry<Value,Value> mapEntry : entrySet()) {
       ObjectExtValue.Entry entry = (ObjectExtValue.Entry) mapEntry;
 
       entry.varDumpImpl(env, out, depth + 1, valueSet);
@@ -1336,7 +1261,7 @@ public class ObjectExtValue extends ObjectValue
     printDepth(out, 4 * depth);
     out.println("(");
 
-    for (Map.Entry<Value,Value> mapEntry : sortedEntrySet()) {
+    for (Map.Entry<Value,Value> mapEntry : entrySet()) {
       ObjectExtValue.Entry entry = (ObjectExtValue.Entry) mapEntry;
 
       entry.printRImpl(env, out, depth + 1, valueSet);
@@ -1355,7 +1280,7 @@ public class ObjectExtValue extends ObjectValue
   {
     out.writeObject(_className);
 
-    out.writeInt(_size);
+    out.writeInt(_fieldMap.size());
 
     for (Map.Entry<Value,Value> entry : entrySet()) {
       out.writeObject(entry.getKey());
@@ -1367,26 +1292,34 @@ public class ObjectExtValue extends ObjectValue
    * Encodes the value in JSON.
    */
   @Override
-  public void jsonEncode(Env env, StringValue sb)
+  public void jsonEncode(Env env, JsonEncodeContext context, StringValue sb)
   {
+    if (true) {
+      super.jsonEncode(env, context, sb);
+
+      return;
+    }
+
     sb.append('{');
 
     int length = 0;
 
-    Iterator<Entry> iter = new EntryIterator(_entries);
+    Iterator<Entry> iter = _fieldMap.values().iterator();
 
     while (iter.hasNext()) {
       Entry entry = iter.next();
 
-      if (entry.getVisibility() != FieldVisibility.PUBLIC)
+      if (! entry.isPublic()) {
         continue;
+      }
 
-      if (length > 0)
+      if (length > 0) {
         sb.append(',');
+      }
 
-      entry.getKey().toStringValue().jsonEncode(env, sb);
+      entry.getKey().toStringValue(env).jsonEncode(env, context, sb);
       sb.append(':');
-      entry.getValue().jsonEncode(env, sb);
+      entry.getValue().jsonEncode(env, context, sb);
       length++;
     }
 
@@ -1423,92 +1356,32 @@ public class ObjectExtValue extends ObjectValue
     }
   }
 
-  public void cleanup(Env env)
-  {
-    QuercusClass qClass = getQuercusClass();
-
-    AbstractFunction fun = qClass.getDestructor();
-
-    if (fun != null)
-      fun.callMethod(env, qClass, this);
-  }
-
-  private static String toMethod(char []key, int keyLength)
-  {
-    return new String(key, 0, keyLength);
-  }
-
-
   @Override
-  public boolean issetField( StringValue name) {
+  public boolean issetField(Env env, StringValue name)
+  {
+    Entry entry = getThisEntry(name);
 
-    Value returnValue = _quercusClass.issetField(Env.getCurrent(),this,name);
-    if(returnValue == UnsetValue.UNSET)
-    {
-        // setter didn't work, lets look in the class itself
-        int hash = (name.hashCode() & 0x7fffffff) % _prime;
-
-        for (Entry entry = _entries[hash]; entry != null; entry = entry._next) {
-          StringValue entryKey = entry._key;
-
-          if ((name == entryKey || name.equals(entryKey)) && !entry._value.eq(NullValue.NULL)) {
-            // php/09ks vs php/091m
-              return true;
-          }
-        }
-
-        if(this.isA("arrayaccess"))
-        {
-            // TODO: This should probably be in ArrayAccessDelegate
-            Env _env = Env.getCurrent();
-            Value v = this.getObject(_env).getArray().get(name);
-            if( v != null && v != NullValue.NULL && v != UnsetValue.UNSET)
-                return true;
-            return false;
-        }
+    if (entry != null && entry.isPublic()) {
+      return entry._value.isset();
     }
 
-    return returnValue.toBoolean();
+    boolean result = getQuercusClass().issetField(env, this, name);
 
+    return result;
   }
 
   @Override
-  public boolean hasField( StringValue name) {
+  public boolean isFieldExists(Env env, StringValue name)
+  {
+    Entry entry = getThisEntry(name);
 
-    Value returnValue = _quercusClass.issetField(Env.getCurrent(),this,name);
-    if(returnValue == UnsetValue.UNSET)
-    {
-        // setter didn't work, lets look in the class itself
-        int hash = (name.hashCode() & 0x7fffffff) % _prime;
-
-        for (Entry entry = _entries[hash]; entry != null; entry = entry._next) {
-          StringValue entryKey = entry._key;
-
-          if ((name == entryKey || name.equals(entryKey))) {
-            // php/09ks vs php/091m
-              return true;
-          }
-        }
-
-        if(this.isA("arrayaccess"))
-        {
-            // TODO: This should probably be in ArrayAccessDelegate
-            Env _env = Env.getCurrent();
-            Value v = this.getObject(_env).getArray().get(name);
-            if( v != null && v != NullValue.NULL && v != UnsetValue.UNSET)
-                return true;
-            return false;
-        }
-    }
-
-    return returnValue.toBoolean();
-
+    return entry != null;
   }
 
   @Override
   public String toString()
   {
-    if (Alarm.isTest())
+    if (CurrentTime.isTest())
       return getClass().getSimpleName() +  "[" + _className + "]";
     else
       return getClass().getSimpleName()
@@ -1530,102 +1403,28 @@ public class ObjectExtValue extends ObjectValue
     @Override
     public Iterator<Map.Entry<Value,Value>> iterator()
     {
-      return new KeyValueIterator(ObjectExtValue.this._entries);
-    }
-  }
-
-  public static class EntryIterator
-    implements Iterator<Entry>
-  {
-    private final Entry []_list;
-    private int _index;
-    private Entry _entry;
-
-    EntryIterator(Entry []list)
-    {
-      _list = list;
-    }
-
-    public boolean hasNext()
-    {
-      if (_entry != null)
-        return true;
-
-      for (; _index < _list.length && _list[_index] == null; _index++) {
-      }
-
-      return _index < _list.length;
-    }
-
-    public Entry next()
-    {
-      if (_entry != null) {
-        Entry entry = _entry;
-        _entry = entry._next;
-
-        return entry;
-      }
-
-      for (; _index < _list.length && _list[_index] == null; _index++) {
-      }
-
-      if (_list.length <= _index)
-        return null;
-
-      Entry entry = _list[_index++];
-      _entry = entry._next;
-
-      return entry;
-    }
-
-    public void remove()
-    {
-      throw new UnsupportedOperationException();
+      return new KeyValueIterator(_fieldMap.values().iterator());
     }
   }
 
   public static class KeyValueIterator
     implements Iterator<Map.Entry<Value,Value>>
   {
-    private final Entry []_list;
-    private int _index;
-    private Entry _entry;
+    private final Iterator<Entry> _iter;
 
-    KeyValueIterator(Entry []list)
+    KeyValueIterator(Iterator<Entry> iter)
     {
-      _list = list;
+      _iter = iter;
     }
 
     public boolean hasNext()
     {
-      if (_entry != null)
-        return true;
-
-      for (; _index < _list.length && _list[_index] == null; _index++) {
-      }
-
-      return _index < _list.length;
+      return _iter.hasNext();
     }
 
     public Map.Entry<Value,Value> next()
     {
-      if (_entry != null) {
-        Entry entry = _entry;
-        _entry = entry._next;
-
-        return entry;
-      }
-
-      for (; _index < _list.length && _list[_index] == null; _index++) {
-      }
-
-      if (_list.length <= _index)
-        return null;
-
-      Entry entry = _list[_index++];
-      _entry = entry._next;
-
-      return entry;
+      return _iter.next();
     }
 
     public void remove()
@@ -1637,45 +1436,21 @@ public class ObjectExtValue extends ObjectValue
   public static class ValueIterator
     implements Iterator<Value>
   {
-    private final Entry []_list;
-    private int _index;
-    private Entry _entry;
+    private final Iterator<Entry> _iter;
 
-    ValueIterator(Entry []list)
+    ValueIterator(Iterator<Entry> iter)
     {
-      _list = list;
+      _iter = iter;
     }
 
     public boolean hasNext()
     {
-      if (_entry != null)
-        return true;
-
-      for (; _index < _list.length && _list[_index] == null; _index++) {
-      }
-
-      return _index < _list.length;
+      return _iter.hasNext();
     }
 
     public Value next()
     {
-      if (_entry != null) {
-        Entry entry = _entry;
-        _entry = entry._next;
-
-        return entry._value;
-      }
-
-      for (; _index < _list.length && _list[_index] == null; _index++) {
-      }
-
-      if (_list.length <= _index)
-        return null;
-
-      Entry entry = _list[_index++];
-      _entry = entry._next;
-
-      return entry._value;
+      return _iter.next().getValue();
     }
 
     public void remove()
@@ -1687,45 +1462,21 @@ public class ObjectExtValue extends ObjectValue
   public static class KeyIterator
     implements Iterator<Value>
   {
-    private final Entry []_list;
-    private int _index;
-    private Entry _entry;
+    private final Iterator<StringValue> _iter;
 
-    KeyIterator(Entry []list)
+    KeyIterator(Iterator<StringValue> iter)
     {
-      _list = list;
+      _iter = iter;
     }
 
     public boolean hasNext()
     {
-      if (_entry != null)
-        return true;
-
-      for (; _index < _list.length && _list[_index] == null; _index++) {
-      }
-
-      return _index < _list.length;
+      return _iter.hasNext();
     }
 
     public Value next()
     {
-      if (_entry != null) {
-        Entry entry = _entry;
-        _entry = entry._next;
-
-        return entry._key;
-      }
-
-      for (; _index < _list.length && _list[_index] == null; _index++) {
-      }
-
-      if (_list.length <= _index)
-        return null;
-
-      Entry entry = _list[_index++];
-      _entry = entry._next;
-
-      return entry._key;
+      return _iter.next();
     }
 
     public void remove()
@@ -1739,44 +1490,25 @@ public class ObjectExtValue extends ObjectValue
                Comparable<Map.Entry<Value, Value>>
   {
     private final StringValue _key;
-    private final FieldVisibility _visibility;
-    private Value _value;
 
-    private Entry _prev;
-    private Entry _next;
+    private Value _value;
 
     public Entry(StringValue key)
     {
       _key = key;
-      _visibility = FieldVisibility.PUBLIC;
-      _value = NullValue.NULL;
-    }
-
-    public Entry(StringValue key, FieldVisibility visibility)
-    {
-      _key = key;
-      _visibility = visibility;
-      _value = NullValue.NULL;
+      _value = UnsetValue.UNSET;
     }
 
     public Entry(StringValue key, Value value)
     {
       _key = key;
-      _visibility = FieldVisibility.PUBLIC;
-      _value = value;
-    }
-
-    public Entry(StringValue key, Value value, FieldVisibility visibility)
-    {
-      _key = key;
-      _visibility = visibility;
       _value = value;
     }
 
     public Entry(Env env, IdentityHashMap<Value,Value> map, Entry entry)
     {
       _key = entry._key;
-      _visibility = entry._visibility;
+
       _value = entry._value.copy(env, map);
     }
 
@@ -1794,25 +1526,20 @@ public class ObjectExtValue extends ObjectValue
     {
       return _key;
     }
-    
-    public Entry getNext()
+
+    public boolean isPublic()
     {
-      return _next;
-    }
-    
-    public void setNext(Entry next)
-    {
-      _next = next;
+      return ! isPrivate() && ! isProtected();
     }
 
-    public FieldVisibility getVisibility()
+    public boolean isProtected()
     {
-      return _visibility;
+      return ClassField.isProtected(_key);
     }
 
-    public final boolean isPrivate()
+    public boolean isPrivate()
     {
-      return _visibility == FieldVisibility.PRIVATE;
+      return ClassField.isPrivate(_key);
     }
 
     public Value toValue()
@@ -1906,10 +1633,11 @@ public class ObjectExtValue extends ObjectValue
     {
       Value copy = root.getCopy(_value);
 
-      if (copy == null)
+      if (copy == null) {
         copy = _value.copyTree(env, root);
+      }
 
-      return new Entry(_key, copy, _visibility);
+      return new Entry(_key, copy);
     }
 
     public int compareTo(Map.Entry<Value, Value> other)
@@ -1935,15 +1663,18 @@ public class ObjectExtValue extends ObjectValue
                             IdentityHashMap<Value, String> valueSet)
       throws IOException
     {
+      StringValue name = ClassField.getOrdinaryName(getKey());
       String suffix = "";
 
-      if (_visibility == FieldVisibility.PROTECTED)
+      if (isProtected()) {
         suffix = ":protected";
-      else if (_visibility == FieldVisibility.PRIVATE)
+      }
+      else if (isPrivate()) {
         suffix = ":private";
+      }
 
       printDepth(out, 2 * depth);
-      out.println("[\"" + getKey() + suffix + "\"]=>");
+      out.println("[\"" + name + suffix + "\"]=>");
 
       printDepth(out, 2 * depth);
 
@@ -1958,15 +1689,18 @@ public class ObjectExtValue extends ObjectValue
                               IdentityHashMap<Value, String> valueSet)
       throws IOException
     {
+      StringValue name = ClassField.getOrdinaryName(getKey());
       String suffix = "";
 
-      if (_visibility == FieldVisibility.PROTECTED)
+      if (isProtected()) {
         suffix = ":protected";
-      else if (_visibility == FieldVisibility.PRIVATE)
+      }
+      else if (isPrivate()) {
         suffix = ":private";
+      }
 
       printDepth(out, 4 * depth);
-      out.print("[" + getKey() + suffix + "] => ");
+      out.print("[" + name + suffix + "] => ");
 
       _value.printR(env, out, depth + 1, valueSet);
 

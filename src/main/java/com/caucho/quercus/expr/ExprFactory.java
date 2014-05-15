@@ -29,18 +29,51 @@
 
 package com.caucho.quercus.expr;
 
-import com.caucho.quercus.Location;
-import com.caucho.quercus.QuercusContext;
-import com.caucho.quercus.env.*;
-import com.caucho.quercus.parser.QuercusParser;
-import com.caucho.quercus.program.*;
-import com.caucho.quercus.statement.*;
-import com.caucho.util.L10N;
-import com.caucho.vfs.Path;
-
 import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import com.caucho.quercus.Location;
+import com.caucho.quercus.QuercusContext;
+import com.caucho.quercus.env.BinaryValue;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.UnicodeValue;
+import com.caucho.quercus.env.Value;
+import com.caucho.quercus.parser.QuercusParser;
+import com.caucho.quercus.program.Arg;
+import com.caucho.quercus.program.ClassDef;
+import com.caucho.quercus.program.Function;
+import com.caucho.quercus.program.FunctionInfo;
+import com.caucho.quercus.program.InterpretedClassDef;
+import com.caucho.quercus.program.MethodDeclaration;
+import com.caucho.quercus.program.ObjectMethod;
+import com.caucho.quercus.statement.BlockStatement;
+import com.caucho.quercus.statement.BreakStatement;
+import com.caucho.quercus.statement.ClassDefStatement;
+import com.caucho.quercus.statement.ClassStaticStatement;
+import com.caucho.quercus.statement.ClosureStaticStatement;
+import com.caucho.quercus.statement.ContinueStatement;
+import com.caucho.quercus.statement.DoStatement;
+import com.caucho.quercus.statement.EchoStatement;
+import com.caucho.quercus.statement.ExprStatement;
+import com.caucho.quercus.statement.ForStatement;
+import com.caucho.quercus.statement.ForeachStatement;
+import com.caucho.quercus.statement.FunctionDefStatement;
+import com.caucho.quercus.statement.GlobalStatement;
+import com.caucho.quercus.statement.IfStatement;
+import com.caucho.quercus.statement.NullStatement;
+import com.caucho.quercus.statement.ReturnRefStatement;
+import com.caucho.quercus.statement.ReturnStatement;
+import com.caucho.quercus.statement.Statement;
+import com.caucho.quercus.statement.StaticStatement;
+import com.caucho.quercus.statement.SwitchStatement;
+import com.caucho.quercus.statement.TextStatement;
+import com.caucho.quercus.statement.ThrowStatement;
+import com.caucho.quercus.statement.TryStatement;
+import com.caucho.quercus.statement.VarGlobalStatement;
+import com.caucho.quercus.statement.WhileStatement;
+import com.caucho.util.L10N;
+import com.caucho.vfs.Path;
 
 /**
  * Factory for creating PHP expressions and statements
@@ -62,7 +95,7 @@ public class ExprFactory {
       return new ExprFactory();
 
     try {
-      Class cl = Class.forName("com.caucho.quercus.expr.ExprFactoryPro");
+      Class<?> cl = Class.forName("com.caucho.quercus.expr.ExprFactoryPro");
 
       return (ExprFactory) cl.newInstance();
     } catch (Exception e) {
@@ -85,7 +118,7 @@ public class ExprFactory {
   /**
    * Creates a string (php5) literal expression.
    */
-  public Expr createString(String lexeme)
+  public Expr createString(StringValue lexeme)
   {
     return new LiteralStringExpr(lexeme);
   }
@@ -93,7 +126,7 @@ public class ExprFactory {
   /**
    * Creates a string literal expression.
    */
-  public Expr createUnicode(String lexeme)
+  public Expr createUnicode(UnicodeValue lexeme)
   {
     return new LiteralUnicodeExpr(lexeme);
   }
@@ -101,9 +134,9 @@ public class ExprFactory {
   /**
    * Creates a binary literal expression.
    */
-  public Expr createBinary(byte []bytes)
+  public Expr createBinary(BinaryValue value)
   {
-    return new LiteralBinaryStringExpr(bytes);
+    return new LiteralBinaryStringExpr(value);
   }
 
   /**
@@ -156,6 +189,14 @@ public class ExprFactory {
   public ConstDirExpr createDirExpr(String dirName)
   {
     return new ConstDirExpr(dirName);
+  }
+
+  /**
+   * Creates a __CLASS__ expression (for traits).
+   */
+  public ConstClassExpr createClassExpr(Location location, StringValue funName)
+  {
+    return new ConstClassExpr(location, funName);
   }
 
   /**
@@ -219,7 +260,7 @@ public class ExprFactory {
   {
     return new ObjectFieldVarExpr(base, name);
   }
-  
+
   //
   // $this expressions
   //
@@ -235,18 +276,21 @@ public class ExprFactory {
   /**
    * Creates a "$this->foo" expression.
    */
-  public ThisFieldExpr createThisField(ThisExpr qThis, 
+  public ThisFieldExpr createThisField(Location location,
+                                       ThisExpr qThis,
                                        StringValue name)
   {
-    return new ThisFieldExpr(qThis, name);
+    return new ThisFieldExpr(location, qThis, name);
   }
 
   /**
    * Creates a "$this->$foo" expression.
    */
-  public ThisFieldVarExpr createThisField(ThisExpr qThis, Expr name)
+  public ThisFieldVarExpr createThisField(Location location,
+                                          ThisExpr qThis,
+                                          Expr name)
   {
-    return new ThisFieldVarExpr(qThis, name);
+    return new ThisFieldVarExpr(location, qThis, name);
   }
 
   /**
@@ -254,7 +298,7 @@ public class ExprFactory {
    */
   public Expr createThisMethod(Location loc,
                                ThisExpr qThis,
-                               String methodName,
+                               StringValue methodName,
                                ArrayList<Expr> args)
   {
     return new ThisMethodExpr(loc, qThis, methodName, args);
@@ -278,25 +322,58 @@ public class ExprFactory {
   /**
    * Creates a class const expression.
    */
-  public ClassConstExpr createClassConst(String className, String name)
+  public ClassConstExpr createClassConst(String className, StringValue name)
   {
     return new ClassConstExpr(className, name);
   }
 
   /**
+   * Creates a parent const expression.
+   */
+  public TraitParentClassConstExpr createTraitParentClassConst(String traitName,
+                                                               StringValue name)
+  {
+    return new TraitParentClassConstExpr(traitName, name);
+  }
+
+  /**
+   * Creates a class const expression.
+   */
+  public ClassVarNameConstExpr createClassConst(String className, Expr name)
+  {
+    return new ClassVarNameConstExpr(className, name);
+  }
+
+  /**
    * Creates an expression class const expression ($class::FOO).
    */
-  public Expr createClassConst(Expr className, String name)
+  public Expr createClassConst(Expr className, StringValue name)
   {
     return new ClassVarConstExpr(className, name);
   }
 
   /**
+   * Creates an expression class const expression ($class::{$foo}).
+   */
+  public Expr createClassConst(Expr className, Expr name)
+  {
+    return new ClassVarVarConstExpr(className, name);
+  }
+
+  /**
    * Creates a class const expression (static::FOO).
    */
-  public ClassVirtualConstExpr createClassVirtualConst(String name)
+  public ClassVirtualConstExpr createClassVirtualConst(StringValue name)
   {
     return new ClassVirtualConstExpr(name);
+  }
+
+  /**
+   * Creates a class const expression (static::{$foo}).
+   */
+  public ClassVarNameVirtualConstExpr createClassVirtualConst(Expr name)
+  {
+    return new ClassVarNameVirtualConstExpr(name);
   }
 
   //
@@ -307,7 +384,7 @@ public class ExprFactory {
    * Creates an class static field 'a::$b' expression.
    */
   public Expr createClassField(String className,
-                               String name)
+                               StringValue name)
   {
     return new ClassFieldExpr(className, name);
   }
@@ -316,7 +393,7 @@ public class ExprFactory {
    * Creates an class static field '$a::$b' expression.
    */
   public Expr createClassField(Expr className,
-                               String name)
+                               StringValue name)
   {
     return new ClassVarFieldExpr(className, name);
   }
@@ -324,7 +401,7 @@ public class ExprFactory {
   /**
    * Creates a class static field 'static::$b' expression.
    */
-  public Expr createClassVirtualField(String name)
+  public Expr createClassVirtualField(StringValue name)
   {
     return new ClassVirtualFieldExpr(name);
   }
@@ -528,6 +605,14 @@ public class ExprFactory {
   }
 
   /**
+   * Creates an empty() expression.
+   */
+  public Expr createEmpty(Location location, Expr expr)
+  {
+    return new FunEmptyExpr(location, expr);
+  }
+
+  /**
    * Creates a required
    */
   public Expr createRequired()
@@ -693,16 +778,14 @@ public class ExprFactory {
       LiteralBinaryStringExpr rightString
         = (LiteralBinaryStringExpr) tail.getValue();
 
-      try {
-        byte []bytes = (leftString.evalConstant().toString()
-            + rightString.evalConstant().toString()).getBytes("ISO-8859-1");
+      StringValue l = (StringValue) leftString.evalConstant();
+      StringValue r = (StringValue) rightString.evalConstant();
 
-        Expr value = createBinary(bytes);
+      StringValue result = l.createStringBuilder().append(l).append(r);
 
-        return createAppendImpl(value, tail.getNext());
-      } catch (java.io.UnsupportedEncodingException e) {
-        throw new RuntimeException(e);
-      }
+      Expr value = createBinary((BinaryValue) result);
+
+      return createAppendImpl(value, tail.getNext());
     }
     else if (left.getValue() instanceof LiteralBinaryStringExpr
              || tail.getValue() instanceof LiteralBinaryStringExpr) {
@@ -715,8 +798,12 @@ public class ExprFactory {
       LiteralStringExpr leftString = (LiteralStringExpr) left.getValue();
       LiteralStringExpr rightString = (LiteralStringExpr) tail.getValue();
 
-      Expr value = createString(leftString.evalConstant().toString()
-                                + rightString.evalConstant().toString());
+      StringValue l = (StringValue) leftString.evalConstant();
+      StringValue r = (StringValue) rightString.evalConstant();
+
+      StringValue sb = l.createStringBuilder().append(l).append(r);
+
+      Expr value = createString(sb);
 
       return createAppendImpl(value, tail.getNext());
     }
@@ -725,8 +812,12 @@ public class ExprFactory {
       LiteralUnicodeExpr leftString = (LiteralUnicodeExpr) left.getValue();
       LiteralUnicodeExpr rightString = (LiteralUnicodeExpr) tail.getValue();
 
-      Expr value = createUnicode(leftString.evalConstant().toString()
-                                 + rightString.evalConstant().toString());
+      UnicodeValue l = (UnicodeValue) leftString.evalConstant();
+      UnicodeValue r = (UnicodeValue) rightString.evalConstant();
+
+      UnicodeValue sb = (UnicodeValue) l.createStringBuilder().append(l).append(r);
+
+      Expr value = createUnicode(sb);
 
       return createAppendImpl(value, tail.getNext());
     }
@@ -960,20 +1051,26 @@ public class ExprFactory {
    * Creates a new function call.
    */
   public Expr createCall(QuercusParser parser,
-                         String name,
+                         StringValue name,
                          ArrayList<Expr> args)
   {
     Location loc = parser.getLocation();
-    
-    if ("isset".equals(name) && args.size() == 1)
+
+    StringValue systemName = parser.getSystemFunctionName(name);
+
+    if (systemName != null) {
+      name = systemName;
+    }
+
+    if (name.equalsString("isset") && args.size() == 1)
       return new FunIssetExpr(args.get(0));
-    else if ("get_called_class".equals(name) && args.size() == 0)
+    else if (name.equalsString("get_called_class") && args.size() == 0)
       return new FunGetCalledClassExpr(loc);
-    else if ("get_class".equals(name) && args.size() == 0)
+    else if (name.equalsString("get_class") && args.size() == 0)
       return new FunGetClassExpr(parser);
-    else if ("each".equals(name) && args.size() == 1) {
+    else if (name.equalsString("each") && args.size() == 1) {
       Expr arg = args.get(0);
-      
+
       if (! arg.isVar()) {
         parser.error(L.l("each() argument must be a variable at '{0}'", arg));
       }
@@ -999,9 +1096,10 @@ public class ExprFactory {
    */
   public ClosureExpr createClosure(Location loc,
                                    Function fun,
-                                   ArrayList<VarExpr> useArgs)
+                                   ArrayList<VarExpr> useArgs,
+                                   boolean isInClassScope)
   {
-    return new ClosureExpr(loc, fun);
+    return new ClosureExpr(loc, fun, useArgs, isInClassScope);
   }
 
   //
@@ -1013,7 +1111,7 @@ public class ExprFactory {
    */
   public Expr createMethodCall(Location loc,
                                Expr objExpr,
-                               String methodName,
+                               StringValue methodName,
                                ArrayList<Expr> args)
   {
     return new ObjectMethodExpr(loc, objExpr, methodName, args);
@@ -1035,10 +1133,26 @@ public class ExprFactory {
    */
   public Expr createClassMethodCall(Location loc,
                                     String className,
-                                    String methodName,
+                                    StringValue methodName,
                                     ArrayList<Expr> args)
   {
-    return new ClassMethodExpr(loc, className, methodName, args);
+    if ("__construct".equals(methodName.toString())) {
+      return new ClassConstructExpr(loc, className, args);
+    }
+    else {
+      return new ClassMethodExpr(loc, className, methodName, args);
+    }
+  }
+
+  /**
+   * Creates a parent class method call parent::foo(...)
+   */
+  public Expr createTraitParentClassMethodCall(Location loc,
+                                               String traitName,
+                                               StringValue methodName,
+                                               ArrayList<Expr> args)
+  {
+    return new TraitParentClassMethodExpr(loc, traitName, methodName, args);
   }
 
   /**
@@ -1046,7 +1160,7 @@ public class ExprFactory {
    */
   public Expr createClassMethodCall(Location loc,
                                     Expr className,
-                                    String methodName,
+                                    StringValue methodName,
                                     ArrayList<Expr> args)
   {
     return new ClassVarMethodExpr(loc, className, methodName, args);
@@ -1056,7 +1170,7 @@ public class ExprFactory {
    * Creates a new function call based on the class context.
    */
   public Expr createClassVirtualMethodCall(Location loc,
-                                           String methodName,
+                                           StringValue methodName,
                                            ArrayList<Expr> args)
   {
     return new ClassVirtualMethodExpr(loc, methodName, args);
@@ -1099,7 +1213,7 @@ public class ExprFactory {
    */
   public Expr createClassConstructor(Location loc,
                                      String className,
-                                     String methodName,
+                                     StringValue methodName,
                                      ArrayList<Expr> args)
   {
     return new ClassConstructorExpr(loc, className, methodName, args);
@@ -1149,8 +1263,8 @@ public class ExprFactory {
    * Creates a new function call new foo(...).
    */
   public ObjectNewExpr createNew(Location loc,
-                           String name,
-                           ArrayList<Expr> args)
+                                 String name,
+                                 ArrayList<Expr> args)
   {
     return new ObjectNewExpr(loc, name, args);
   }
@@ -1163,6 +1277,15 @@ public class ExprFactory {
                                  ArrayList<Expr> args)
   {
     return new ObjectNewVarExpr(loc, name, args);
+  }
+
+  /**
+   * Creates a new function call new static(...).
+   */
+  public ObjectNewStaticExpr createNewStatic(Location loc,
+                                             ArrayList<Expr> args)
+  {
+    return new ObjectNewStaticExpr(loc, args);
   }
 
   /**
@@ -1293,7 +1416,7 @@ public class ExprFactory {
   /**
    * Creates a text statement
    */
-  public Statement createText(Location loc, String text)
+  public Statement createText(Location loc, StringValue text)
   {
     return new TextStatement(loc, text);
   }
@@ -1412,24 +1535,35 @@ public class ExprFactory {
   }
 
   /**
-   * Creates a static statement inside a class
+   * Creates a static statement
    */
   public Statement createClassStatic(Location loc,
-                                     String className,
+                                     StringValue staticName,
                                      VarExpr var,
                                      Expr value)
   {
-    return new ClassStaticStatement(loc, className, var, value);
+    return new ClassStaticStatement(loc, staticName, var, value);
   }
 
   /**
    * Creates a static statement
    */
   public Statement createStatic(Location loc,
+                                StringValue uniqueStaticName,
                                 VarExpr var,
                                 Expr value)
   {
-    return new StaticStatement(loc, var, value);
+    return new StaticStatement(loc, uniqueStaticName, var, value);
+  }
+
+  /**
+   * Creates a static statement that is within a closure scope
+   */
+  public Statement createClosureStatic(Location loc,
+                                       VarExpr var,
+                                       Expr value)
+  {
+    return new ClosureStaticStatement(loc, var, value);
   }
 
   /**
@@ -1493,7 +1627,7 @@ public class ExprFactory {
   /**
    * Creates a new FunctionInfo
    */
-  public FunctionInfo createFunctionInfo(QuercusContext quercus, 
+  public FunctionInfo createFunctionInfo(QuercusContext quercus,
                                          ClassDef classDef,
                                          String name)
   {
@@ -1540,7 +1674,7 @@ public class ExprFactory {
   public InterpretedClassDef createClassDef(Location location,
                                             String name,
                                             String parentName,
-                                            String[] ifaceList,
+                                            String []ifaceList,
                                             int index)
   {
     return new InterpretedClassDef(location,

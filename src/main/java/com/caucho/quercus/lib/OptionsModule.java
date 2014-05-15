@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,9 +29,10 @@
 
 package com.caucho.quercus.lib;
 
+import com.caucho.quercus.Location;
 import com.caucho.quercus.QuercusContext;
-import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.ReadOnly;
 import com.caucho.quercus.annotation.UsesSymbolTable;
 import com.caucho.quercus.annotation.Name;
 import com.caucho.quercus.env.*;
@@ -40,10 +41,12 @@ import com.caucho.quercus.module.AbstractQuercusModule;
 import com.caucho.quercus.module.IniDefinition;
 import com.caucho.quercus.module.IniDefinitions;
 import com.caucho.quercus.program.QuercusProgram;
+import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Locale;
@@ -105,27 +108,101 @@ public class OptionsModule extends AbstractQuercusModule {
    */
   @UsesSymbolTable(replace = false)
   @Name("assert")
-  public static Value q_assert(Env env, String code)
+  public static Value q_assert(Env env,
+                               @ReadOnly Value value,
+                               @Optional Value message)
   {
-    try {
-      QuercusContext quercus = env.getQuercus();
+    if (! isAssertActive(env)) {
+      return BooleanValue.TRUE;
+    }
 
-      QuercusProgram program = quercus.parseCode(code);
+    boolean result;
 
-      program = program.createExprReturn();
+    if (value.isString()) {
+      long errorReporting = 0;
 
-      Value value = program.execute(env);
-
-      if (value == null || ! value.toBoolean()) {
-        env.warning(L.l("Assertion \"{0}\" failed", code));
-        return NullValue.NULL;
+      if (isAssertQuietEval(env)) {
+        errorReporting = ErrorModule.error_reporting(env, LongValue.ZERO);
       }
 
-      return BooleanValue.TRUE;
+      try {
+        QuercusContext quercus = env.getQuercus();
+        QuercusProgram program = quercus.parseCode(value.toStringValue(env));
 
-    } catch (IOException e) {
-      throw new QuercusModuleException(e);
+        program = program.createExprReturn();
+        Value v = program.execute(env);
+
+        result = v != null && v.toBoolean();
+      }
+      catch (IOException e) {
+        env.warning(e);
+
+        result = false;
+      }
+      finally {
+        if (isAssertQuietEval(env)) {
+          ErrorModule.error_reporting(env, LongValue.create(errorReporting));
+        }
+      }
     }
+    else {
+      result = value.toBoolean();
+    }
+
+    if (result) {
+      return BooleanValue.TRUE;
+    }
+    else {
+      if (message.isDefault()) {
+        message = value.toStringValue(env);
+      }
+
+      Value callback = getAssertCallback(env);
+
+      if (! callback.isNull()) {
+        Location location = env.getLocation();
+
+        StringValue fileName = env.createString(location.getFileName());
+        LongValue lineNumber = LongValue.create(location.getLineNumber());
+
+        callback.call(env, fileName, lineNumber, message);
+      }
+
+      if (isAssertWarn(env)) {
+        env.warning(L.l("Assertion '{0}' failed", message));
+      }
+
+      if (isAssertBail(env)) {
+        env.die();
+      }
+
+      return NullValue.NULL;
+    }
+  }
+
+  private static boolean isAssertActive(Env env)
+  {
+    return INI_ASSERT_ACTIVE.getAsBoolean(env);
+  }
+
+  private static boolean isAssertWarn(Env env)
+  {
+    return INI_ASSERT_WARNING.getAsBoolean(env);
+  }
+
+  private static boolean isAssertBail(Env env)
+  {
+    return INI_ASSERT_BAIL.getAsBoolean(env);
+  }
+
+  private static boolean isAssertQuietEval(Env env)
+  {
+    return INI_ASSERT_QUIET_EVAL.getAsBoolean(env);
+  }
+
+  private static Value getAssertCallback(Env env)
+  {
+    return INI_ASSERT_CALLBACK.getValue(env);
   }
 
   /**
@@ -298,7 +375,9 @@ public class OptionsModule extends AbstractQuercusModule {
    */
   public static Value getlastmod(Env env)
   {
-    return FileModule.filemtime(env, env.getSelfPath());
+    String path = env.getSelfPath().getNativePath();
+
+    return FileModule.filemtime(env, env.createString(path));
   }
 
   /**
@@ -322,7 +401,9 @@ public class OptionsModule extends AbstractQuercusModule {
    */
   public static Value getmyuid(Env env)
   {
-    return FileModule.fileowner(env, env.getSelfPath());
+    String str = env.getSelfPath().getFullPath();
+
+    return FileModule.fileowner(env, env.createString(str));
   }
 
   /**
@@ -402,13 +483,17 @@ public class OptionsModule extends AbstractQuercusModule {
    * @param extension assumes ini values are prefixed by extension names.
    */
   public static Value ini_get_all(Env env,
-                                  @Optional() String extension)
+                                  @Optional String extension)
   {
-    if (extension.length() > 0) {
+    if (extension == null) {
+      extension = "";
+    }
+    else if (extension.length() > 0) {
       if (! env.isExtensionLoaded(extension)) {
         env.warning(L.l("extension '" + extension + "' not loaded."));
         return BooleanValue.FALSE;
       }
+
       extension += ".";
     }
 
@@ -505,12 +590,36 @@ public class OptionsModule extends AbstractQuercusModule {
   // XXX: php_logo_guid
   // XXX: phpcredits
 
+  public static Value php_ini_loaded_file(Env env)
+  {
+    Path path = env.getQuercus().getIniFile();
+
+    if (path != null) {
+      return env.createString(path.toString());
+    }
+    else {
+      return BooleanValue.FALSE;
+    }
+  }
+
+  public static Value php_ini_scanned_files(Env env)
+  {
+    return BooleanValue.FALSE;
+  }
+
   /**
    * Returns the sapi type.
    */
   public static String php_sapi_name(Env env)
   {
-    return env.getQuercus().getSapiName();
+    String name = env.getIniString("quercus.sapi_name");
+
+    if (name != null && name.length() > 0) {
+      return name;
+    }
+    else {
+      return env.getQuercus().getSapiName();
+    }
   }
 
   /**
@@ -557,32 +666,18 @@ public class OptionsModule extends AbstractQuercusModule {
     }
   }
 
-  public static void phpinfo(Env env, @Optional("-1") int what)
+  public static void phpinfo(Env env, @Optional("INFO_ALL") int what)
   {
-    if (hasRequest(env)){
-        env.println("<!DOCTYPE html>\n<html><head><title>Quercus - PHP in Java</title>");
-        env.println("<style type=\"text/css\">");
+    if (hasRequest(env)) {
+      String quercusName = env.getQuercus().getName();
+      String css = getPhpinfoCss();
 
-        env.println("body {background-color: #ffffff; color: #000000; text-align: center;}\n" +
-                "body, th, h1, h2 {font-family: sans-serif;}\n" +
-                "pre {margin: 0px; font-family: monospace;}\n" +
-                "a:link {color: #4C2004; text-decoration: none; background-color: #ffffff;}\n" +
-                "a:hover {color: #FFCC33; text-decoration: underline;}\n" +
-                "table {border-collapse: collapse; width: 600px;}\n" +
-                ".center {text-align: center;}\n" +
-                "table.center { margin-left: auto; margin-right: auto; text-align: left;}\n" +
-                "th .center { text-align: center !important; }\n" +
-                "td, th { line-height: 110%; border-bottom: 1px solid #ccc; vertical-align: baseline; padding-bottom: 0.1em; padding-top: 0.6em; }\n" +
-                "h1, h2 { color: #990033; font-family: Helvetica,Arial,sans-serif; width: 600px; margin-left: auto; margin-right: auto;} \n" +
-                "h1 {font-size: 150%; border-bottom: 1px solid #FAB41D; }\n" +
-                "h2 {font-size: 125%;}\n" +
-                "img {float: right; border: 0px;}\n" +
-                "hr {" +
-                "    background: none repeat scroll 0 0 #FAB41D; border: 0 none; height: 1px; margin: 0.2em 0;" +
-                "width: 600px; }");
-        env.println("</style>");
-        env.println("</head><body>");
-
+      env.println("<!DOCTYPE html>\n<html><head><title>" + quercusName + "</title>");
+      env.println("<style type=\"text/css\">");
+      env.println(css);
+      env.println();
+      env.println("</style>");
+      env.println("</head><body>");
     }
 
     if ((what & INFO_GENERAL) != 0)
@@ -594,15 +689,51 @@ public class OptionsModule extends AbstractQuercusModule {
       env.println("</body></html>");
   }
 
+  private static String getPhpinfoCss()
+  {
+    ClassLoader loader = Thread.currentThread().getContextClassLoader();
+
+    InputStream is = loader.getResourceAsStream("phpinfo/style.css");
+
+    try {
+      if (is != null) {
+        StringBuilder sb = new StringBuilder();
+
+        int ch;
+        while ((ch = is.read()) >= 0) {
+          sb.append((char) ch);
+        }
+
+        return sb.toString();
+      }
+    }
+    catch (IOException e) {
+      IoUtil.close(is);
+    }
+
+    return "body {background-color: #ffffff; color: #000000; text-align: center;}\n" +
+           "body, th, h1, h2 {font-family: sans-serif;}\n" +
+           "pre {margin: 0px; font-family: monospace;}\n" +
+           "a:link {color: #4C2004; text-decoration: none; background-color: #ffffff;}\n" +
+           "a:hover {color: #FFCC33; text-decoration: underline;}\n" +
+           "table {border-collapse: collapse; width: 600px;}\n" +
+           ".center {text-align: center;}\n" +
+           "table.center { margin-left: auto; margin-right: auto; text-align: left;}\n" +
+           "th .center { text-align: center !important; }\n" +
+           "td, th { line-height: 110%; border-bottom: 1px solid #ccc; vertical-align: baseline; padding-bottom: 0.1em; padding-top: 0.6em; }\n" +
+           "h1, h2 { color: #990033; font-family: Helvetica,Arial,sans-serif; width: 600px; margin-left: auto; margin-right: auto;} \n" +
+           "h1 {font-size: 150%; border-bottom: 1px solid #FAB41D; }\n" +
+           "h2 {font-size: 125%;}\n" +
+           "img {float: right; border: 0px;}\n" +
+           "hr {" +
+           "    background: none repeat scroll 0 0 #FAB41D; border: 0 none; height: 1px; margin: 0.2em 0;" +
+           "width: 600px; }";
+  }
+
   private static void phpinfoGeneral(Env env)
   {
-    String quercusName;
-    
-    if (env.getQuercus().isPro())
-      quercusName = "Quercus Pro";
-    else
-      quercusName = "Quercus";
-    
+    String quercusName = env.getQuercus().getName();
+
     if (hasRequest(env))
       env.println("<h1>" + quercusName + "</h1>");
     else
@@ -717,9 +848,9 @@ public class OptionsModule extends AbstractQuercusModule {
   /**
    * Returns the quercus version.
    */
-  public static StringValue phpversion(Env env, @Optional StringValue module)
+  public static String phpversion(Env env, @Optional StringValue module)
   {
-    return env.getQuercus().getPhpVersionValue();
+    return env.getQuercus().getPhpVersion();
   }
 
   /**
@@ -830,7 +961,7 @@ public class OptionsModule extends AbstractQuercusModule {
   {
     return "2.0.4";
   }
-  
+
   /**
    * JVM takes care of circular reference collection.
    */
@@ -838,11 +969,11 @@ public class OptionsModule extends AbstractQuercusModule {
   {
     return true;
   }
-  
+
   public static void gc_enable()
   {
   }
-  
+
   public static void gc_disable()
   {
   }
@@ -921,7 +1052,7 @@ public class OptionsModule extends AbstractQuercusModule {
     else if (value.isObject()) {
       ObjectValue obj = (ObjectValue)value.toObject(env);
 
-      ObjectValue result = new ObjectExtValue(obj.getQuercusClass());
+      ObjectValue result = new ObjectExtValue(env, obj.getQuercusClass());
 
       for (Map.Entry<Value,Value> entry : obj.entrySet()) {
         Value key = escape(env, entry.getKey());
@@ -936,7 +1067,8 @@ public class OptionsModule extends AbstractQuercusModule {
       return HtmlModule.htmlspecialchars(env,
                                          value.toStringValue(),
                                          HtmlModule.ENT_COMPAT,
-                                         null);
+                                         null,
+                                         true);
     }
   }
 
@@ -1024,6 +1156,9 @@ public class OptionsModule extends AbstractQuercusModule {
     = _iniDefinitions.add("allow_webdav_methods", false, PHP_INI_ALL);
   static final IniDefinition INI_MEMORY_LIMIT
     = _iniDefinitions.add("memory_limit", "512M", PHP_INI_ALL);
+
+  static final IniDefinition INI_SHORT_OPEN_TAG
+    = _iniDefinitions.add("short_open_tag", true, PHP_INI_ALL);
 
   // unsupported
   static final IniDefinition MAGIC_QUOTES_RUNTIME
