@@ -6,7 +6,7 @@
   <groupId>com.caucho</groupId>
   <artifactId>quercus</artifactId>
   <packaging>jar</packaging>
-  <version>4.0.25</version>
+  <version>4.0.39</version>
   <name>Quercus</name>
   <url>http://maven.apache.org</url>
   <dependencies>
@@ -34,7 +34,7 @@
 	<dependency>
 		<groupId>javax.cache</groupId>
 		<artifactId>cache-api</artifactId>
-		<version>0.5</version>
+		<version>0.61</version>
 	</dependency>
 	<dependency>
 		<groupId>javax.enterprise</groupId>
@@ -46,6 +46,11 @@
 		<artifactId>javax.faces</artifactId>
 		<version>2.1.14</version>
 	</dependency>
+    <dependency>
+        <groupId>com.google.appengine</groupId>
+        <artifactId>appengine-api-1.0-sdk</artifactId>
+        <version>1.9.4</version>
+    </dependency>
   </dependencies>
   <build>
 	<plugins>
@@ -53,8 +58,8 @@
 		<artifactId>maven-compiler-plugin</artifactId>
 		<configuration>
 		  <encoding>UTF-8</encoding>
-		  <source>1.6</source>
-		  <target>1.6</target>
+		  <source>1.7</source>
+		  <target>1.7</target>
 		</configuration>
 	  </plugin>
 	</plugins>
