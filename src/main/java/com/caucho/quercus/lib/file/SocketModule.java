@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.file;
 
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.BooleanValue;
 import com.caucho.quercus.env.Env;
@@ -250,7 +250,7 @@ public class SocketModule extends AbstractQuercusModule {
   public static boolean socket_bind(Env env,
                                     @NotNull SocketInputOutput socket,
                                     StringValue address,
-                                    @Optional("0") int port)
+                                    @OptionalParam("0") int port)
   {
     try {
       InetAddress []addresses = InetAddress.getAllByName(address.toString());
@@ -278,7 +278,7 @@ public class SocketModule extends AbstractQuercusModule {
 
   public static boolean socket_connect(Env env,
                                        @NotNull SocketInputOutput socket,
-                                       StringValue address, @Optional int port)
+                                       StringValue address, @OptionalParam int port)
   {
     try {
       InetAddress []addresses = InetAddress.getAllByName(address.toString());
@@ -306,7 +306,7 @@ public class SocketModule extends AbstractQuercusModule {
 
   public static Value socket_read(Env env,
                                   @NotNull SocketInputOutput socket,
-                                  int length, @Optional int type)
+                                  int length, @OptionalParam int type)
   {
     TempBuffer tempBuffer = null;
     TempCharBuffer tempCharBuffer = null;
@@ -346,7 +346,7 @@ public class SocketModule extends AbstractQuercusModule {
   public static boolean socket_set_timeout(Env env,
                                            @NotNull Value stream,
                                            int seconds,
-                                           @Optional("-1") int milliseconds)
+                                           @OptionalParam("-1") int milliseconds)
   {
     return StreamModule.stream_set_timeout(env, stream, seconds, milliseconds);
   }
@@ -354,7 +354,7 @@ public class SocketModule extends AbstractQuercusModule {
   public static Value socket_write(Env env,
                                    @NotNull SocketInputOutput socket,
                                    @NotNull InputStream is,
-                                   @Optional("-1") int length)
+                                   @OptionalParam("-1") int length)
   {
     if (is == null)
       return BooleanValue.FALSE;
@@ -384,7 +384,7 @@ public class SocketModule extends AbstractQuercusModule {
    */
   public boolean socket_shutdown(Env env,
                                  @NotNull SocketInputOutput file,
-                                 @Optional("2") int how)
+                                 @OptionalParam("2") int how)
   {
     if (file == null)
       return false;

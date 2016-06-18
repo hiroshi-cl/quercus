@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.UnsetValue;
@@ -46,7 +46,7 @@ public class Array2Module extends AbstractQuercusModule
 
   public static Value array_lookup(Env env,
                                    Value obj, Value key,
-                                   @Optional Value defaultValue)
+                                   @OptionalParam Value defaultValue)
   {
     if (! obj.isArray()) {
       throw env.createErrorException(L.l("argument is not an array"));

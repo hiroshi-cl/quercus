@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.db;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ResourceType;
 import com.caucho.quercus.env.ConnectionEntry;
 import com.caucho.quercus.env.Env;
@@ -66,13 +66,13 @@ public class Postgres extends JdbcConnectionResource
   Object _serverErrorMessage;
 
   public Postgres(Env env,
-                  @Optional("localhost") String host,
-                  @Optional String user,
-                  @Optional String password,
-                  @Optional String db,
-                  @Optional("5432") int port,
-                  @Optional String driver,
-                  @Optional String url)
+                  @OptionalParam("localhost") String host,
+                  @OptionalParam String user,
+                  @OptionalParam String password,
+                  @OptionalParam String db,
+                  @OptionalParam("5432") int port,
+                  @OptionalParam String driver,
+                  @OptionalParam String url)
   {
     super(env);
 

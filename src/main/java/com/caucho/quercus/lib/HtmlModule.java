@@ -39,7 +39,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.quercus.QuercusModuleException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.ConstArrayValue;
@@ -120,8 +120,8 @@ public class HtmlModule extends AbstractQuercusModule {
    */
   public Value get_html_translation_table(
       Env env,
-      @Optional("HTML_SPECIALCHARS") int table,
-      @Optional("ENT_COMPAT") int quoteStyle) {
+      @OptionalParam("HTML_SPECIALCHARS") int table,
+      @OptionalParam("ENT_COMPAT") int quoteStyle) {
     Value result;
 
     if (! env.isUnicodeSemantics()) {
@@ -166,7 +166,7 @@ public class HtmlModule extends AbstractQuercusModule {
    */
   public static StringValue htmlspecialchars_decode(Env env,
                                         StringValue str,
-                                        @Optional("ENT_COMPAT") int quoteStyle)
+                                        @OptionalParam("ENT_COMPAT") int quoteStyle)
   {
     int len = str.length();
 
@@ -264,9 +264,9 @@ public class HtmlModule extends AbstractQuercusModule {
    */
   public static Value htmlspecialchars(Env env,
                                        StringValue string,
-                                       @Optional("ENT_COMPAT") int quoteStyle,
-                                       @Optional String charset,
-                                       @Optional("true") boolean isDoubleEncode)
+                                       @OptionalParam("ENT_COMPAT") int quoteStyle,
+                                       @OptionalParam String charset,
+                                       @OptionalParam("true") boolean isDoubleEncode)
   {
     int len = string.length();
 
@@ -332,8 +332,8 @@ public class HtmlModule extends AbstractQuercusModule {
    */
   public static Value htmlentities(Env env,
                                    StringValue string,
-                                   @Optional("ENT_COMPAT") int quoteStyle,
-                                   @Optional String charset)
+                                   @OptionalParam("ENT_COMPAT") int quoteStyle,
+                                   @OptionalParam String charset)
   {
     if (charset == null || charset.length() == 0) {
       // php 5.4.0
@@ -414,8 +414,8 @@ public class HtmlModule extends AbstractQuercusModule {
    */
   public static StringValue html_entity_decode(Env env,
                                                StringValue string,
-                                               @Optional int quoteStyle,
-                                               @Optional String charset)
+                                               @OptionalParam int quoteStyle,
+                                               @OptionalParam String charset)
   {
     if (string.length() == 0)
       return env.getEmptyString();

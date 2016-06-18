@@ -31,7 +31,7 @@ package com.caucho.quercus.lib.dom;
 
 import com.caucho.quercus.UnimplementedException;
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.Env;
 import com.caucho.util.L10N;
@@ -78,9 +78,9 @@ public class DOMImplementation
   }
 
   static public DOMDocument createDocument(Env env,
-                                           @Optional String namespaceURI,
-                                           @Optional String name,
-                                           @Optional DOMDocumentType docType)
+                                           @OptionalParam String namespaceURI,
+                                           @OptionalParam String name,
+                                           @OptionalParam DOMDocumentType docType)
   {
     DOMDocument doc;
 
@@ -107,8 +107,8 @@ public class DOMImplementation
   static public DOMDocumentType createDocumentType(
       Env env,
       @NotNull String qualifiedName,
-      @Optional String publicId,
-      @Optional String systemId) {
+      @OptionalParam String publicId,
+      @OptionalParam String systemId) {
     if (qualifiedName == null)
       return null;
 

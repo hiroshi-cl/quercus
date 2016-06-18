@@ -31,7 +31,7 @@ package com.caucho.quercus.lib;
 
 import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.QuercusException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.VariableArguments;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.expr.CallExpr;

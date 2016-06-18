@@ -70,13 +70,13 @@ public class VarType<D extends GenericDeclaration> extends BaseType
     // ioc/024j vs ioc/024k
     return false;
   }
-  
+
   @Override
   public boolean isGeneric()
   {
     return true;
   }
-  
+
   @Override
   public boolean isVariable()
   {
@@ -94,13 +94,13 @@ public class VarType<D extends GenericDeclaration> extends BaseType
 
     return bounds;
   }
-  
+
   @Override
   protected BaseType []getWildcardBounds()
   {
     return _bounds;
   }
-  
+
   @Override
   public Class<?> getRawClass()
   {
@@ -123,16 +123,16 @@ public class VarType<D extends GenericDeclaration> extends BaseType
   {
     if (type.isWildcard())
       return true;
-    
+
     for (BaseType bound : _bounds) {
       if (! bound.isAssignableFrom(type)) {
         return false;
       }
     }
-    
+
     return true;
   }
-  
+
   @Override
   public boolean isParamAssignableFrom(BaseType type)
   {
@@ -170,23 +170,69 @@ public class VarType<D extends GenericDeclaration> extends BaseType
   {
     if (_bounds.length == 0)
       return _name;
-    
+
     StringBuilder sb = new StringBuilder(_name);
-    
+
     for (BaseType type : _bounds) {
       if (! type.getRawClass().equals(Object.class))
         sb.append(" extends ").append(type);
     }
-    
+
     return sb.toString();
   }
-  
+
+  // TODO
+  @Override
+  public java.lang.reflect.AnnotatedType[] getAnnotatedBounds()
+  {
+    return new java.lang.reflect.AnnotatedType[0];
+  }
+
+  // TODO:
+  @Override
+  public <T extends java.lang.annotation.Annotation> T getAnnotation(Class<T> annotationClass) {
+    return null;
+  }
+
+  // TODO:
+  @Override
+  public java.lang.annotation.Annotation[] getAnnotations()
+  {
+    return new java.lang.annotation.Annotation[0];
+  }
+
+  // TODO:
+  @Override
+  public java.lang.annotation.Annotation[] getDeclaredAnnotations()
+  {
+    return new java.lang.annotation.Annotation[0];
+  }
+
   static class GenericDeclarationImpl implements GenericDeclaration {
     @Override
     public TypeVariable<?>[] getTypeParameters()
     {
       return null;
     }
-    
+
+    // TODO:
+    @Override
+    public <T extends java.lang.annotation.Annotation> T getAnnotation(Class<T> annotationClass) {
+      return null;
+    }
+
+    // TODO:
+    @Override
+    public java.lang.annotation.Annotation[] getAnnotations()
+    {
+      return new java.lang.annotation.Annotation[0];
+    }
+
+    // TODO:
+    @Override
+    public java.lang.annotation.Annotation[] getDeclaredAnnotations()
+    {
+      return new java.lang.annotation.Annotation[0];
+    }
   }
 }

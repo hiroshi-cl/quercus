@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.db;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.ConnectionEntry;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.LongValue;
@@ -49,13 +49,13 @@ public class Oracle extends JdbcConnectionResource {
   private static final L10N L = new L10N(Oracle.class);
 
   public Oracle(Env env,
-                @Optional("localhost") String host,
-                @Optional String user,
-                @Optional String password,
-                @Optional String db,
-                @Optional("1521") int port,
-                @Optional String driver,
-                @Optional String url)
+                @OptionalParam("localhost") String host,
+                @OptionalParam String user,
+                @OptionalParam String password,
+                @OptionalParam String db,
+                @OptionalParam("1521") int port,
+                @OptionalParam String driver,
+                @OptionalParam String url)
   {
     super(env);
 

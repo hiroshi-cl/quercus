@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
@@ -70,8 +70,8 @@ public class HttpModule extends AbstractQuercusModule {
    */
   public static Value header(Env env,
                              StringValue headerStr,
-                             @Optional("true") boolean replace,
-                             @Optional long httpResponseCode)
+                             @OptionalParam("true") boolean replace,
+                             @OptionalParam long httpResponseCode)
   {
     QuercusHttpServletResponse res = env.getResponse();
 
@@ -196,8 +196,8 @@ public class HttpModule extends AbstractQuercusModule {
    * Return true if the headers have been sent.
    */
   public static boolean headers_sent(Env env,
-                                     @Optional @Reference Value file,
-                                     @Optional @Reference Value line)
+                                     @OptionalParam @Reference Value file,
+                                     @OptionalParam @Reference Value line)
   {
     QuercusHttpServletResponse res = env.getResponse();
 
@@ -210,12 +210,12 @@ public class HttpModule extends AbstractQuercusModule {
    */
   public static boolean setcookie(Env env,
                                   String name,
-                                  @Optional String value,
-                                  @Optional long expire,
-                                  @Optional String path,
-                                  @Optional String domain,
-                                  @Optional boolean secure,
-                                  @Optional boolean httpOnly)
+                                  @OptionalParam String value,
+                                  @OptionalParam long expire,
+                                  @OptionalParam String path,
+                                  @OptionalParam String domain,
+                                  @OptionalParam boolean secure,
+                                  @OptionalParam boolean httpOnly)
   {
     QuercusHttpServletResponse response = env.getResponse();
 

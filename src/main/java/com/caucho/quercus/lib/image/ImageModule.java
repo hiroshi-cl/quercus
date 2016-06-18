@@ -32,7 +32,7 @@ package com.caucho.quercus.lib.image;
 import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.UnimplementedException;
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
@@ -175,7 +175,7 @@ public class ImageModule extends AbstractQuercusModule {
    */
   public static Value getimagesize(Env env,
                                    Path file,
-                                   @Optional ArrayValue imageArray)
+                                   @OptionalParam ArrayValue imageArray)
   {
     if (! file.canRead()) {
       return BooleanValue.FALSE;
@@ -561,7 +561,7 @@ public class ImageModule extends AbstractQuercusModule {
    * Define a color as transparent
    */
   public static long imagecolortransparent(QuercusImage image,
-                                           @Optional int color)
+                                           @OptionalParam int color)
   {
     // form that includes the optional argument is a no-op since we
     // currently only support true-color, full-alpha channel
@@ -943,8 +943,8 @@ public class ImageModule extends AbstractQuercusModule {
    * Applies a filter to an image
    */
   public static boolean imagefilter(Env env, QuercusImage image, int filterType,
-                                    @Optional int arg1, @Optional int arg2,
-                                    @Optional int arg3)
+                                    @OptionalParam int arg1, @OptionalParam int arg2,
+                                    @OptionalParam int arg3)
   {
     switch(filterType)
       {
@@ -1069,7 +1069,7 @@ public class ImageModule extends AbstractQuercusModule {
                                   double angle,
                                   StringValue fontFile,
                                   String text,
-                                  @Optional ArrayValue extra)
+                                  @OptionalParam ArrayValue extra)
   {
     try {
       QuercusImage image = new QuercusImage(100, 100);
@@ -1129,7 +1129,7 @@ public class ImageModule extends AbstractQuercusModule {
                                   int color,
                                   StringValue fontFile,
                                   String text,
-                                  @Optional ArrayValue extra)
+                                  @OptionalParam ArrayValue extra)
   {
     try {
       Graphics2D g = image.getGraphics();
@@ -1200,7 +1200,7 @@ public class ImageModule extends AbstractQuercusModule {
   /**
    * Output GD2 image to browser or file
    */
-  public static void imagegd2(QuercusImage image, @Optional Path file)
+  public static void imagegd2(QuercusImage image, @OptionalParam Path file)
   {
     throw new QuercusException("imagegd2 is not implemented");
   }
@@ -1208,7 +1208,7 @@ public class ImageModule extends AbstractQuercusModule {
   /**
    * Output GD image to browser or file
    */
-  public static void imagegd(QuercusImage image, @Optional Path file)
+  public static void imagegd(QuercusImage image, @OptionalParam Path file)
   {
     throw new QuercusException("imagegd is not implemented");
   }
@@ -1217,7 +1217,7 @@ public class ImageModule extends AbstractQuercusModule {
    * Output image to browser or file
    */
   public static boolean imagegif(Env env, QuercusImage image,
-                                 @Optional Path path)
+                                 @OptionalParam Path path)
   {
     try {
       if (path != null) {
@@ -1248,7 +1248,7 @@ public class ImageModule extends AbstractQuercusModule {
    * Enable or disable interlace
    */
   public static boolean imageinterlace(QuercusImage image,
-                                       @Optional Boolean enable)
+                                       @OptionalParam Boolean enable)
   {
     if (enable != null)
       image.setInterlace(enable);
@@ -1270,8 +1270,8 @@ public class ImageModule extends AbstractQuercusModule {
    */
   public static boolean imagejpeg(Env env,
                                   QuercusImage image,
-                                  @Optional Path path,
-                                  @Optional int quality)
+                                  @OptionalParam Path path,
+                                  @OptionalParam int quality)
   {
     try {
       if (path != null) {
@@ -1338,7 +1338,7 @@ public class ImageModule extends AbstractQuercusModule {
    */
   public static boolean imagepng(Env env,
                                  QuercusImage image,
-                                 @Optional Path path)
+                                 @OptionalParam Path path)
   {
     try {
       if (path != null) {
@@ -1378,9 +1378,9 @@ public class ImageModule extends AbstractQuercusModule {
    * Give the bounding box of a text rectangle using PostScript Type1 fonts
    */
   public static ArrayValue imagepsbbox(String text, int font, int size,
-                                       @Optional int space,
-                                       @Optional int tightness,
-                                       @Optional float angle)
+                                       @OptionalParam int space,
+                                       @OptionalParam int tightness,
+                                       @OptionalParam float angle)
   {
     throw new QuercusException("imagepsbbox() not implemented");
   }
@@ -1440,10 +1440,10 @@ public class ImageModule extends AbstractQuercusModule {
                                        String text,
                                        Value fontIndex,
                                        int size, int fg, int bg, int x, int y,
-                                       @Optional int space,
-                                       @Optional int tightness,
-                                       @Optional float angle,
-                                       @Optional int antialias_steps)
+                                       @OptionalParam int space,
+                                       @OptionalParam int tightness,
+                                       @OptionalParam float angle,
+                                       @OptionalParam int antialias_steps)
   {
     throw new QuercusException("imagepstext() not implemented");
   }
@@ -1465,7 +1465,7 @@ public class ImageModule extends AbstractQuercusModule {
    */
   public static boolean imagerotate(QuercusImage image, float angle,
                                     int backgroundColor,
-                                    @Optional int ignoreTransparent)
+                                    @OptionalParam int ignoreTransparent)
   {
     // this function is broken on most PHP installs: "Note: This
     // function is only available if PHP is compiled with the bundled
@@ -1698,8 +1698,8 @@ public class ImageModule extends AbstractQuercusModule {
    * Output image to browser or file
    */
   public static void imagewbmp(QuercusImage image,
-                               @Optional Path filename,
-                               @Optional int threshhold)
+                               @OptionalParam Path filename,
+                               @OptionalParam int threshhold)
   {
     throw new UnimplementedException("imagewbmp()");
   }
@@ -1710,7 +1710,7 @@ public class ImageModule extends AbstractQuercusModule {
    * Embed into single tags.
    */
   public static boolean iptcembed(String iptcdata, String jpegFileName,
-                                  @Optional int spool)
+                                  @OptionalParam int spool)
   {
     throw new UnimplementedException("iptcembed()");
   }

@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.filter;
 
 import com.caucho.quercus.UnimplementedException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReadOnly;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
@@ -96,8 +96,8 @@ public class FilterModule extends AbstractQuercusModule
 
   public static Value filter_var(Env env,
                                  @ReadOnly Value value,
-                                 @Optional Value filterIdV,
-                                 @Optional Value flagV)
+                                 @OptionalParam Value filterIdV,
+                                 @OptionalParam Value flagV)
   {
     if (value.isArray()) {
       return BooleanValue.FALSE;
@@ -115,8 +115,8 @@ public class FilterModule extends AbstractQuercusModule
   public static Value filter_input(Env env,
                                    int type,
                                    StringValue name,
-                                   @Optional Value filterIdV,
-                                   @Optional Value flagV)
+                                   @OptionalParam Value filterIdV,
+                                   @OptionalParam Value flagV)
   {
     ArrayValue array;
 
@@ -157,8 +157,8 @@ public class FilterModule extends AbstractQuercusModule
 
   public Value filter_input_array(Env env,
                                   int type,
-                                  @Optional Value definition,
-                                  @Optional("true") boolean isAddEmpty)
+                                  @OptionalParam Value definition,
+                                  @OptionalParam("true") boolean isAddEmpty)
   {
     ArrayValue inputArray;
 

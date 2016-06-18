@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.date;
 
 import com.caucho.quercus.UnimplementedException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.NotNull;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.*;
@@ -120,7 +120,7 @@ public class DateModule extends AbstractQuercusModule {
    */
   public StringValue date(Env env,
                           StringValue format,
-                          @Optional("-1") long time)
+                          @OptionalParam("-1") long time)
   {
     if (time < 0) {
       time = time(env);
@@ -134,7 +134,7 @@ public class DateModule extends AbstractQuercusModule {
    */
   public Value idate(Env env,
                      StringValue format,
-                     @Optional("-1") long time)
+                     @OptionalParam("-1") long time)
   {
     if (format.length() != 1) {
       log.log(Level.FINE, L.l("idate format '{0}' needs to be of length one and only one",
@@ -201,7 +201,7 @@ public class DateModule extends AbstractQuercusModule {
    * Returns the timestamp of easter.
    */
   public static long easter_date(Env env,
-                                 @Optional("-1") int year)
+                                 @OptionalParam("-1") int year)
   {
     long now = env.getCurrentTime();
 
@@ -242,8 +242,8 @@ public class DateModule extends AbstractQuercusModule {
    * Returns the timestamp of easter.
    */
   public static long easter_days(Env env,
-                                 @Optional("-1") int year,
-                                 @Optional int method)
+                                 @OptionalParam("-1") int year,
+                                 @OptionalParam int method)
   {
     return easter_date(env, year);
   }
@@ -251,7 +251,7 @@ public class DateModule extends AbstractQuercusModule {
   /**
    * Returns an array of the current date.
    */
-  public Value getdate(Env env, @Optional Value timeV)
+  public Value getdate(Env env, @OptionalParam Value timeV)
   {
     QDate date = env.getDate();
 
@@ -281,7 +281,7 @@ public class DateModule extends AbstractQuercusModule {
     return array;
   }
 
-  public Value gettimeofday(Env env, @Optional boolean isFloatReturn)
+  public Value gettimeofday(Env env, @OptionalParam boolean isFloatReturn)
   {
     long gmtTime = env.getExactTime();
 
@@ -312,7 +312,7 @@ public class DateModule extends AbstractQuercusModule {
    */
   public StringValue gmdate(Env env,
                             StringValue format,
-                            @Optional("-1") long time)
+                            @OptionalParam("-1") long time)
   {
     if (time < 0) {
       time = time(env);
@@ -325,12 +325,12 @@ public class DateModule extends AbstractQuercusModule {
    * Returns the formatted date.
    */
   public long gmmktime(Env env,
-                       @Optional() Value hourV,
-                       @Optional() Value minuteV,
-                       @Optional() Value secondV,
-                       @Optional() Value monthV,
-                       @Optional() Value dayV,
-                       @Optional() Value yearV)
+                       @OptionalParam() Value hourV,
+                       @OptionalParam() Value minuteV,
+                       @OptionalParam() Value secondV,
+                       @OptionalParam() Value monthV,
+                       @OptionalParam() Value dayV,
+                       @OptionalParam() Value yearV)
   {
     QDate date = env.getGmtDate();
     long now = env.getCurrentTime();
@@ -351,7 +351,7 @@ public class DateModule extends AbstractQuercusModule {
    */
   public String gmstrftime(Env env,
                            String format,
-                           @Optional("-1") long phpTime)
+                           @OptionalParam("-1") long phpTime)
   {
     long time;
 
@@ -811,8 +811,8 @@ public class DateModule extends AbstractQuercusModule {
    * Returns the time as an indexed or associative array
    */
   public ArrayValue localtime(Env env,
-                              @NotNull @Optional("-1") long time,
-                              @Optional("false") boolean isAssociative)
+                              @NotNull @OptionalParam("-1") long time,
+                              @OptionalParam("false") boolean isAssociative)
   {
     if (time < 0)
       time  = env.getCurrentTime();
@@ -877,7 +877,7 @@ public class DateModule extends AbstractQuercusModule {
   /**
    * Returns the time including microseconds
    */
-  public static Value microtime(Env env, @Optional boolean getAsFloat)
+  public static Value microtime(Env env, @OptionalParam boolean getAsFloat)
   {
     double now = env.getMicroTime() * 1E-6;
 
@@ -896,13 +896,13 @@ public class DateModule extends AbstractQuercusModule {
    * Returns the formatted date.
    */
   public long mktime(Env env,
-                     @Optional() Value hourV,
-                     @Optional() Value minuteV,
-                     @Optional() Value secondV,
-                     @Optional() Value monthV,
-                     @Optional() Value dayV,
-                     @Optional() Value yearV,
-                     @Optional("-1") int isDST)
+                     @OptionalParam() Value hourV,
+                     @OptionalParam() Value minuteV,
+                     @OptionalParam() Value secondV,
+                     @OptionalParam() Value monthV,
+                     @OptionalParam() Value dayV,
+                     @OptionalParam() Value yearV,
+                     @OptionalParam("-1") int isDST)
   {
     if (isDST != -1)
       env.deprecatedArgument("isDST");
@@ -978,7 +978,7 @@ public class DateModule extends AbstractQuercusModule {
    */
   public static String strftime(Env env,
                                 String format,
-                                @Optional("-1") long phpTime)
+                                @OptionalParam("-1") long phpTime)
   {
     long time;
 
@@ -1025,7 +1025,7 @@ public class DateModule extends AbstractQuercusModule {
    */
   public static Value strtotime(Env env,
                                 String timeString,
-                                @Optional("-1") long now)
+                                @OptionalParam("-1") long now)
   {
     try {
       if (now >= 0) {
@@ -1101,8 +1101,8 @@ public class DateModule extends AbstractQuercusModule {
   }
 
   public static DateTime date_create(Env env,
-                                     @Optional Value time,
-                                     @Optional DateTimeZone dateTimeZone)
+                                     @OptionalParam Value time,
+                                     @OptionalParam DateTimeZone dateTimeZone)
   {
     if (time.isDefault()) {
       time = env.createString("now");
@@ -1215,22 +1215,22 @@ public class DateModule extends AbstractQuercusModule {
   }
 
   public static Value date_sunrise(int timestamp,
-                                   @Optional int format,
-                                   @Optional double latitude,
-                                   @Optional double longitude,
-                                   @Optional double zenith,
-                                   @Optional double gmtOffset)
+                                   @OptionalParam int format,
+                                   @OptionalParam double latitude,
+                                   @OptionalParam double longitude,
+                                   @OptionalParam double zenith,
+                                   @OptionalParam double gmtOffset)
   {
   //gmtOffset is specified in hours
     throw new UnimplementedException("date_sunrise");
   }
 
   public static Value date_sunset(int timestamp,
-                                  @Optional int format,
-                                  @Optional double latitude,
-                                  @Optional double longitude,
-                                  @Optional double zenith,
-                                  @Optional double gmtOffset)
+                                  @OptionalParam int format,
+                                  @OptionalParam double latitude,
+                                  @OptionalParam double longitude,
+                                  @OptionalParam double zenith,
+                                  @OptionalParam double gmtOffset)
   {
     //gmtOffset is specified in hours
     throw new UnimplementedException("date_sunset");
@@ -1239,7 +1239,7 @@ public class DateModule extends AbstractQuercusModule {
   public static void date_time_set(DateTime dateTime,
                                    int hour,
                                    int minute,
-                                   @Optional int second)
+                                   @OptionalParam int second)
   {
     dateTime.setTime(hour, minute, second);
   }
@@ -1300,8 +1300,8 @@ public class DateModule extends AbstractQuercusModule {
   }
 
   public static Value timezone_name_from_abbr(StringValue abbr,
-                                              @Optional("-1") int gmtOffset,
-                                              @Optional boolean isDST)
+                                              @OptionalParam("-1") int gmtOffset,
+                                              @OptionalParam boolean isDST)
   {
     if (gmtOffset == -1)
       return DateTimeZone.findTimeZone(abbr);

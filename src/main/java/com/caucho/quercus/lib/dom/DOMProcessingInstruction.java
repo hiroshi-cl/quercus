@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.dom;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.Env;
 
 import org.w3c.dom.ProcessingInstruction;
@@ -38,7 +38,7 @@ public class DOMProcessingInstruction
   extends DOMNode<ProcessingInstruction>
 {
   public static DOMProcessingInstruction __construct(
-      Env env, String name, @Optional String data)
+      Env env, String name, @OptionalParam String data)
   {
     DOMProcessingInstruction pi = getImpl(env)
         .createProcessingInstruction(name);

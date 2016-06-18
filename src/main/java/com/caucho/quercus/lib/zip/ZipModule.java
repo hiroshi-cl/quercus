@@ -30,7 +30,7 @@ package com.caucho.quercus.lib.zip;
 
 import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.BooleanValue;
 import com.caucho.quercus.env.Env;
@@ -147,7 +147,7 @@ public class ZipModule extends AbstractQuercusModule {
   public boolean zip_entry_open(Env env,
                                 @NotNull ZipDirectory directory,
                                 @NotNull QuercusZipEntry entry,
-                                @Optional String mode)
+                                @OptionalParam String mode)
   {
     if ((directory == null) || (entry == null))
       return false;
@@ -184,7 +184,7 @@ public class ZipModule extends AbstractQuercusModule {
   @ReturnNullAsFalse
   public StringValue zip_entry_read(Env env,
                                     @NotNull QuercusZipEntry entry,
-                                    @Optional("1024") int length)
+                                    @OptionalParam("1024") int length)
   {
     if (entry == null)
       return null;

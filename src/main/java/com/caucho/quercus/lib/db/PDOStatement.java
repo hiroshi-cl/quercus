@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.db;
 
 import com.caucho.quercus.UnimplementedException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReadOnly;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.env.ArrayValue;
@@ -217,7 +217,7 @@ public class PDOStatement
   public boolean bindColumn(Env env,
                             Value column,
                             @Reference Value var,
-                            @Optional("-1") int type)
+                            @OptionalParam("-1") int type)
   {
     try {
       if (_boundColumnMap == null) {
@@ -270,9 +270,9 @@ public class PDOStatement
   public boolean bindParam(Env env,
                            @ReadOnly Value parameter,
                            @Reference Value value,
-                           @Optional("PDO::PARAM_STR") int dataType,
-                           @Optional("-1") int length,
-                           @Optional Value driverOptions)
+                           @OptionalParam("PDO::PARAM_STR") int dataType,
+                           @OptionalParam("-1") int length,
+                           @OptionalParam Value driverOptions)
   {
     if (length != -1) {
       throw new UnimplementedException("length");
@@ -336,7 +336,7 @@ public class PDOStatement
   public boolean bindValue(Env env,
                            @ReadOnly Value parameter,
                            @ReadOnly Value value,
-                           @Optional("PDO::PARAM_STR") int dataType)
+                           @OptionalParam("PDO::PARAM_STR") int dataType)
   {
     if (dataType == -1) {
       dataType = PDO.PARAM_STR;
@@ -402,7 +402,7 @@ public class PDOStatement
    *
    * @return true for success, false for failure
    */
-  public boolean execute(Env env, @Optional @ReadOnly Value inputParameters)
+  public boolean execute(Env env, @OptionalParam @ReadOnly Value inputParameters)
   {
     _error.clear();
 
@@ -507,9 +507,9 @@ public class PDOStatement
    * are no more rows or an error occurs.
    */
   public Value fetch(Env env,
-                     @Optional int fetchMode,
-                     @Optional("0") int cursorOrientation,
-                     @Optional("0") int cursorOffset)
+                     @OptionalParam int fetchMode,
+                     @OptionalParam("0") int cursorOrientation,
+                     @OptionalParam("0") int cursorOffset)
   {
     if (cursorOrientation != 0)
       throw new UnimplementedException("fetch with cursorOrientation");
@@ -528,8 +528,8 @@ public class PDOStatement
    * @param columnIndex 0-based column index when fetchMode is FETCH_BOTH
    */
   public Value fetchAll(Env env,
-                        @Optional("0") int fetchMode,
-                        @Optional("-1") int columnIndex)
+                        @OptionalParam("0") int fetchMode,
+                        @OptionalParam("-1") int columnIndex)
   {
     int effectiveFetchMode;
 
@@ -656,7 +656,7 @@ public class PDOStatement
   /**
    * @param column 0-based column number
    */
-  public Value fetchColumn(Env env, @Optional int column)
+  public Value fetchColumn(Env env, @OptionalParam int column)
   {
     if (column < 0 && _fetchModeArgs.length > 0) {
       column = _fetchModeArgs[0].toInt();
@@ -890,8 +890,8 @@ public class PDOStatement
   }
 
   public Value fetchObject(Env env,
-                           @Optional String className,
-                           @Optional Value[] args)
+                           @OptionalParam String className,
+                           @OptionalParam Value[] args)
   {
     JdbcResultResource rs = getResultSet();
 

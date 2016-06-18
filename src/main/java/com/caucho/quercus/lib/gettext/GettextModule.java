@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.gettext;
 
 import com.caucho.quercus.QuercusModuleException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.lib.string.StringModule;
 import com.caucho.quercus.module.AbstractQuercusModule;
@@ -255,7 +255,7 @@ public class GettextModule
    * @return name of current domain after change.
    */
   public String textdomain(Env env,
-                                @Optional Value domain)
+                                @OptionalParam Value domain)
   {
     if (! domain.isNull()) {
       String name = domain.toString();

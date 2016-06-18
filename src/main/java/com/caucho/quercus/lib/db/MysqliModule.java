@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.db;
 
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.*;
@@ -239,12 +239,12 @@ public class MysqliModule extends AbstractQuercusModule {
    */
   @ReturnNullAsFalse
   public static Mysqli mysqli_connect(Env env,
-                                      @Optional("localhost") StringValue host,
-                                      @Optional StringValue userName,
-                                      @Optional StringValue password,
-                                      @Optional String dbname,
-                                      @Optional("3306") int port,
-                                      @Optional StringValue socket)
+                                      @OptionalParam("localhost") StringValue host,
+                                      @OptionalParam StringValue userName,
+                                      @OptionalParam StringValue password,
+                                      @OptionalParam String dbname,
+                                      @OptionalParam("3306") int port,
+                                      @OptionalParam StringValue socket)
     throws IllegalStateException
   {
     Mysqli mysqli = new Mysqli(env,
@@ -564,7 +564,7 @@ public class MysqliModule extends AbstractQuercusModule {
    */
   public static Value mysqli_fetch_array(Env env,
                                          @NotNull MysqliResult result,
-                                         @Optional("MYSQLI_BOTH") int type)
+                                         @OptionalParam("MYSQLI_BOTH") int type)
   {
     if (result == null) {
       return BooleanValue.FALSE;
@@ -611,8 +611,8 @@ public class MysqliModule extends AbstractQuercusModule {
    */
   public static Value mysqli_fetch_object(Env env,
                                           @NotNull MysqliResult result,
-                                          @Optional String className,
-                                          @Optional Value[] args)
+                                          @OptionalParam String className,
+                                          @OptionalParam Value[] args)
   {
     if (result == null) {
       return NullValue.NULL;
@@ -923,7 +923,7 @@ public class MysqliModule extends AbstractQuercusModule {
   public static Value mysqli_query(Env env,
                                    @NotNull Mysqli conn,
                                    StringValue sql,
-                                   @Optional("MYSQLI_STORE_RESULT") int resultMode) {
+                                   @OptionalParam("MYSQLI_STORE_RESULT") int resultMode) {
     // ERRATUM: <i>resultMode</i> is ignored, MYSQLI_USE_RESULT would represent
     //  an unbuffered query, but that is not supported.
 
@@ -961,13 +961,13 @@ public class MysqliModule extends AbstractQuercusModule {
   public static boolean mysqli_real_connect(
       Env env,
       @NotNull Mysqli mysqli,
-      @Optional("localhost") StringValue host,
-      @Optional StringValue userName,
-      @Optional StringValue password,
-      @Optional StringValue dbname,
-      @Optional("3306") int port,
-      @Optional StringValue socket,
-      @Optional int flags) {
+      @OptionalParam("localhost") StringValue host,
+      @OptionalParam StringValue userName,
+      @OptionalParam StringValue password,
+      @OptionalParam StringValue dbname,
+      @OptionalParam("3306") int port,
+      @OptionalParam StringValue socket,
+      @OptionalParam int flags) {
     if (mysqli == null)
       return false;
 
@@ -1373,7 +1373,7 @@ public class MysqliModule extends AbstractQuercusModule {
   /**
    * Get information about the most recent query.
    */
-  public static Value mysqli_info(Env env, @Optional Mysqli conn)
+  public static Value mysqli_info(Env env, @OptionalParam Mysqli conn)
   {
     if (conn == null) {
       return null;

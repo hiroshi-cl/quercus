@@ -31,7 +31,7 @@ package com.caucho.quercus.lib.zlib;
 
 import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.lib.file.BinaryInput;
@@ -83,7 +83,7 @@ public class ZlibModule extends AbstractQuercusModule {
   public static BinaryStream gzopen(Env env,
                                     StringValue fileName,
                                     String mode,
-                                    @Optional("false") boolean useIncludePath)
+                                    @OptionalParam("false") boolean useIncludePath)
   {
     String filemode = getFileMode(mode);
     int compressionLevel = getCompressionLevel(mode);
@@ -135,7 +135,7 @@ public class ZlibModule extends AbstractQuercusModule {
   @ReturnNullAsFalse
   public static ArrayValue gzfile(Env env,
                                   StringValue fileName,
-                                  @Optional boolean useIncludePath)
+                                  @OptionalParam boolean useIncludePath)
   {
     BinaryInput is = (BinaryInput) gzopen(env, fileName, "r", useIncludePath);
 
@@ -175,7 +175,7 @@ public class ZlibModule extends AbstractQuercusModule {
    */
   public static Value readgzfile(Env env,
                                  StringValue fileName,
-                                 @Optional boolean useIncludePath)
+                                 @OptionalParam boolean useIncludePath)
   {
     BinaryInput is = (BinaryInput) gzopen(env, fileName, "r", useIncludePath);
 
@@ -196,7 +196,7 @@ public class ZlibModule extends AbstractQuercusModule {
    */
   public static int gzwrite(@NotNull BinaryOutput os,
                             InputStream is,
-                            @Optional("0x7fffffff") int length)
+                            @OptionalParam("0x7fffffff") int length)
   {
     if (os == null)
       return 0;
@@ -219,7 +219,7 @@ public class ZlibModule extends AbstractQuercusModule {
   public int gzputs(Env env,
                     @NotNull BinaryOutput os,
                     InputStream is,
-                    @Optional("0x7ffffff") int length)
+                    @OptionalParam("0x7ffffff") int length)
   {
     if (os == null)
       return 0;
@@ -311,7 +311,7 @@ public class ZlibModule extends AbstractQuercusModule {
   public static Value gzgetss(Env env,
                               @NotNull BinaryInput is,
                               int length,
-                              @Optional Value allowedTags)
+                              @OptionalParam Value allowedTags)
   {
     return FileModule.fgetss(env, is, length, allowedTags);
   }
@@ -335,7 +335,7 @@ public class ZlibModule extends AbstractQuercusModule {
    */
   public int gzseek(@NotNull BinaryStream binaryStream,
                     long offset,
-                    @Optional("FileModule.SEEK_SET") int whence)
+                    @OptionalParam("FileModule.SEEK_SET") int whence)
   {
     if (binaryStream == null)
       return -1;
@@ -430,7 +430,7 @@ public class ZlibModule extends AbstractQuercusModule {
    */
   public Value gzcompress(Env env,
                           InputStream data,
-                          @Optional("6") int level)
+                          @OptionalParam("6") int level)
   {
     TempBuffer tempInput = TempBuffer.allocate();
     byte []inputBuffer = tempInput.getBuffer();
@@ -517,7 +517,7 @@ public class ZlibModule extends AbstractQuercusModule {
    */
   public Value gzuncompress(Env env,
                             InputStream is,
-                            @Optional("0") long length)
+                            @OptionalParam("0") long length)
   {
     TempBuffer tempBuf = TempBuffer.allocate();
     byte []buffer = tempBuf.getBuffer();
@@ -556,7 +556,7 @@ public class ZlibModule extends AbstractQuercusModule {
    * @return compressed using DEFLATE algorithm
    */
   public Value gzdeflate(Env env, InputStream data,
-                         @Optional("6") int level)
+                         @OptionalParam("6") int level)
   {
     TempBuffer tempInput = TempBuffer.allocate();
     byte []inputBuffer = tempInput.getBuffer();
@@ -615,7 +615,7 @@ public class ZlibModule extends AbstractQuercusModule {
    */
   public Value gzinflate(Env env,
                          InputStream data,
-                         @Optional("0") int length)
+                         @OptionalParam("0") int length)
   {
     if (length <= 0) {
       length = Integer.MAX_VALUE;
@@ -683,8 +683,8 @@ public class ZlibModule extends AbstractQuercusModule {
    * @return StringValue with gzip header and trailer
    */
   public Value gzencode(Env env, InputStream is,
-                        @Optional("6") int level,
-                        @Optional("1") int encodingMode)
+                        @OptionalParam("6") int level,
+                        @OptionalParam("1") int encodingMode)
   {
     TempBuffer tempBuf = TempBuffer.allocate();
     byte[] buffer = tempBuf.getBuffer();

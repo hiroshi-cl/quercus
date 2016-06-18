@@ -33,7 +33,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.Env;
@@ -69,7 +69,7 @@ public class ReflectionExtension
 
   public static String export(Env env,
                               String name,
-                              @Optional boolean isReturn)
+                              @OptionalParam boolean isReturn)
   {
     return null;
   }

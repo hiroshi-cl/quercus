@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib;
 
 import com.caucho.quercus.QuercusModuleException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.Env;
@@ -73,7 +73,7 @@ public class ApacheModule extends AbstractQuercusModule {
    */
   public Value apache_note(Env env,
                            String name,
-                           @Optional Value value)
+                           @OptionalParam Value value)
   {
     Map<String,Value> map = (Map) env.getSpecialValue("_caucho_apache_note");
 

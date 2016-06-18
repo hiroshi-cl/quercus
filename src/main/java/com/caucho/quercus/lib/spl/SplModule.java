@@ -32,7 +32,7 @@ package com.caucho.quercus.lib.spl;
 import java.util.ArrayList;
 import java.util.Locale;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.BooleanValue;
@@ -56,7 +56,7 @@ public class SplModule extends AbstractQuercusModule
 
   public static Value class_implements(Env env,
                                         Value obj,
-                                        @Optional boolean autoload)
+                                        @OptionalParam boolean autoload)
   {
     QuercusClass cls;
 
@@ -77,7 +77,7 @@ public class SplModule extends AbstractQuercusModule
 
   public static Value class_parents(Env env,
                                     Value obj,
-                                    @Optional boolean autoload)
+                                    @OptionalParam boolean autoload)
   {
     QuercusClass cls;
 
@@ -107,9 +107,9 @@ public class SplModule extends AbstractQuercusModule
   }
 
   public static boolean spl_autoload_register(Env env,
-                                              @Optional Callable fun,
-                                              @Optional("true") boolean isThrowErrors,
-                                              @Optional boolean isPrepend)
+                                              @OptionalParam Callable fun,
+                                              @OptionalParam("true") boolean isThrowErrors,
+                                              @OptionalParam boolean isPrepend)
   {
     if (fun == null) {
       fun = new CallbackFunction(env, env.createString("spl_autoload"));
@@ -149,7 +149,7 @@ public class SplModule extends AbstractQuercusModule
   }
 
   public static String spl_autoload_extensions(Env env,
-                                               @Optional String extensions)
+                                               @OptionalParam String extensions)
   {
     String oldExtensions = getAutoloadExtensions(env);
 
@@ -174,7 +174,7 @@ public class SplModule extends AbstractQuercusModule
 
   public static void spl_autoload(Env env,
                                   String className,
-                                  @Optional String extensions)
+                                  @OptionalParam String extensions)
   {
     if (env.findClass(className, false, true, true) != null)
       return;

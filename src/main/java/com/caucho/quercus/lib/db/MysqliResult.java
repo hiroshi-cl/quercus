@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.db;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ResourceType;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.*;
@@ -137,7 +137,7 @@ public class MysqliResult extends JdbcResultResource {
    * or null if there are no more rows in the result set
    */
   public Value fetch_array(Env env,
-                           @Optional("MYSQLI_BOTH") int type)
+                           @OptionalParam("MYSQLI_BOTH") int type)
   {
     if (type != MysqliModule.MYSQLI_ASSOC
             && type != MysqliModule.MYSQLI_BOTH
@@ -222,8 +222,8 @@ public class MysqliResult extends JdbcResultResource {
    * rows in resultset
    */
   public Value fetch_object(Env env,
-                            @Optional String className,
-                            @Optional Value[] args)
+                            @OptionalParam String className,
+                            @OptionalParam Value[] args)
   {
     return fetchObject(env, className, args);
   }

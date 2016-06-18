@@ -148,8 +148,8 @@ public class DateTimeZone implements Cloneable
   }
 
   /* commented out for wordpress-2.8.1
-  public Value getTransitions(@Optional int timestampBegin,
-                              @Optional int timestampEnd)
+  public Value getTransitions(@OptionalParam int timestampBegin,
+                              @OptionalParam int timestampEnd)
   {
     throw new UnimplementedException("DateTimeZone->getTransitions()");
   }

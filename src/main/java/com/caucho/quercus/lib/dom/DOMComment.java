@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.dom;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.Env;
 
 import org.w3c.dom.Comment;
@@ -37,7 +37,7 @@ import org.w3c.dom.Comment;
 public class DOMComment
   extends DOMCharacterData<Comment>
 {
-  public static DOMComment __construct(Env env, @Optional String value)
+  public static DOMComment __construct(Env env, @OptionalParam String value)
   {
     DOMComment comment = getImpl(env).createComment();
 

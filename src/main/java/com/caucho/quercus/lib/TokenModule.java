@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib;
 
 import com.caucho.quercus.QuercusModuleException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.lib.file.FileModule;
 import com.caucho.quercus.module.AbstractQuercusModule;
@@ -192,7 +192,7 @@ public class TokenModule extends AbstractQuercusModule {
 
   public static Value highlight_file(Env env,
                                      StringValue filename,
-                                     @Optional boolean isReturn)
+                                     @OptionalParam boolean isReturn)
   {
     StringValue v = FileModule.file_get_contents(env,
                                                  filename,
@@ -209,7 +209,7 @@ public class TokenModule extends AbstractQuercusModule {
 
   public static Value highlight_string(Env env,
                                        StringValue s,
-                                       @Optional boolean isReturn)
+                                       @OptionalParam boolean isReturn)
   {
     try {
       StringValue sb = isReturn ? env.createUnicodeBuilder() : null;

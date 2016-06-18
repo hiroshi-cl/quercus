@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.gae;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.Value;
@@ -48,9 +48,9 @@ public class GaeUserServiceModule extends AbstractQuercusModule {
 
   public static String gae_users_create_login_url(Env env,
                                                   String destinationUrl,
-                                                  @Optional String authDomain,
-                                                  @Optional String federatedIdentity,
-                                                  @Optional Value attributesRequest ) {
+                                                  @OptionalParam String authDomain,
+                                                  @OptionalParam String federatedIdentity,
+                                                  @OptionalParam Value attributesRequest ) {
     Set<String> attributeSet = null;
 
     if (! attributesRequest.isDefault()) {
@@ -71,7 +71,7 @@ public class GaeUserServiceModule extends AbstractQuercusModule {
 
   public static String gae_users_create_logout_url(Env env,
                                                    String destinationUrl,
-                                                   @Optional String authDomain) {
+                                                   @OptionalParam String authDomain) {
     return GaeUserService.createLogoutURL(destinationUrl, authDomain);
   }
 

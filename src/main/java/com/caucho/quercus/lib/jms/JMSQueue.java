@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.jms;
 
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.*;
 import com.caucho.vfs.TempBuffer;
 import com.caucho.util.L10N;
@@ -78,7 +78,7 @@ public class JMSQueue
     _connection.start();
   }
 
-  public static Value __construct(Env env, @Optional String queueName)
+  public static Value __construct(Env env, @OptionalParam String queueName)
   {
     JMSQueue queue = JMSModule.message_get_queue(env, queueName, null);
 
@@ -90,7 +90,7 @@ public class JMSQueue
     return env.wrapJava(queue);
   }
 
-  public boolean send(@NotNull Value value, @Optional JMSQueue replyTo)
+  public boolean send(@NotNull Value value, @OptionalParam JMSQueue replyTo)
     throws JMSException
   {
     Message message = null;
@@ -148,7 +148,7 @@ public class JMSQueue
     return true;
   }
 
-  public Value receive(Env env, @Optional("1") long timeout)
+  public Value receive(Env env, @OptionalParam("1") long timeout)
     throws JMSException
   {
     Message message = _consumer.receive(timeout);

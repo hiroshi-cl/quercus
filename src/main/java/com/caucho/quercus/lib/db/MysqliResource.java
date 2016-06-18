@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.db;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ResourceType;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.StringValue;
@@ -46,12 +46,12 @@ public class MysqliResource extends Mysqli {
     * It can be invoked by PHP or and by Java code.
     */
   public MysqliResource(Env env,
-                        @Optional("localhost") StringValue host,
-                        @Optional StringValue user,
-                        @Optional StringValue password,
-                        @Optional String db,
-                        @Optional("3306") int port,
-                        @Optional StringValue socket)
+                        @OptionalParam("localhost") StringValue host,
+                        @OptionalParam StringValue user,
+                        @OptionalParam StringValue password,
+                        @OptionalParam String db,
+                        @OptionalParam("3306") int port,
+                        @OptionalParam StringValue socket)
   {
     super(env, host, user, password, db, port, socket);
   }

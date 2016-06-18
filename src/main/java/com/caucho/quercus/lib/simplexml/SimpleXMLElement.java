@@ -53,7 +53,7 @@ import org.xml.sax.SAXException;
 import org.xml.sax.XMLReader;
 
 import com.caucho.quercus.annotation.EntrySet;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.BooleanValue;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.QuercusClass;
@@ -131,10 +131,10 @@ public class SimpleXMLElement extends SimpleXMLNode
 
   public static Value __construct(Env env,
                                   Value data,
-                                  @Optional int options,
-                                  @Optional boolean dataIsUrl,
-                                  @Optional Value namespaceV,
-                                  @Optional boolean isPrefix)
+                                  @OptionalParam int options,
+                                  @OptionalParam boolean dataIsUrl,
+                                  @OptionalParam Value namespaceV,
+                                  @OptionalParam boolean isPrefix)
   {
     QuercusClass cls = env.getCallingClass();
 

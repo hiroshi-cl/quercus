@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.module.*;
 import com.caucho.util.*;
@@ -80,7 +80,7 @@ public class HashModule extends AbstractQuercusModule {
   public Value hash(Env env,
                     String algorithm,
                     StringValue string,
-                    @Optional boolean isBinary)
+                    @OptionalParam boolean isBinary)
   {
     try {
       algorithm = getAlgorithm(algorithm);
@@ -148,7 +148,7 @@ public class HashModule extends AbstractQuercusModule {
   public Value hash_file(Env env,
                          String algorithm,
                          Path path,
-                         @Optional boolean isBinary)
+                         @OptionalParam boolean isBinary)
   {
     try {
       algorithm = getAlgorithm(algorithm);
@@ -190,7 +190,7 @@ public class HashModule extends AbstractQuercusModule {
    */
   public Value hash_final(Env env,
                           HashContext context,
-                          @Optional boolean isBinary)
+                          @OptionalParam boolean isBinary)
   {
     if (context == null)
       return BooleanValue.FALSE;
@@ -205,7 +205,7 @@ public class HashModule extends AbstractQuercusModule {
                          String algorithm,
                          StringValue data,
                          StringValue key,
-                         @Optional boolean isBinary)
+                         @OptionalParam boolean isBinary)
   {
     HashContext context = hash_init(env, algorithm, HASH_HMAC, key);
 
@@ -221,7 +221,7 @@ public class HashModule extends AbstractQuercusModule {
                               String algorithm,
                               Path path,
                               StringValue key,
-                              @Optional boolean isBinary)
+                              @OptionalParam boolean isBinary)
   {
     HashContext context = hash_init(env, algorithm, HASH_HMAC, key);
 
@@ -235,8 +235,8 @@ public class HashModule extends AbstractQuercusModule {
    */
   public HashContext hash_init(Env env,
                                String algorithm,
-                               @Optional int options,
-                               @Optional StringValue keyString)
+                               @OptionalParam int options,
+                               @OptionalParam StringValue keyString)
   {
     try {
       if (options == HASH_HMAC) {
@@ -331,7 +331,7 @@ public class HashModule extends AbstractQuercusModule {
   public int hash_update_stream(Env env,
                                 HashContext context,
                                 InputStream is,
-                                @Optional("-1") int length)
+                                @OptionalParam("-1") int length)
   {
     if (context == null)
       return -1;

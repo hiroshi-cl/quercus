@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.db;
 
 import com.caucho.quercus.UnimplementedException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReadOnly;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
@@ -165,9 +165,9 @@ public class PDO implements EnvCleanup {
 
   public PDO(Env env,
              String dsn,
-             @Optional String user,
-             @Optional String pass,
-             @Optional @ReadOnly ArrayValue options)
+             @OptionalParam String user,
+             @OptionalParam String pass,
+             @OptionalParam @ReadOnly ArrayValue options)
   {
     _dsn = dsn;
     _error = new PDOError();
@@ -472,7 +472,7 @@ public class PDO implements EnvCleanup {
     return BooleanValue.FALSE;
   }
 
-  public String lastInsertId(Env env, @Optional Value nameV)
+  public String lastInsertId(Env env, @OptionalParam Value nameV)
   {
     if (! nameV.isDefault()) {
       throw new UnimplementedException("lastInsertId with name");
@@ -502,7 +502,7 @@ public class PDO implements EnvCleanup {
    */
   public Value prepare(Env env,
                        String query,
-                       @Optional ArrayValue driverOptions)
+                       @OptionalParam ArrayValue driverOptions)
   {
     if (! isConnected()) {
       return BooleanValue.FALSE;
@@ -539,8 +539,8 @@ public class PDO implements EnvCleanup {
    */
   public Value query(Env env,
                      String query,
-                     @Optional int mode,
-                     @Optional @ReadOnly Value[] args)
+                     @OptionalParam int mode,
+                     @OptionalParam @ReadOnly Value[] args)
   {
     _error.clear();
 
@@ -581,7 +581,7 @@ public class PDO implements EnvCleanup {
   /**
    * Quotes the string
    */
-  public String quote(String query, @Optional int parameterType)
+  public String quote(String query, @OptionalParam int parameterType)
   {
     return "'" + real_escape_string(query) + "'";
   }

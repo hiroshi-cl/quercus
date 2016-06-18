@@ -10,7 +10,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.quercus.annotation.Name;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
@@ -121,8 +121,8 @@ public abstract class SimpleXMLNode
    */
   public SimpleXMLElement addChild(Env env,
                                    String name,
-                                   @Optional String value,
-                                   @Optional String namespace)
+                                   @OptionalParam String value,
+                                   @OptionalParam String namespace)
   {
     SimpleView view = _view.addChild(env, name, value, namespace);
 
@@ -136,8 +136,8 @@ public abstract class SimpleXMLNode
    */
   public void addAttribute(Env env,
                            String name,
-                           @Optional String value,
-                           @Optional String namespace)
+                           @OptionalParam String value,
+                           @OptionalParam String namespace)
   {
     if (namespace != null) {
       if (namespace.length() == 0) {
@@ -156,7 +156,7 @@ public abstract class SimpleXMLNode
   /**
    * public mixed SimpleXMLElement::asXML([ string $filename ])
    */
-  public final Value asXML(Env env, @Optional Value filename)
+  public final Value asXML(Env env, @OptionalParam Value filename)
   {
     StringBuilder sb = new StringBuilder();
     if (! _view.toXml(env, sb)) {
@@ -220,8 +220,8 @@ public abstract class SimpleXMLNode
    * public SimpleXMLElement SimpleXMLElement::attributes([ string $ns = NULL [, bool $is_prefix = false ]])
    */
   public Value attributes(Env env,
-                          @Optional Value namespaceV,
-                          @Optional boolean isPrefix)
+                          @OptionalParam Value namespaceV,
+                          @OptionalParam boolean isPrefix)
   {
     String namespace = null;
     if (! namespaceV.isNull()) {
@@ -243,8 +243,8 @@ public abstract class SimpleXMLNode
    * public SimpleXMLElement SimpleXMLElement::children([ string $ns [, bool $is_prefix = false ]])
    */
   public Value children(Env env,
-                        @Optional Value namespaceV,
-                        @Optional boolean isPrefix)
+                        @OptionalParam Value namespaceV,
+                        @OptionalParam boolean isPrefix)
   {
     String namespace = null;
     String prefix = null;
@@ -276,7 +276,7 @@ public abstract class SimpleXMLNode
   /**
    * public array SimpleXMLElement::getNamespaces ([ bool $recursive = false ] )
    */
-  public ArrayValue getNamespaces(Env env, @Optional boolean isRecursive)
+  public ArrayValue getNamespaces(Env env, @OptionalParam boolean isRecursive)
   {
     ArrayValue array = new ArrayValueImpl();
 
@@ -296,8 +296,8 @@ public abstract class SimpleXMLNode
     * public array SimpleXMLElement::getDocNamespaces ([ bool $recursive = false [, bool $from_root = true ]] )
     */
   public ArrayValue getDocNamespaces(Env env,
-                                     @Optional boolean isRecursive,
-                                     @Optional boolean isFromRoot)
+                                     @OptionalParam boolean isRecursive,
+                                     @OptionalParam boolean isFromRoot)
   {
     ArrayValue array = new ArrayValueImpl();
 

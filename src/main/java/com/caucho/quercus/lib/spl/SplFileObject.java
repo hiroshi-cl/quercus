@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.spl;
 
 import com.caucho.quercus.UnimplementedException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Value;
@@ -43,9 +43,9 @@ public class SplFileObject extends SplFileInfo
 
   public SplFileObject(Env env,
                        StringValue fileName,
-                       @Optional("r") String mode,
-                       @Optional boolean isUseIncludePath,
-                       @Optional Value contextV)
+                       @OptionalParam("r") String mode,
+                       @OptionalParam boolean isUseIncludePath,
+                       @OptionalParam Value contextV)
   {
     super(env, fileName);
 

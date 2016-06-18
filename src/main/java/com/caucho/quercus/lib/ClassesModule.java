@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReadOnly;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.*;
@@ -88,7 +88,7 @@ public class ClassesModule extends AbstractQuercusModule {
    */
   public boolean class_alias(Env env,
                              String original, String alias,
-                             @Optional("true") boolean isAutoLoad)
+                             @OptionalParam("true") boolean isAutoLoad)
   {
     QuercusClass aliasCls = env.findClass(alias, -1, false, true, true);
 
@@ -116,7 +116,7 @@ public class ClassesModule extends AbstractQuercusModule {
    */
   public static boolean class_exists(Env env,
                                      String className,
-                                     @Optional("true") boolean useAutoload)
+                                     @OptionalParam("true") boolean useAutoload)
   {
     if (className == null)
       return false;
@@ -313,7 +313,7 @@ public class ClassesModule extends AbstractQuercusModule {
    */
   public boolean interface_exists(Env env,
                                   String interfaceName,
-                                  @Optional("true") boolean useAutoload)
+                                  @OptionalParam("true") boolean useAutoload)
   {
     QuercusClass cl =  env.findClass(interfaceName, -1, useAutoload, true, true);
 

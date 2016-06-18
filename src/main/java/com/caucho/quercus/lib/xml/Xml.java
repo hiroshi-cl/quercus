@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.xml;
 
 import com.caucho.quercus.QuercusException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.annotation.ResourceType;
 import com.caucho.quercus.env.ArrayValueImpl;
@@ -383,7 +383,7 @@ public class Xml {
    */
   public int xml_parse(Env env,
                        StringValue data,
-                       @Optional("true") boolean isFinal)
+                       @OptionalParam("true") boolean isFinal)
     throws Exception
   {
     if (_xmlString == null)
@@ -452,7 +452,7 @@ public class Xml {
   public int xml_parse_into_struct(Env env,
                                    StringValue data,
                                    @Reference Value valsV,
-                                   @Optional @Reference Value indexV)
+                                   @OptionalParam @Reference Value indexV)
     throws Exception
   {
     ArrayValueImpl valueArray = new ArrayValueImpl();

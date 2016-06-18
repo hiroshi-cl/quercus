@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.session;
 
 import com.caucho.quercus.annotation.Hide;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.Callable;
@@ -103,7 +103,7 @@ public class SessionModule extends AbstractQuercusModule
    * then a warning is produced
    * and no cache related headers will be sent to the client.
    */
-  public Value session_cache_limiter(Env env, @Optional Value newValue)
+  public Value session_cache_limiter(Env env, @OptionalParam Value newValue)
   {
     Value value = env.getIni("session.cache_limiter");
 
@@ -115,7 +115,7 @@ public class SessionModule extends AbstractQuercusModule
     return value;
   }
 
-  public Value session_cache_expire(Env env, @Optional Value newValue)
+  public Value session_cache_expire(Env env, @OptionalParam Value newValue)
   {
     Value value = (LongValue) env.getSpecialValue("cache_expire");
 
@@ -200,7 +200,7 @@ public class SessionModule extends AbstractQuercusModule
   /**
    * Returns the session id
    */
-  public static String session_id(Env env, @Optional String id)
+  public static String session_id(Env env, @OptionalParam String id)
   {
     Value sessionIdValue = (Value) env.getSpecialValue("caucho.session_id");
 
@@ -240,7 +240,7 @@ public class SessionModule extends AbstractQuercusModule
   /**
    * Returns the object's class name
    */
-  public Value session_module_name(Env env, @Optional String newValue)
+  public Value session_module_name(Env env, @OptionalParam String newValue)
   {
     Value value = env.getIni("session.save_handler");
 
@@ -253,7 +253,7 @@ public class SessionModule extends AbstractQuercusModule
   /**
    * Returns the object's class name
    */
-  public Value session_name(Env env, @Optional String newValue)
+  public Value session_name(Env env, @OptionalParam String newValue)
   {
     Value value = env.getIni("session.name");
 
@@ -273,7 +273,7 @@ public class SessionModule extends AbstractQuercusModule
    * Therefore, session callbacks should not be called.
    */
   public static boolean session_regenerate_id(Env env,
-                                              @Optional boolean deleteOld)
+                                              @OptionalParam boolean deleteOld)
   {
     // php/1k82, php/1k83
     if (env.getSession() == null)
@@ -352,7 +352,7 @@ public class SessionModule extends AbstractQuercusModule
   /**
    * Returns the session's save path
    */
-  public Value session_save_path(Env env, @Optional String newValue)
+  public Value session_save_path(Env env, @OptionalParam String newValue)
   {
     Value value = env.getIni("session.save_path");
 
@@ -372,10 +372,10 @@ public class SessionModule extends AbstractQuercusModule
    */
   public Value session_set_cookie_params(Env env,
                                          long lifetime,
-                                         @Optional Value path,
-                                         @Optional Value domain,
-                                         @Optional Value isSecure,
-                                         @Optional Value isHttpOnly)
+                                         @OptionalParam Value path,
+                                         @OptionalParam Value domain,
+                                         @OptionalParam Value isSecure,
+                                         @OptionalParam Value isHttpOnly)
   {
     env.setIni("session.cookie_lifetime", String.valueOf(lifetime));
 

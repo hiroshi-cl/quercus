@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib;
 
 import com.caucho.config.ConfigException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.BinaryValue;
@@ -140,7 +140,7 @@ public class MhashModule extends AbstractQuercusModule {
       _highestOrdinal = ordinal;
   }
 
-  public Value mhash(Env env, int hash, StringValue data, @Optional String key)
+  public Value mhash(Env env, int hash, StringValue data, @OptionalParam String key)
   {
     if (key != null) {
       throw new UnsupportedOperationException("key");

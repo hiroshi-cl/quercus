@@ -45,7 +45,7 @@ import java.util.logging.Logger;
  */
 public class JClassDependency implements PersistentDependency {
   private final static Logger log = Log.open(JClassDependency.class);
-  
+
   private final String _className;
 
   private boolean _checkFields = true;
@@ -92,7 +92,7 @@ public class JClassDependency implements PersistentDependency {
   public JClassDependency(String className, String digest)
   {
     _className = className;
-    
+
     String newDigest = getDigest();
 
     if (! newDigest.equals(digest)) {
@@ -102,7 +102,7 @@ public class JClassDependency implements PersistentDependency {
       _isDigestModified = true;
     }
   }
-  
+
   /**
    * Returns true if the underlying resource has changed.
    */
@@ -110,7 +110,7 @@ public class JClassDependency implements PersistentDependency {
   {
     return _isDigestModified;
   }
-  
+
   /**
    * Log the reason for modification
    */
@@ -132,14 +132,14 @@ public class JClassDependency implements PersistentDependency {
     try {
       if (_className == null || "".equals(_className))
         return "";
-      
+
       DynamicClassLoader loader
         = (DynamicClassLoader) Thread.currentThread().getContextClassLoader();
 
       ClassLoader tmpLoader = loader.getNewTempClassLoader();
-      
+
       Class cl = Class.forName(_className, false, tmpLoader);
-      
+
       if (cl == null)
         return "";
 
@@ -169,7 +169,7 @@ public class JClassDependency implements PersistentDependency {
           if (Modifier.isProtected(field.getModifiers())
               && ! _checkProtected)
             continue;
-          
+
           addDigest(digest, field.getName());
           addDigest(digest, field.getModifiers());
           addDigest(digest, field.getType().getName());
@@ -180,7 +180,7 @@ public class JClassDependency implements PersistentDependency {
 
       Method []methods = cl.getDeclaredMethods();
       Arrays.sort(methods, new MethodComparator());
-      
+
       for (int i = 0; i < methods.length; i++) {
         Method method = methods[i];
 
@@ -190,7 +190,7 @@ public class JClassDependency implements PersistentDependency {
           continue;
         if (Modifier.isStatic(method.getModifiers()) && ! _checkStatic)
           continue;
-          
+
         addDigest(digest, method.getName());
         addDigest(digest, method.getModifiers());
         addDigest(digest, method.getName());
@@ -207,11 +207,11 @@ public class JClassDependency implements PersistentDependency {
 
         addDigest(digest, method.getAnnotations());
       }
-      
+
       byte []digestBytes = new byte[256];
-      
+
       int len = digest.digest(digestBytes, 0, digestBytes.length);
-      
+
       return digestToBase64(digestBytes, len);
     } catch (Exception e) {
       log.log(Level.FINER, e.toString(), e);
@@ -228,7 +228,7 @@ public class JClassDependency implements PersistentDependency {
     return ("new com.caucho.bytecode.JClassDependency(\"" +
             _className + "\", \"" + getDigest() + "\")");
   }
-  
+
   /**
    * Adds the annotations to the digest using a UTF8 encoding.
    */
@@ -240,7 +240,7 @@ public class JClassDependency implements PersistentDependency {
     for (Annotation ann : annList)
       addDigest(digest, ann);
   }
-  
+
   /**
    * Adds the annotations to the digest using a UTF8 encoding.
    */
@@ -248,7 +248,7 @@ public class JClassDependency implements PersistentDependency {
   {
     addDigest(digest, ann.annotationType().getName());
   }
-  
+
   /**
    * Adds the int to the digest.
    */
@@ -259,7 +259,7 @@ public class JClassDependency implements PersistentDependency {
     digest.update((byte) (v >> 8));
     digest.update((byte) v);
   }
-  
+
   /**
    * Adds the string to the digest using a UTF8 encoding.
    */
@@ -267,7 +267,7 @@ public class JClassDependency implements PersistentDependency {
   {
     if (string == null)
       return;
-    
+
     int len = string.length();
     for (int i = 0; i < len; i++) {
       int ch = string.charAt(i);
@@ -284,12 +284,12 @@ public class JClassDependency implements PersistentDependency {
       }
     }
   }
-  
+
   private String digestToBase64(byte []digest, int len)
   {
     CharBuffer cb = CharBuffer.allocate();
 
-    Base64.encode(cb, digest, 0, len);
+    com.caucho.util.Base64.encode(cb, digest, 0, len);
 
     return cb.close();
   }
@@ -298,7 +298,7 @@ public class JClassDependency implements PersistentDependency {
   {
     if (o == this)
       return true;
-    
+
     if (! (o instanceof JClassDependency))
       return false;
 
@@ -322,11 +322,11 @@ public class JClassDependency implements PersistentDependency {
       int cmp = a.getName().compareTo(b.getName());
       if (cmp != 0)
         return cmp;
-      
+
       cmp = a.getDeclaringClass().getName().compareTo(b.getDeclaringClass().getName());
       if (cmp != 0)
         return cmp;
-      
+
       return a.getType().getName().compareTo(b.getType().getName());
     }
   }
@@ -360,11 +360,11 @@ public class JClassDependency implements PersistentDependency {
         if (cmp != 0)
           return cmp;
       }
-      
+
       cmp = a.getDeclaringClass().getName().compareTo(b.getDeclaringClass().getName());
       if (cmp != 0)
         return cmp;
-      
+
       return a.getReturnType().getName().compareTo(b.getReturnType().getName());
     }
   }

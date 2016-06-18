@@ -31,7 +31,7 @@ package com.caucho.quercus.lib.xml;
 
 import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.BooleanValue;
@@ -237,7 +237,7 @@ public class XmlModule extends AbstractQuercusModule {
   public int xml_parse(Env env,
                        @NotNull Xml parser,
                        StringValue data,
-                       @Optional("true") boolean isFinal)
+                       @OptionalParam("true") boolean isFinal)
   {
     if (parser == null)
       return 0;
@@ -255,7 +255,7 @@ public class XmlModule extends AbstractQuercusModule {
    * returns a new Xml Parser
    */
   public Xml xml_parser_create(Env env,
-                               @Optional("'UTF-8'") String outputEncoding)
+                               @OptionalParam("'UTF-8'") String outputEncoding)
   {
     if (outputEncoding == null)
       outputEncoding = "UTF-8";
@@ -273,8 +273,8 @@ public class XmlModule extends AbstractQuercusModule {
    * @return namespace aware Xml Parser
    */
   public Xml xml_parser_create_ns(Env env,
-                                  @Optional("'UTF-8'") String outputEncoding,
-                                  @Optional("':'") String separator)
+                                  @OptionalParam("'UTF-8'") String outputEncoding,
+                                  @OptionalParam("':'") String separator)
   {
     if (outputEncoding == null)
       outputEncoding = "UTF-8";
@@ -466,7 +466,7 @@ public class XmlModule extends AbstractQuercusModule {
                                    @NotNull Xml parser,
                                    StringValue data,
                                    @Reference Value valueArray,
-                                   @Optional @Reference Value indexArray)
+                                   @OptionalParam @Reference Value indexArray)
   {
     try {
       if (parser == null)
@@ -510,7 +510,7 @@ public class XmlModule extends AbstractQuercusModule {
   }
 
   public static boolean libxml_use_internal_errors(Env env,
-                                                   @Optional Value isKeepErrors)
+                                                   @OptionalParam Value isKeepErrors)
   {
     ArrayList<LibXmlError> existingErrorList = getErrorList(env);
 

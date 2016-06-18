@@ -32,7 +32,7 @@ package com.caucho.quercus.lib.curl;
 import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.UnimplementedException;
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.*;
@@ -374,7 +374,7 @@ public class CurlModule
    */
   public static Value curl_getinfo(Env env,
                                    @NotNull CurlResource curl,
-                                   @Optional Value option)
+                                   @OptionalParam Value option)
   {
 //    if (option instanceof DefaultValue)
 //     return curl.getAllInfo();
@@ -494,7 +494,7 @@ public class CurlModule
    * @param url
    */
   public static CurlResource curl_init(Env env,
-                                       @Optional String url)
+                                       @OptionalParam String url)
   {
     CurlResource curl = new CurlResource();
 
@@ -602,7 +602,7 @@ public class CurlModule
    */
   public static Value curl_multi_info_read(Env env,
                                            CurlMultiResource multi,
-                                           @Optional @Reference Value msgsInQueue)
+                                           @OptionalParam @Reference Value msgsInQueue)
   {
     return multi.readInfo(env, msgsInQueue);
   }
@@ -632,7 +632,7 @@ public class CurlModule
    */
   public static int curl_multi_select(Env env,
                                       CurlMultiResource multi,
-                                      @Optional Value timeout)
+                                      @OptionalParam Value timeout)
   {
     return 0;
   }
@@ -1033,7 +1033,7 @@ public class CurlModule
    * @param version
    */
   public static ArrayValue curl_version(Env env,
-                                        @Optional Value age)
+                                        @OptionalParam Value age)
   {
     ArrayValue array = new ArrayValueImpl();
 

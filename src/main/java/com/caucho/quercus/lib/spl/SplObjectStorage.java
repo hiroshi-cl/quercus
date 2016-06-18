@@ -35,7 +35,7 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.Env;
@@ -73,7 +73,7 @@ public class SplObjectStorage
     }
   }
 
-  public void attach(Env env, Value obj, @Optional Value value)
+  public void attach(Env env, Value obj, @OptionalParam Value value)
   {
     StringValue hash = getHash(env, obj);
 

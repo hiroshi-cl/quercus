@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.gae;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.google.appengine.api.users.User;
 import com.google.appengine.api.users.UserService;
 import com.google.appengine.api.users.UserServiceFactory;
@@ -46,9 +46,9 @@ public class GaeUserService
   }
 
   public static String createLoginURL(String destinationUrl,
-                                      @Optional String authDomain,
-                                      @Optional String federatedIdentity,
-                                      @Optional Set<String> attributesRequest)
+                                      @OptionalParam String authDomain,
+                                      @OptionalParam String federatedIdentity,
+                                      @OptionalParam Set<String> attributesRequest)
   {
     return getUserService().createLoginURL(destinationUrl,
                                            authDomain,
@@ -57,7 +57,7 @@ public class GaeUserService
   }
 
   public static String createLogoutURL(String destinationUrl,
-                                       @Optional String authDomain)
+                                       @OptionalParam String authDomain)
   {
     return getUserService().createLogoutURL(destinationUrl, authDomain);
   }

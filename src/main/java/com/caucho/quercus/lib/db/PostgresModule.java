@@ -31,7 +31,7 @@ package com.caucho.quercus.lib.db;
 
 import com.caucho.quercus.UnimplementedException;
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.module.AbstractQuercusModule;
@@ -177,7 +177,7 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   @ReturnNullAsFalse
   public static String pg_client_encoding(Env env,
-                                          @Optional Postgres conn)
+                                          @OptionalParam Postgres conn)
   {
     try {
       if (conn == null)
@@ -195,7 +195,7 @@ public class PostgresModule extends AbstractQuercusModule {
    * Closes a PostgreSQL connection
    */
   public static boolean pg_close(Env env,
-                                 @Optional Postgres conn)
+                                 @OptionalParam Postgres conn)
   {
     try {
       if (conn == null)
@@ -220,7 +220,7 @@ public class PostgresModule extends AbstractQuercusModule {
   @ReturnNullAsFalse
   public static Postgres pg_connect(Env env,
                                     String connectionString,
-                                    @Optional int connectionType)
+                                    @OptionalParam int connectionType)
   {
     try {
       String host = "localhost";
@@ -467,7 +467,7 @@ public class PostgresModule extends AbstractQuercusModule {
                                       @NotNull Postgres conn,
                                       String tableName,
                                       ArrayValue assocArray,
-                                      @Optional("0") int options)
+                                      @OptionalParam("0") int options)
   {
     try {
       if (conn == null)
@@ -587,8 +587,8 @@ public class PostgresModule extends AbstractQuercusModule {
                                      @NotNull Postgres conn,
                                      String tableName,
                                      ArrayValue rows,
-                                     @Optional("") String delimiter,
-                                     @Optional("") String nullAs)
+                                     @OptionalParam("") String delimiter,
+                                     @OptionalParam("") String nullAs)
   {
     // XXX delimiter not used?
 
@@ -686,8 +686,8 @@ public class PostgresModule extends AbstractQuercusModule {
   public static ArrayValue pg_copy_to(Env env,
                                       @NotNull Postgres conn,
                                       String tableName,
-                                      @Optional("") String delimiter,
-                                      @Optional("") String nullAs)
+                                      @OptionalParam("") String delimiter,
+                                      @OptionalParam("") String nullAs)
   {
     try {
       if (conn == null)
@@ -697,12 +697,12 @@ public class PostgresModule extends AbstractQuercusModule {
       // did not support SQL COPY operations that could simplify
       // the code below.
 
-      // XXX: This should be replaced when @Optional("\t") is fixed.
+      // XXX: This should be replaced when @OptionalParam("\t") is fixed.
       if (delimiter.equals("")) {
         delimiter = "\t";
       }
 
-      // XXX: This should be replaced when @Optional("\\N") is fixed.
+      // XXX: This should be replaced when @OptionalParam("\\N") is fixed.
       // Note: according to php.net, it must be \\N, i.e. the
       // two-character sequence: {'\\', 'N'}
       if (nullAs.equals("")) {
@@ -762,7 +762,7 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   @ReturnNullAsFalse
   public static String pg_dbname(Env env,
-                                 @Optional Postgres conn)
+                                 @OptionalParam Postgres conn)
   {
     try {
       if (conn == null)
@@ -783,7 +783,7 @@ public class PostgresModule extends AbstractQuercusModule {
                                   @NotNull Postgres conn,
                                   String tableName,
                                   ArrayValue assocArray,
-                                  @Optional("-1") int options)
+                                  @OptionalParam("-1") int options)
   {
     // From php.net: this function is EXPERIMENTAL.
     // This function is EXPERIMENTAL. The behaviour of this function,
@@ -838,7 +838,7 @@ public class PostgresModule extends AbstractQuercusModule {
    * Sync with PostgreSQL backend
    */
   public static boolean pg_end_copy(Env env,
-                                    @Optional Postgres conn)
+                                    @OptionalParam Postgres conn)
   {
     env.stub("pg_end_copy");
 
@@ -934,7 +934,7 @@ public class PostgresModule extends AbstractQuercusModule {
   @ReturnNullAsFalse
   public static ArrayValue pg_fetch_all_columns(Env env,
                                                 @NotNull PostgresResult result,
-                                                @Optional("0") LongValue column)
+                                                @OptionalParam("0") LongValue column)
   {
     try {
       if (result == null) {
@@ -1002,8 +1002,8 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   public static Value pg_fetch_array(Env env,
                                      @NotNull PostgresResult result,
-                                     @Optional("-1") Value row,
-                                     @Optional("PGSQL_BOTH") int resultType) {
+                                     @OptionalParam("-1") Value row,
+                                     @OptionalParam("PGSQL_BOTH") int resultType) {
     try {
       if (result == null) {
         return BooleanValue.FALSE;
@@ -1060,7 +1060,7 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   public static Value pg_fetch_assoc(Env env,
                                           @NotNull PostgresResult result,
-                                          @Optional("-1") Value row)
+                                          @OptionalParam("-1") Value row)
   {
     try {
       if (result == null) {
@@ -1085,8 +1085,8 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   public static Value pg_fetch_object(Env env,
                                       @NotNull PostgresResult result,
-                                      @Optional("-1") Value row,
-                                      @Optional int resultType)
+                                      @OptionalParam("-1") Value row,
+                                      @OptionalParam int resultType)
   {
     try {
       if (result == null)
@@ -1118,7 +1118,7 @@ public class PostgresModule extends AbstractQuercusModule {
   public static Value pg_fetch_result(Env env,
                                       @NotNull PostgresResult result,
                                       Value row,
-                                      @Optional("-1") Value fieldNameOrNumber)
+                                      @OptionalParam("-1") Value fieldNameOrNumber)
   {
     try {
       if (result == null)
@@ -1161,7 +1161,7 @@ public class PostgresModule extends AbstractQuercusModule {
   public static Value pg_result(Env env,
                                 @NotNull PostgresResult result,
                                 Value row,
-                                @Optional("-1") Value fieldNameOrNumber)
+                                @OptionalParam("-1") Value fieldNameOrNumber)
   {
     return pg_fetch_result(env, result, row, fieldNameOrNumber);
   }
@@ -1171,7 +1171,7 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   public static Value pg_fetch_row(Env env,
                                         @NotNull PostgresResult result,
-                                        @Optional("-1") Value row)
+                                        @OptionalParam("-1") Value row)
   {
     try {
       if (result == null)
@@ -1197,7 +1197,7 @@ public class PostgresModule extends AbstractQuercusModule {
       Env env,
       @NotNull PostgresResult result,
       Value row,
-      @Optional("-1") Value fieldNameOrNumber) {
+      @OptionalParam("-1") Value fieldNameOrNumber) {
     try {
       if (result == null)
         return null;
@@ -1251,7 +1251,7 @@ public class PostgresModule extends AbstractQuercusModule {
       Env env,
       @NotNull PostgresResult result,
       Value row,
-      @Optional("-1") Value fieldNameOrNumber) {
+      @OptionalParam("-1") Value fieldNameOrNumber) {
     return pg_field_is_null(env, result, row, fieldNameOrNumber);
   }
 
@@ -1320,7 +1320,7 @@ public class PostgresModule extends AbstractQuercusModule {
   public static int pg_field_prtlen(Env env,
                                     @NotNull PostgresResult result,
                                     Value rowNumber,
-                                    @Optional("-1") Value fieldNameOrNumber)
+                                    @OptionalParam("-1") Value fieldNameOrNumber)
   {
     try {
       if (result == null)
@@ -1371,7 +1371,7 @@ public class PostgresModule extends AbstractQuercusModule {
   public static int pg_fieldprtlen(Env env,
                                    @NotNull PostgresResult result,
                                    Value rowNumber,
-                                   @Optional("-1") Value fieldNameOrNumber)
+                                   @OptionalParam("-1") Value fieldNameOrNumber)
   {
     return pg_field_prtlen(env, result, rowNumber, fieldNameOrNumber);
   }
@@ -1486,7 +1486,7 @@ public class PostgresModule extends AbstractQuercusModule {
   public static String pg_field_table(Env env,
                                       @NotNull PostgresResult result,
                                       int fieldNumber,
-                                      @Optional("false") boolean oidOnly)
+                                      @OptionalParam("false") boolean oidOnly)
   {
     // The Postgres JDBC driver doesn't have a concept of exposing
     // to the client what table maps to a particular select item
@@ -1610,7 +1610,7 @@ public class PostgresModule extends AbstractQuercusModule {
   @ReturnNullAsFalse
   public static ArrayValue pg_get_notify(Env env,
                                          @NotNull Postgres conn,
-                                         @Optional("-1") int resultType)
+                                         @OptionalParam("-1") int resultType)
   {
     try {
       if (conn == null)
@@ -1703,7 +1703,7 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   @ReturnNullAsFalse
   public static PostgresResult pg_get_result(Env env,
-                                             @Optional Postgres conn)
+                                             @OptionalParam Postgres conn)
   {
     // Three different scenarios for pg_get_result:
     //
@@ -1792,7 +1792,7 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   @ReturnNullAsFalse
   public static String pg_host(Env env,
-                               @Optional Postgres conn)
+                               @OptionalParam Postgres conn)
   {
     try {
       if (conn == null)
@@ -1813,7 +1813,7 @@ public class PostgresModule extends AbstractQuercusModule {
                                   @NotNull Postgres conn,
                                   String tableName,
                                   ArrayValue assocArray,
-                                  @Optional("-1") int options)
+                                  @OptionalParam("-1") int options)
   {
     try {
       if (conn == null)
@@ -1865,7 +1865,7 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   @ReturnNullAsFalse
   public static StringValue pg_last_error(Env env,
-                                          @Optional Postgres conn)
+                                          @OptionalParam Postgres conn)
   {
     try {
 
@@ -1885,7 +1885,7 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   @ReturnNullAsFalse
   public static StringValue pg_errormessage(Env env,
-                                            @Optional Postgres conn)
+                                            @OptionalParam Postgres conn)
   {
     return pg_last_error(env, conn);
   }
@@ -1991,7 +1991,7 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   @ReturnNullAsFalse
   public static LongValue pg_lo_create(Env env,
-                                       @Optional Postgres conn)
+                                       @OptionalParam Postgres conn)
   {
     try {
 
@@ -2040,7 +2040,7 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   @ReturnNullAsFalse
   public static LongValue pg_locreate(Env env,
-                                      @Optional Postgres conn)
+                                      @OptionalParam Postgres conn)
   {
     return pg_lo_create(env, conn);
   }
@@ -2281,7 +2281,7 @@ public class PostgresModule extends AbstractQuercusModule {
   @ReturnNullAsFalse
   public static StringValue pg_lo_read(Env env,
                                        Object largeObject,
-                                       @Optional("-1") int len)
+                                       @OptionalParam("-1") int len)
   {
     try {
 
@@ -2317,7 +2317,7 @@ public class PostgresModule extends AbstractQuercusModule {
   @ReturnNullAsFalse
   public static StringValue pg_loread(Env env,
                                       Object largeObject,
-                                      @Optional("-1") int len)
+                                      @OptionalParam("-1") int len)
   {
     return pg_lo_read(env, largeObject, len);
   }
@@ -2328,7 +2328,7 @@ public class PostgresModule extends AbstractQuercusModule {
   public static boolean pg_lo_seek(Env env,
                                    Object largeObject,
                                    int offset,
-                                   @Optional int whence)
+                                   @OptionalParam int whence)
   {
     try {
       Class<?> cl = Class.forName("org.postgresql.largeobject.LargeObject");
@@ -2437,7 +2437,7 @@ public class PostgresModule extends AbstractQuercusModule {
   public static LongValue pg_lo_write(Env env,
                                       @NotNull Object largeObject,
                                       String data,
-                                      @Optional int len)
+                                      @OptionalParam int len)
   {
     try {
       if (largeObject == null)
@@ -2473,7 +2473,7 @@ public class PostgresModule extends AbstractQuercusModule {
   public static LongValue pg_lowrite(Env env,
                                      @NotNull Object largeObject,
                                      String data,
-                                     @Optional int len)
+                                     @OptionalParam int len)
   {
     return pg_lo_write(env, largeObject, data, len);
   }
@@ -2556,7 +2556,7 @@ public class PostgresModule extends AbstractQuercusModule {
    * Get the options associated with the connection
    */
   public static String pg_options(Env env,
-                                  @Optional Postgres conn)
+                                  @OptionalParam Postgres conn)
   {
     throw new UnimplementedException("pg_options");
   }
@@ -2610,7 +2610,7 @@ public class PostgresModule extends AbstractQuercusModule {
   @ReturnNullAsFalse
   public static Postgres pg_pconnect(Env env,
                                      String connectionString,
-                                     @Optional int connectType)
+                                     @OptionalParam int connectType)
   {
     return pg_connect(env, connectionString, connectType);
   }
@@ -2619,7 +2619,7 @@ public class PostgresModule extends AbstractQuercusModule {
    * Ping database connection
    */
   public static boolean pg_ping(Env env,
-                                @Optional Postgres conn)
+                                @OptionalParam Postgres conn)
   {
     try {
 
@@ -2639,7 +2639,7 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   @ReturnNullAsFalse
   public static StringValue pg_port(Env env,
-                                    @Optional Postgres conn)
+                                    @OptionalParam Postgres conn)
   {
     try {
 
@@ -2923,7 +2923,7 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   @ReturnNullAsFalse
   public static String pg_result_error(Env env,
-                                       @Optional PostgresResult result)
+                                       @OptionalParam PostgresResult result)
   {
     try {
       if (result != null)
@@ -2960,7 +2960,7 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   public static int pg_result_status(Env env,
                                      @NotNull PostgresResult result,
-                                     @Optional("PGSQL_STATUS_LONG") int type)
+                                     @OptionalParam("PGSQL_STATUS_LONG") int type)
   {
     try {
       if (result == null)
@@ -3000,7 +3000,7 @@ public class PostgresModule extends AbstractQuercusModule {
                                      @NotNull Postgres conn,
                                      String tableName,
                                      ArrayValue assocArray,
-                                     @Optional("-1") int options)
+                                     @OptionalParam("-1") int options)
   {
     try {
       if (conn == null)
@@ -3228,8 +3228,8 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   public static boolean pg_trace(Env env,
                                  Path path,
-                                 @Optional String mode,
-                                 @Optional Postgres conn)
+                                 @OptionalParam String mode,
+                                 @OptionalParam Postgres conn)
   {
     env.stub("pg_trace");
 
@@ -3240,7 +3240,7 @@ public class PostgresModule extends AbstractQuercusModule {
    * Returns the current in-transaction status of the server
    */
   public static int pg_transaction_status(Env env,
-                                          @Optional Postgres conn)
+                                          @OptionalParam Postgres conn)
   {
     return PGSQL_TRANSACTION_IDLE;
   }
@@ -3249,7 +3249,7 @@ public class PostgresModule extends AbstractQuercusModule {
    * Return the TTY name associated with the connection
    */
   public static String pg_tty(Env env,
-                              @Optional Postgres conn)
+                              @OptionalParam Postgres conn)
   {
     // Note:  pg_tty() is obsolete, since the server no longer pays attention to
     // the TTY setting, but the function remains for backwards compatibility.
@@ -3287,7 +3287,7 @@ public class PostgresModule extends AbstractQuercusModule {
    * Disable tracing of a PostgreSQL connection
    */
   public static boolean pg_untrace(Env env,
-                                   @Optional Postgres conn)
+                                   @OptionalParam Postgres conn)
   {
     // Always returns TRUE
 
@@ -3304,7 +3304,7 @@ public class PostgresModule extends AbstractQuercusModule {
                                   String tableName,
                                   ArrayValue data,
                                   ArrayValue condition,
-                                  @Optional int options)
+                                  @OptionalParam int options)
   {
     // From php.net: This function is EXPERIMENTAL.
 
@@ -3377,7 +3377,7 @@ public class PostgresModule extends AbstractQuercusModule {
    */
   @ReturnNullAsFalse
   public static ArrayValue pg_version(Env env,
-                                      @Optional Postgres conn)
+                                      @OptionalParam Postgres conn)
   {
     try {
 

@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib;
 
 import com.caucho.quercus.QuercusModuleException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.PassThru;
 import com.caucho.quercus.annotation.ReadOnly;
 import com.caucho.quercus.annotation.Reference;
@@ -137,7 +137,7 @@ public class VariableModule extends AbstractQuercusModule {
   public static Value define(Env env,
                              StringValue name,
                              Value value,
-                             @Optional boolean isCaseInsensitive)
+                             @OptionalParam boolean isCaseInsensitive)
   {
     return env.addConstant(name, value, isCaseInsensitive);
   }
@@ -252,7 +252,7 @@ public class VariableModule extends AbstractQuercusModule {
    */
   public static boolean import_request_variables(Env env,
                                                  String types,
-                                                 @Optional String prefix)
+                                                 @OptionalParam String prefix)
   {
     if ("".equals(prefix))
       env.notice(L.l("import_request_variables should use a prefix argument"));
@@ -367,8 +367,8 @@ public class VariableModule extends AbstractQuercusModule {
    */
   public static boolean is_callable(Env env,
                                     @ReadOnly Value v,
-                                    @Optional boolean isCheckSyntaxOnly,
-                                    @Optional @Reference Value nameRef)
+                                    @OptionalParam boolean isCheckSyntaxOnly,
+                                    @OptionalParam @Reference Value nameRef)
   {
     if (nameRef.isDefault()) {
       nameRef = null;
@@ -553,7 +553,7 @@ public class VariableModule extends AbstractQuercusModule {
    */
   public static Value print_r(Env env,
                               @ReadOnly Value v,
-                              @Optional boolean isReturn)
+                              @OptionalParam boolean isReturn)
   {
     try {
       WriteStream out;
@@ -795,7 +795,7 @@ public class VariableModule extends AbstractQuercusModule {
    */
   public static Value var_export(Env env,
                                  @ReadOnly Value v,
-                                 @Optional boolean isReturn)
+                                 @OptionalParam boolean isReturn)
   {
     StringValue s = v.varExport(env);
 

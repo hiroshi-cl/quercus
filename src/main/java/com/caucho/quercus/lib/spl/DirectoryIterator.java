@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.spl;
 
 import com.caucho.quercus.QuercusRuntimeException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.LongValue;
 import com.caucho.quercus.env.StringValue;
@@ -157,7 +157,7 @@ public class DirectoryIterator
   }
 
   @Override
-  public String getBasename(Env env, @Optional String suffix)
+  public String getBasename(Env env, @OptionalParam String suffix)
   {
     return getCurrent(env).getBasename(env, suffix);
   }
@@ -175,7 +175,7 @@ public class DirectoryIterator
   }
 
   @Override
-  public SplFileInfo getFileInfo(Env env, @Optional String className)
+  public SplFileInfo getFileInfo(Env env, @OptionalParam String className)
   {
     return getCurrent(env).getFileInfo(env, className);
   }
@@ -223,7 +223,7 @@ public class DirectoryIterator
   }
 
   @Override
-  public SplFileInfo getPathInfo(Env env, @Optional String className)
+  public SplFileInfo getPathInfo(Env env, @OptionalParam String className)
   {
     return getCurrent(env).getPathInfo(env, className);
   }
@@ -296,9 +296,9 @@ public class DirectoryIterator
 
   @Override
   public SplFileObject openFile(Env env,
-                                @Optional("r") String mode,
-                                @Optional boolean isUseIncludePath,
-                                @Optional Value context)
+                                @OptionalParam("r") String mode,
+                                @OptionalParam boolean isUseIncludePath,
+                                @OptionalParam Value context)
   {
     return getCurrent(env).openFile(env, mode, isUseIncludePath, context);
   }

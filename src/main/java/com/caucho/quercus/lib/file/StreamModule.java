@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.file;
 
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReadOnly;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
@@ -121,7 +121,7 @@ public class StreamModule extends AbstractQuercusModule {
    * Creates a stream context.
    */
   public static Value stream_context_create(Env env,
-                                            @Optional ArrayValue options)
+                                            @OptionalParam ArrayValue options)
   {
     return new StreamContextResource(options);
   }
@@ -145,7 +145,7 @@ public class StreamModule extends AbstractQuercusModule {
    * Returns the default stream context.
    */
   public static Value stream_context_get_default(Env env,
-                                                 @Optional ArrayValue options)
+                                                 @OptionalParam ArrayValue options)
   {
     StreamContextResource context = env.getDefaultStreamContext();
 
@@ -205,8 +205,8 @@ public class StreamModule extends AbstractQuercusModule {
   public static long stream_copy_to_stream(Env env,
                                            @NotNull BinaryInput in,
                                            @NotNull BinaryOutput out,
-                                           @Optional("-1") int length,
-                                           @Optional int offset)
+                                           @OptionalParam("-1") int length,
+                                           @OptionalParam int offset)
   {
     long bytesWritten = 0;
 
@@ -261,8 +261,8 @@ public class StreamModule extends AbstractQuercusModule {
    */
   public static Value stream_get_contents(Env env,
                                           @NotNull BinaryInput in,
-                                          @Optional("-1") long maxLen,
-                                          @Optional long offset)
+                                          @OptionalParam("-1") long maxLen,
+                                          @OptionalParam long offset)
   {
     try {
       if (in == null)
@@ -295,7 +295,7 @@ public class StreamModule extends AbstractQuercusModule {
    */
   public static Value stream_get_line(Env env,
                                       @NotNull BinaryInput file,
-                                      @Optional("-1") long length)
+                                      @OptionalParam("-1") long length)
   {
     try {
       if (file == null)
@@ -407,7 +407,7 @@ public class StreamModule extends AbstractQuercusModule {
   public static boolean stream_register_wrapper(Env env,
                                                 StringValue protocol,
                                                 String className,
-                                                @Optional int flags)
+                                                @OptionalParam int flags)
   {
     return stream_wrapper_register(env, protocol, className, flags);
   }
@@ -444,7 +444,7 @@ public class StreamModule extends AbstractQuercusModule {
   public static boolean stream_set_timeout(Env env,
                                            @NotNull Value stream,
                                            int seconds,
-                                           @Optional("-1") int microseconds)
+                                           @OptionalParam("-1") int microseconds)
   {
     if (stream == null)
       return false;
@@ -477,11 +477,11 @@ public class StreamModule extends AbstractQuercusModule {
   @ReturnNullAsFalse
   public static SocketInputOutput stream_socket_client(Env env,
                                   @NotNull String remoteSocket,
-                                  @Optional @Reference Value errorInt,
-                                  @Optional @Reference Value errorStr,
-                                  @Optional("120.0") double timeout,
-                                  @Optional("STREAM_CLIENT_CONNECT") int flags,
-                                  @Optional StreamContextResource context)
+                                  @OptionalParam @Reference Value errorInt,
+                                  @OptionalParam @Reference Value errorStr,
+                                  @OptionalParam("120.0") double timeout,
+                                  @OptionalParam("STREAM_CLIENT_CONNECT") int flags,
+                                  @OptionalParam StreamContextResource context)
   {
     try {
       if (remoteSocket == null) {
@@ -577,7 +577,7 @@ public class StreamModule extends AbstractQuercusModule {
                                     @ReadOnly Value write,
                                     @ReadOnly Value except,
                                     int timeoutSeconds,
-                                    @Optional int timeoutMicroseconds)
+                                    @OptionalParam int timeoutMicroseconds)
   {
     int count = 0;
 
@@ -629,7 +629,7 @@ public class StreamModule extends AbstractQuercusModule {
   public static boolean stream_wrapper_register(Env env,
                                                 StringValue protocol,
                                                 String className,
-                                                @Optional int flags)
+                                                @OptionalParam int flags)
   {
     HashMap<StringValue,ProtocolWrapper> wrapperMap = env.getStreamWrappers();
 

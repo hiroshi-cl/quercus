@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.mail;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.module.AbstractQuercusModule;
@@ -67,8 +67,8 @@ public class MailModule extends AbstractQuercusModule {
                              String to,
                              String subject,
                              StringValue message,
-                             @Optional String additionalHeaders,
-                             @Optional String additionalParameters)
+                             @OptionalParam String additionalHeaders,
+                             @OptionalParam String additionalParameters)
   {
     Transport smtp = null;
 

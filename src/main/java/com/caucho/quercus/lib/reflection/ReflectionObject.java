@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.reflection;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.ObjectValue;
 import com.caucho.quercus.env.QuercusClass;
@@ -58,7 +58,7 @@ public class ReflectionObject extends ReflectionClass
 
   public static String export(Env env,
                               Value object,
-                              @Optional boolean isReturn)
+                              @OptionalParam boolean isReturn)
   {
     return null;
   }

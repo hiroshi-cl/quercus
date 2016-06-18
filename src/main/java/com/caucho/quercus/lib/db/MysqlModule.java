@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.db;
 
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.BooleanValue;
 import com.caucho.quercus.env.ConstStringValue;
 import com.caucho.quercus.env.Env;
@@ -108,7 +108,7 @@ public class MysqlModule extends AbstractQuercusModule {
   /**
    * Returns the number of affected rows.
    */
-  public static int mysql_affected_rows(Env env, @Optional Mysqli conn)
+  public static int mysql_affected_rows(Env env, @OptionalParam Mysqli conn)
   {
     if (conn == null)
       conn = getConnection(env);
@@ -119,7 +119,7 @@ public class MysqlModule extends AbstractQuercusModule {
   /**
    * Get information about the most recent query.
    */
-  public static Value mysql_info(Env env, @Optional Mysqli conn)
+  public static Value mysql_info(Env env, @OptionalParam Mysqli conn)
   {
     if (conn == null)
       conn = getConnection(env);
@@ -135,8 +135,8 @@ public class MysqlModule extends AbstractQuercusModule {
   public static boolean mysql_change_user(Env env,
                                           StringValue user,
                                           StringValue pass,
-                                          @Optional StringValue database,
-                                          @Optional Mysqli conn)
+                                          @OptionalParam StringValue database,
+                                          @OptionalParam Mysqli conn)
   {
     return false;
   }
@@ -145,7 +145,7 @@ public class MysqlModule extends AbstractQuercusModule {
    * Returns the client encoding
    */
   public static StringValue mysql_client_encoding(
-      Env env, @Optional Mysqli conn)
+      Env env, @OptionalParam Mysqli conn)
   {
     if (conn == null)
       conn = getConnection(env);
@@ -156,7 +156,7 @@ public class MysqlModule extends AbstractQuercusModule {
   /**
    * Closes a mysql connection.
    */
-  public static boolean mysql_close(Env env, @Optional Mysqli conn)
+  public static boolean mysql_close(Env env, @OptionalParam Mysqli conn)
   {
     boolean isEnvConn = false;
 
@@ -194,7 +194,7 @@ public class MysqlModule extends AbstractQuercusModule {
    */
   public static boolean mysql_create_db(Env env,
                                         @NotNull StringValue name,
-                                        @Optional Mysqli conn)
+                                        @OptionalParam Mysqli conn)
   {
     if (name.length() == 0)
       return false;
@@ -255,7 +255,7 @@ public class MysqlModule extends AbstractQuercusModule {
   public static Value mysql_db_name(Env env,
                                     @NotNull MysqliResult result,
                                     int row,
-                                    @Optional("0") Value field)
+                                    @OptionalParam("0") Value field)
   {
     if (result == null)
       return BooleanValue.FALSE;
@@ -280,7 +280,7 @@ public class MysqlModule extends AbstractQuercusModule {
   public static Value mysql_result(Env env,
                                    @NotNull MysqliResult result,
                                    int row,
-                                   @Optional("0") Value field)
+                                   @OptionalParam("0") Value field)
   {
     if (result == null)
       return BooleanValue.FALSE;
@@ -293,7 +293,7 @@ public class MysqlModule extends AbstractQuercusModule {
    */
   public static boolean mysql_drop_db(Env env,
                                       @NotNull StringValue databaseName,
-                                      @Optional Mysqli conn)
+                                      @OptionalParam Mysqli conn)
   {
     if (databaseName.length() == 0)
       return false;
@@ -309,7 +309,7 @@ public class MysqlModule extends AbstractQuercusModule {
    */
   public static boolean mysql_dropdb(Env env,
                                      @NotNull StringValue databaseName,
-                                     @Optional Mysqli conn)
+                                     @OptionalParam Mysqli conn)
   {
     return mysql_drop_db(env, databaseName, conn);
   }
@@ -317,7 +317,7 @@ public class MysqlModule extends AbstractQuercusModule {
   /**
    * Returns the error number of the most recent error
    */
-  public static int mysql_errno(Env env, @Optional Mysqli conn)
+  public static int mysql_errno(Env env, @OptionalParam Mysqli conn)
   {
     if (conn == null)
       conn = getConnection(env);
@@ -337,7 +337,7 @@ public class MysqlModule extends AbstractQuercusModule {
   /**
    * Returns the most recent error.
    */
-  public static StringValue mysql_error(Env env, @Optional Mysqli conn)
+  public static StringValue mysql_error(Env env, @OptionalParam Mysqli conn)
   {
     if (conn == null)
       conn = getConnection(env);
@@ -412,7 +412,7 @@ public class MysqlModule extends AbstractQuercusModule {
 
   public static StringValue mysql_real_escape_string(Env env,
                                                      Value val,
-                                                     @Optional Mysqli conn)
+                                                     @OptionalParam Mysqli conn)
   {
     StringValue unescapedString = val.toStringValue();
 
@@ -427,7 +427,7 @@ public class MysqlModule extends AbstractQuercusModule {
    */
   public static Value mysql_fetch_array(Env env,
                                         @NotNull MysqliResult result,
-                                        @Optional("MYSQL_BOTH") int type)
+                                        @OptionalParam("MYSQL_BOTH") int type)
   {
     if (result == null) {
       return BooleanValue.FALSE;
@@ -472,7 +472,7 @@ public class MysqlModule extends AbstractQuercusModule {
    */
   public static Value mysql_fetch_field(Env env,
                                         @NotNull MysqliResult result,
-                                        @Optional("-1") int fieldOffset)
+                                        @OptionalParam("-1") int fieldOffset)
   {
     /**
      * ERRATA is also documented in php/142s.qa
@@ -613,7 +613,7 @@ public class MysqlModule extends AbstractQuercusModule {
    */
   public static Value mysql_query(Env env,
                                   StringValue sql,
-                                  @Optional Mysqli conn)
+                                  @OptionalParam Mysqli conn)
   {
     if (conn == null)
       conn = getConnection(env);
@@ -639,8 +639,8 @@ public class MysqlModule extends AbstractQuercusModule {
    */
   public static Value mysql_fetch_object(Env env,
                                          @NotNull MysqliResult result,
-                                         @Optional String className,
-                                         @Optional Value[] args)
+                                         @OptionalParam String className,
+                                         @OptionalParam Value[] args)
   {
     if (result == null) {
       return BooleanValue.FALSE;
@@ -830,7 +830,7 @@ public class MysqlModule extends AbstractQuercusModule {
    */
   public static Value mysql_field_len(Env env,
                                       @NotNull MysqliResult result,
-                                      @Optional("0") int fieldOffset)
+                                      @OptionalParam("0") int fieldOffset)
   {
     // gallery2 calls this function with 1 arg, so fieldOffset is optional
 
@@ -874,7 +874,7 @@ public class MysqlModule extends AbstractQuercusModule {
   /**
    * Returns a string describing the host.
    */
-  public static StringValue mysql_get_host_info(Env env, @Optional Mysqli conn)
+  public static StringValue mysql_get_host_info(Env env, @OptionalParam Mysqli conn)
   {
     if (conn == null)
       conn = getConnection(env);
@@ -886,7 +886,7 @@ public class MysqlModule extends AbstractQuercusModule {
    * Returns an integer respresenting the MySQL protocol
    * version.
    */
-  public static int mysql_get_proto_info(Env env, @Optional Mysqli conn)
+  public static int mysql_get_proto_info(Env env, @OptionalParam Mysqli conn)
   {
     if (conn == null)
       conn = getConnection(env);
@@ -898,7 +898,7 @@ public class MysqlModule extends AbstractQuercusModule {
    * Returns the MySQL server version.
    */
 
-  public static Value mysql_get_server_info(Env env, @Optional Mysqli conn)
+  public static Value mysql_get_server_info(Env env, @OptionalParam Mysqli conn)
   {
     if (conn == null) {
       conn = getConnection(env);
@@ -915,7 +915,7 @@ public class MysqlModule extends AbstractQuercusModule {
    * INSERT query on success, 0 if the previous query does not generate
    * an AUTO_INCREMENT value, or FALSE if no MySQL connection was established
    */
-  public static Value mysql_insert_id(Env env, @Optional Mysqli conn)
+  public static Value mysql_insert_id(Env env, @OptionalParam Mysqli conn)
   {
     if (conn == null)
       conn = getConnection(env);
@@ -928,7 +928,7 @@ public class MysqlModule extends AbstractQuercusModule {
    * databases available from the current mysql daemon.
    */
   public static Value mysql_list_dbs(Env env,
-                                     @Optional Mysqli conn)
+                                     @OptionalParam Mysqli conn)
   {
     if (conn == null)
       conn = getConnection(env);
@@ -952,7 +952,7 @@ public class MysqlModule extends AbstractQuercusModule {
   public static Value mysql_list_fields(Env env,
                                         String database,
                                         StringValue tableName,
-                                        @Optional Mysqli conn)
+                                        @OptionalParam Mysqli conn)
   {
     // php/141c
     // php gives warnings when the table doesn't exist or is an
@@ -991,7 +991,7 @@ public class MysqlModule extends AbstractQuercusModule {
   public static Value mysql_listfields(Env env,
                                        String databaseName,
                                        StringValue tableName,
-                                       @Optional Mysqli conn)
+                                       @OptionalParam Mysqli conn)
   {
     return mysql_list_fields(env, databaseName, tableName, conn);
   }
@@ -1002,7 +1002,7 @@ public class MysqlModule extends AbstractQuercusModule {
   public static Value mysql_db_query(Env env,
                                      String databaseName,
                                      StringValue query,
-                                     @Optional Mysqli conn)
+                                     @OptionalParam Mysqli conn)
   {
     if (conn == null)
       conn = getConnection(env);
@@ -1018,7 +1018,7 @@ public class MysqlModule extends AbstractQuercusModule {
    */
   public static boolean mysql_select_db(Env env,
                                         String dbName,
-                                        @Optional Mysqli conn)
+                                        @OptionalParam Mysqli conn)
   {
     if (dbName == null || dbName.length() == 0)
       return false;
@@ -1034,7 +1034,7 @@ public class MysqlModule extends AbstractQuercusModule {
    */
   public static Object mysql_list_tables(Env env,
                                          StringValue databaseName,
-                                         @Optional Mysqli conn)
+                                         @OptionalParam Mysqli conn)
   {
     return mysql_query(env,
                        env.createString("SHOW TABLES FROM " + databaseName),
@@ -1085,11 +1085,11 @@ public class MysqlModule extends AbstractQuercusModule {
    * so don't need to do anything different from regular mysql_connect().
    */
   public static Value mysql_pconnect(Env env,
-                                     @Optional StringValue server,
-                                     @Optional StringValue user,
-                                     @Optional StringValue password,
-                                     @Optional boolean newLink,
-                                     @Optional int flags)
+                                     @OptionalParam StringValue server,
+                                     @OptionalParam StringValue user,
+                                     @OptionalParam StringValue password,
+                                     @OptionalParam boolean newLink,
+                                     @OptionalParam int flags)
   {
     Value value = mysql_connect(env, server, user, password, newLink, flags);
 
@@ -1105,11 +1105,11 @@ public class MysqlModule extends AbstractQuercusModule {
    * Returns a new mysql connection.
    */
   public static Value mysql_connect(Env env,
-                                    @Optional StringValue host,
-                                    @Optional StringValue userName,
-                                    @Optional StringValue password,
-                                    @Optional boolean isNewLink,
-                                    @Optional int flags) {
+                                    @OptionalParam StringValue host,
+                                    @OptionalParam StringValue userName,
+                                    @OptionalParam StringValue password,
+                                    @OptionalParam boolean isNewLink,
+                                    @OptionalParam int flags) {
     int port = -1;
     String socketStr = "";
 
@@ -1202,7 +1202,7 @@ public class MysqlModule extends AbstractQuercusModule {
   /**
    * Checks if the connection is still valid.
    */
-  public static boolean mysql_ping(Env env, @Optional Mysqli conn)
+  public static boolean mysql_ping(Env env, @OptionalParam Mysqli conn)
   {
     if (conn == null)
       conn = getConnection(env);
@@ -1214,7 +1214,7 @@ public class MysqlModule extends AbstractQuercusModule {
    * Returns a string with the status of the connection
    * or NULL if error.
    */
-  public static Value mysql_stat(Env env, @Optional Mysqli conn)
+  public static Value mysql_stat(Env env, @OptionalParam Mysqli conn)
   {
     if (conn == null)
       conn = getConnection(env);
@@ -1243,7 +1243,7 @@ public class MysqlModule extends AbstractQuercusModule {
    */
   public static Object mysql_unbuffered_query(Env env,
                                        @NotNull StringValue name,
-                                       @Optional Mysqli conn)
+                                       @OptionalParam Mysqli conn)
   {
     // An "unbuffered" query is a performance optimization
     // for large data sets. Mysql will lock the table in
@@ -1260,7 +1260,7 @@ public class MysqlModule extends AbstractQuercusModule {
    * thread, but it is really a connection identifier.
    */
   public static Value mysql_thread_id(Env env,
-                                      @Optional Mysqli conn)
+                                      @OptionalParam Mysqli conn)
   {
     if (conn == null)
       conn = getConnection(env);
@@ -1270,7 +1270,7 @@ public class MysqlModule extends AbstractQuercusModule {
 
   //@todo mysql_list_processes()
 
-  public static Value mysql_get_charset(Env env, @Optional Mysqli conn)
+  public static Value mysql_get_charset(Env env, @OptionalParam Mysqli conn)
   {
     if (conn == null) {
       conn = getConnection(env);
@@ -1281,7 +1281,7 @@ public class MysqlModule extends AbstractQuercusModule {
 
   public static boolean mysql_set_charset(Env env,
                                           StringValue charset,
-                                          @Optional Mysqli conn)
+                                          @OptionalParam Mysqli conn)
   {
     if (conn == null) {
       conn = getConnection(env);

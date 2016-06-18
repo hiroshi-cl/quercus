@@ -367,9 +367,9 @@ public class XMLWriter {
    * Starts the document
    */
   public boolean startDocument(Env env,
-                               @Optional StringValue version,
-                               @Optional StringValue encoding,
-                               @Optional StringValue standalone)
+                               @OptionalParam StringValue version,
+                               @OptionalParam StringValue encoding,
+                               @OptionalParam StringValue standalone)
   {
     _s.append("<?xml");
     
@@ -417,8 +417,8 @@ public class XMLWriter {
    * Starts a DTD
    */
   public boolean startDTD(StringValue name,
-                          @Optional StringValue publicId,
-                          @Optional StringValue systemId)
+                          @OptionalParam StringValue publicId,
+                          @OptionalParam StringValue systemId)
   {
     return true;
   }
@@ -620,9 +620,9 @@ public class XMLWriter {
    */
   public boolean writeDTD(Env env,
                           StringValue name,
-                          @Optional StringValue publicId,
-                          @Optional StringValue systemId,
-                          @Optional StringValue subset)
+                          @OptionalParam StringValue publicId,
+                          @OptionalParam StringValue systemId,
+                          @OptionalParam StringValue subset)
   {
     startDTD(name, publicId, systemId);
     text(env, subset);
@@ -636,7 +636,7 @@ public class XMLWriter {
    */
   public boolean writeElement(Env env,
                               StringValue name,
-                              @Optional StringValue content)
+                              @OptionalParam StringValue content)
   {
     startElement(env, name);
 
@@ -655,7 +655,7 @@ public class XMLWriter {
                                 StringValue prefix,
                                 StringValue name,
                                 StringValue uri,
-                                @Optional StringValue content)
+                                @OptionalParam StringValue content)
   {
     startElementNS(env, prefix, name, uri);
 

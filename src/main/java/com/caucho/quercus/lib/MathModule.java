@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.module.AbstractQuercusModule;
 import com.caucho.quercus.program.JavaClassDef;
@@ -560,8 +560,8 @@ public class MathModule extends AbstractQuercusModule {
     return new LongValue(RAND_MAX);
   }
 
-  public static long mt_rand(@Optional("0") long min,
-                             @Optional("RAND_MAX") long max)
+  public static long mt_rand(@OptionalParam("0") long min,
+                             @OptionalParam("RAND_MAX") long max)
   {
     long range = max - min + 1;
 
@@ -575,7 +575,7 @@ public class MathModule extends AbstractQuercusModule {
     return min + value % range;
   }
 
-  public static Value mt_srand(@Optional long seed)
+  public static Value mt_srand(@OptionalParam long seed)
   {
     return NullValue.NULL;
   }
@@ -621,13 +621,13 @@ public class MathModule extends AbstractQuercusModule {
     return 180 * value / Math.PI;
   }
 
-  public static long rand(@Optional int min,
-                          @Optional("RAND_MAX") int max)
+  public static long rand(@OptionalParam int min,
+                          @OptionalParam("RAND_MAX") int max)
   {
     return mt_rand(min, max);
   }
 
-  public static double round(double value, @Optional int precision)
+  public static double round(double value, @OptionalParam int precision)
   {
     if (precision > 0) {
       double exp = Math.pow(10, precision);
@@ -653,7 +653,7 @@ public class MathModule extends AbstractQuercusModule {
     return Math.sqrt(value);
   }
 
-  public static Value srand(@Optional long seed)
+  public static Value srand(@OptionalParam long seed)
   {
     return NullValue.NULL;
   }

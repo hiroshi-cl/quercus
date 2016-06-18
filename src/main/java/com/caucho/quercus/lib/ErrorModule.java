@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.expr.Expr;
 import com.caucho.quercus.expr.CallExpr;
@@ -91,7 +91,7 @@ public class ErrorModule extends AbstractQuercusModule {
   /**
    * Exits
    */
-  public static Value die(Env env, @Optional String msg)
+  public static Value die(Env env, @OptionalParam String msg)
   {
     if (msg != null)
       return env.die(msg);
@@ -103,8 +103,8 @@ public class ErrorModule extends AbstractQuercusModule {
    * Produces a backtrace
    */
   public static ArrayValue debug_backtrace(Env env,
-                                           @Optional("DEBUG_BACKTRACE_PROVIDE_OBJECT") int options,
-                                           @Optional int limit)
+                                           @OptionalParam("DEBUG_BACKTRACE_PROVIDE_OBJECT") int options,
+                                           @OptionalParam int limit)
   {
     Exception e = new Exception();
     e.fillInStackTrace();
@@ -491,7 +491,7 @@ public class ErrorModule extends AbstractQuercusModule {
   /**
    * Exits
    */
-  public Value exit(Env env, @Optional Value msg)
+  public Value exit(Env env, @OptionalParam Value msg)
   {
     return env.exit(msg);
   }
@@ -509,9 +509,9 @@ public class ErrorModule extends AbstractQuercusModule {
    */
   public static boolean error_log(Env env,
                                   StringValue message,
-                                  @Optional int type,
-                                  @Optional StringValue destination,
-                                  @Optional StringValue extraHeaders)
+                                  @OptionalParam int type,
+                                  @OptionalParam StringValue destination,
+                                  @OptionalParam StringValue extraHeaders)
   {
     if (type == 3) {
       if (destination.length() == 0) {
@@ -583,7 +583,7 @@ public class ErrorModule extends AbstractQuercusModule {
    * Changes the error reporting value.
    */
   public static long error_reporting(Env env,
-                                     @Optional Value levelV)
+                                     @OptionalParam Value levelV)
   {
     long oldMask = env.getIni("error_reporting").toLong();
 
@@ -615,7 +615,7 @@ public class ErrorModule extends AbstractQuercusModule {
    */
   public static boolean set_error_handler(Env env,
                                           Callable fun,
-                                          @Optional("E_ALL") int errorMask)
+                                          @OptionalParam("E_ALL") int errorMask)
   {
     env.setErrorHandler(errorMask, fun);
 
@@ -655,7 +655,7 @@ public class ErrorModule extends AbstractQuercusModule {
    */
   public static Value trigger_error(Env env,
                                     String msg,
-                                    @Optional("E_USER_NOTICE") int code)
+                                    @OptionalParam("E_USER_NOTICE") int code)
   {
     switch (code) {
     case Env.E_USER_NOTICE:
@@ -687,7 +687,7 @@ public class ErrorModule extends AbstractQuercusModule {
    */
   public Value user_error(Env env,
                           String msg,
-                          @Optional("E_USER_NOTICE") int code)
+                          @OptionalParam("E_USER_NOTICE") int code)
   {
     return trigger_error(env, msg, code);
   }

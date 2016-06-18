@@ -32,7 +32,7 @@ package com.caucho.quercus.lib.regexp;
 import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.QuercusRuntimeException;
 import com.caucho.quercus.annotation.Hide;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.NotNull;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.annotation.UsesSymbolTable;
@@ -140,7 +140,7 @@ public class RegexpModule
   public static Value ereg(Env env,
                            Ereg regexp,
                            StringValue string,
-                           @Optional @Reference Value regsV)
+                           @OptionalParam @Reference Value regsV)
   {
 
     if (regexp.getRawRegexp().length() == 0) {
@@ -159,7 +159,7 @@ public class RegexpModule
   public static Value eregi(Env env,
                             Eregi regexp,
                             StringValue string,
-                            @Optional @Reference Value regsV)
+                            @OptionalParam @Reference Value regsV)
   {
 
     if (regexp.getRawRegexp().length() == 0) {
@@ -485,9 +485,9 @@ public class RegexpModule
   public static Value preg_match(Env env,
                                  Regexp regexp,
                                  StringValue subject,
-                                 @Optional @Reference Value matchRef,
-                                 @Optional int flags,
-                                 @Optional int offset)
+                                 @OptionalParam @Reference Value matchRef,
+                                 @OptionalParam int flags,
+                                 @OptionalParam int offset)
   {
     if (regexp.getException() != null) {
       env.warning(regexp.getException());
@@ -595,8 +595,8 @@ public class RegexpModule
                                      Regexp regexp,
                                      StringValue subject,
                                      @Reference Value matchRef,
-                                     @Optional("PREG_PATTERN_ORDER") int flags,
-                                     @Optional int offset)
+                                     @OptionalParam("PREG_PATTERN_ORDER") int flags,
+                                     @OptionalParam int offset)
   {
     if (regexp.getException() != null) {
       env.warning(regexp.getException());
@@ -833,7 +833,7 @@ public class RegexpModule
    * Quotes regexp values
    */
   public static StringValue preg_quote(StringValue string,
-                                       @Optional StringValue delim)
+                                       @OptionalParam StringValue delim)
   {
     StringValue sb = string.createStringBuilder();
 
@@ -888,8 +888,8 @@ public class RegexpModule
                                    Regexp[] regexpList,
                                    Value replacement,
                                    Value subject,
-                                   @Optional("-1") long limit,
-                                   @Optional @Reference Value count)
+                                   @OptionalParam("-1") long limit,
+                                   @OptionalParam @Reference Value count)
   {
     for (Regexp regexp : regexpList) {
       if (regexp.getException() != null) {
@@ -940,7 +940,7 @@ public class RegexpModule
                                    Regexp regexp,
                                    Value replacement,
                                    StringValue subject,
-                                   @Optional("-1") long limit,
+                                   @OptionalParam("-1") long limit,
                                    Value countV)
     throws IllegalRegexpException
   {
@@ -999,8 +999,8 @@ public class RegexpModule
                                    Value pattern,
                                    Value replacement,
                                    Value subject,
-                                   @Optional("-1") long limit,
-                                   @Optional @Reference Value count)
+                                   @OptionalParam("-1") long limit,
+                                   @OptionalParam @Reference Value count)
   {
     Regexp []regexpList = createRegexpArray(pattern);
 
@@ -1046,7 +1046,7 @@ public class RegexpModule
                                    Regexp []regexpList,
                                    Value replacement,
                                    StringValue subject,
-                                   @Optional("-1") long limit,
+                                   @OptionalParam("-1") long limit,
                                    Value countV)
   {
     StringValue string = subject;
@@ -1410,8 +1410,8 @@ public class RegexpModule
                                             Regexp regexp,
                                             @NotNull Callable fun,
                                             Value subject,
-                                            @Optional("-1") long limit,
-                                            @Optional @Reference Value count)
+                                            @OptionalParam("-1") long limit,
+                                            @OptionalParam @Reference Value count)
   {
     if (fun == null) {
       env.warning(
@@ -1472,8 +1472,8 @@ public class RegexpModule
                                             Value regexpValue,
                                             Callable fun,
                                             Value subject,
-                                            @Optional("-1") long limit,
-                                            @Optional @Reference Value count)
+                                            @OptionalParam("-1") long limit,
+                                            @OptionalParam @Reference Value count)
   {
     if (! regexpValue.isArray()) {
       Regexp regexp = createRegexp(regexpValue.toStringValue());
@@ -1532,8 +1532,8 @@ public class RegexpModule
                                            Regexp regexp,
                                            Callable fun,
                                            StringValue subject,
-                                           @Optional("-1") long limit,
-                                           @Optional @Reference Value countV)
+                                           @OptionalParam("-1") long limit,
+                                           @OptionalParam @Reference Value countV)
     throws IllegalRegexpException
   {
     if (limit < 0)
@@ -1559,8 +1559,8 @@ public class RegexpModule
                                            Regexp []regexpList,
                                            Callable fun,
                                            StringValue subject,
-                                           @Optional("-1") long limit,
-                                           @Optional @Reference Value countV)
+                                           @OptionalParam("-1") long limit,
+                                           @OptionalParam @Reference Value countV)
   {
     if (limit < 0) {
       limit = LONG_MAX;
@@ -1593,8 +1593,8 @@ public class RegexpModule
   public static Value preg_split(Env env,
                                  Regexp regexp,
                                  StringValue string,
-                                 @Optional("-1") long limit,
-                                 @Optional int flags)
+                                 @OptionalParam("-1") long limit,
+                                 @OptionalParam int flags)
   {
     if (regexp.getException() != null) {
       env.warning(regexp.getException());
@@ -1775,7 +1775,7 @@ public class RegexpModule
   public static Value split(Env env,
                             Ereg regexp,
                             StringValue string,
-                            @Optional("-1") long limit)
+                            @OptionalParam("-1") long limit)
   {
     return splitImpl(env, regexp, string, limit);
   }
@@ -1792,7 +1792,7 @@ public class RegexpModule
   public static Value spliti(Env env,
                              Eregi regexp,
                              StringValue string,
-                             @Optional("-1") long limit)
+                             @OptionalParam("-1") long limit)
   {
     return splitImpl(env, regexp, string, limit);
   }
@@ -1859,7 +1859,7 @@ public class RegexpModule
   public static Value preg_grep(Env env,
                                 Regexp regexp,
                                 ArrayValue input,
-                                @Optional("0") int flag)
+                                @OptionalParam("0") int flag)
   {
     if (input == null)
       return NullValue.NULL;

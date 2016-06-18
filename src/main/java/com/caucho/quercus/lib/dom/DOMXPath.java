@@ -44,7 +44,7 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import com.caucho.quercus.QuercusModuleException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.Env;
 import com.caucho.util.LruCache;
 import com.caucho.xpath.Expr;
@@ -81,7 +81,7 @@ public class DOMXPath
   
   public DOMNodeList query(Env env,
                            String expression,
-                           @Optional DOMNode<Node> contextNode)
+                           @OptionalParam DOMNode<Node> contextNode)
   {
     Node node;
     

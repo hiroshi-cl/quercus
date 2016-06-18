@@ -33,7 +33,7 @@ import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.annotation.UsesSymbolTable;
@@ -204,8 +204,8 @@ public class MiscModule extends AbstractQuercusModule {
    * Execute a system command.
    */
   public static String exec(Env env, String command,
-                            @Optional Value output,
-                            @Optional @Reference Value result)
+                            @OptionalParam Value output,
+                            @OptionalParam @Reference Value result)
   {
     try {
       String []args = new String[3];
@@ -291,8 +291,8 @@ public class MiscModule extends AbstractQuercusModule {
    */
   public static Value get_browser(
                        Env env,
-                       @Optional() String user_agent,
-                       @Optional() boolean return_array)
+                       @OptionalParam() String user_agent,
+                       @OptionalParam() boolean return_array)
   {
     if (user_agent == null
         || user_agent.length() == 0)
@@ -663,7 +663,7 @@ public class MiscModule extends AbstractQuercusModule {
    * Execute a system command.
    */
   public static void passthru(Env env, String command,
-                               @Optional @Reference Value result)
+                               @OptionalParam @Reference Value result)
   {
 
     try {
@@ -721,9 +721,9 @@ public class MiscModule extends AbstractQuercusModule {
                                            String command,
                                            ArrayValue descriptorArray,
                                            @Reference Value pipes,
-                                           @Optional Path pwd,
-                                           @Optional ArrayValue envArray,
-                                           @Optional ArrayValue options)
+                                           @OptionalParam Path pwd,
+                                           @OptionalParam ArrayValue envArray,
+                                           @OptionalParam ArrayValue options)
   {
     String []args = new String[3];
 
@@ -906,7 +906,7 @@ public class MiscModule extends AbstractQuercusModule {
   /**
    * Returns the disconnect ignore setting
    */
-  public static int ignore_user_abort(@Optional boolean set)
+  public static int ignore_user_abort(@OptionalParam boolean set)
   {
     return 0;
   }
@@ -914,7 +914,7 @@ public class MiscModule extends AbstractQuercusModule {
   /**
    * Returns a unique id.
    */
-  public String uniqid(@Optional String prefix, @Optional boolean moreEntropy)
+  public String uniqid(@OptionalParam String prefix, @OptionalParam boolean moreEntropy)
   {
     StringBuilder sb = new StringBuilder();
 
@@ -976,7 +976,7 @@ public class MiscModule extends AbstractQuercusModule {
    * Execute a system command.
    */
   public static String system(Env env, String command,
-                              @Optional @Reference Value result)
+                              @OptionalParam @Reference Value result)
   {
     return exec(env, command, null, result);
   }

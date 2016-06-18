@@ -31,7 +31,7 @@ package com.caucho.quercus.lib;
 
 import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.*;
@@ -126,10 +126,10 @@ public class NetworkModule extends AbstractQuercusModule {
    */
   public static SocketInputOutput fsockopen(Env env,
                                             String host,
-                                            @Optional int port,
-                                            @Optional @Reference Value errno,
-                                            @Optional @Reference Value errstr,
-                                            @Optional double timeout)
+                                            @OptionalParam int port,
+                                            @OptionalParam @Reference Value errno,
+                                            @OptionalParam @Reference Value errstr,
+                                            @OptionalParam double timeout)
   {
     try {
       if (host == null)
@@ -189,10 +189,10 @@ public class NetworkModule extends AbstractQuercusModule {
    */
   public static SocketInputOutput pfsockopen(Env env,
                                              String host,
-                                             @Optional int port,
-                                             @Optional @Reference Value errno,
-                                             @Optional @Reference Value errstr,
-                                             @Optional double timeout)
+                                             @OptionalParam int port,
+                                             @OptionalParam @Reference Value errno,
+                                             @OptionalParam @Reference Value errstr,
+                                             @OptionalParam double timeout)
   {
     return fsockopen(env, host, port, errno, errstr, timeout);
   }
@@ -487,7 +487,7 @@ public class NetworkModule extends AbstractQuercusModule {
   public static boolean getmxrr(Env env,
                                 @NotNull String hostname,
                                 @Reference Value mxhosts,
-                                @Optional @Reference Value weight)
+                                @OptionalParam @Reference Value weight)
   {
     return dns_get(env, hostname, "MX", mxhosts, weight);
   }
@@ -590,7 +590,7 @@ public class NetworkModule extends AbstractQuercusModule {
   public static boolean dns_get_mx(Env env,
                                    @NotNull String hostname,
                                    @Reference Value mxhosts,
-                                   @Optional @Reference Value weight)
+                                   @OptionalParam @Reference Value weight)
   {
     return dns_get(env, hostname, "MX", mxhosts, weight);
 
@@ -598,7 +598,7 @@ public class NetworkModule extends AbstractQuercusModule {
 
   public static boolean checkdnsrr(Env env,
                                    @NotNull String hostname,
-                                   @Optional("MX") String type)
+                                   @OptionalParam("MX") String type)
   {
     return dns_get(env, hostname, type, null, null);
   }
@@ -614,16 +614,16 @@ public class NetworkModule extends AbstractQuercusModule {
    */
   public static boolean dns_check_record(Env env,
                                          @NotNull String hostname,
-                                         @Optional("MX") String type)
+                                         @OptionalParam("MX") String type)
   {
     return dns_get(env, hostname, type, null, null);
   }
 
   public ArrayValue dns_get_record(Env env,
                                    @NotNull String hostname,
-                                   @Optional("-1") int type,
-                                   @Optional @Reference Value authnsRef,
-                                   @Optional @Reference Value addtlRef)
+                                   @OptionalParam("-1") int type,
+                                   @OptionalParam @Reference Value authnsRef,
+                                   @OptionalParam @Reference Value addtlRef)
   {
     ArrayValue result =  new ArrayValueImpl();
 

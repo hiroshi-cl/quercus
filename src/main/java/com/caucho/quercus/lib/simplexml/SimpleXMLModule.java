@@ -30,7 +30,7 @@ package com.caucho.quercus.lib.simplexml;
 
 import com.caucho.quercus.UnimplementedException;
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.BooleanValue;
 import com.caucho.quercus.env.Env;
@@ -63,10 +63,10 @@ public class SimpleXMLModule
 
   public Value simplexml_load_string(Env env,
                                      Value data,
-                                     @Optional String className,
-                                     @Optional int options,
-                                     @Optional Value namespaceV,
-                                     @Optional boolean isPrefix)
+                                     @OptionalParam String className,
+                                     @OptionalParam int options,
+                                     @OptionalParam Value namespaceV,
+                                     @OptionalParam boolean isPrefix)
   {
     if (data.isNull() || data == BooleanValue.FALSE)
       return BooleanValue.FALSE;
@@ -83,10 +83,10 @@ public class SimpleXMLModule
 
   public Value simplexml_load_file(Env env,
                                    @NotNull StringValue file,
-                                   @Optional String className,
-                                   @Optional int options,
-                                   @Optional Value namespaceV,
-                                   @Optional boolean isPrefix)
+                                   @OptionalParam String className,
+                                   @OptionalParam int options,
+                                   @OptionalParam Value namespaceV,
+                                   @OptionalParam boolean isPrefix)
   {
     if (className == null || className.length() == 0) {
       className = "SimpleXMLElement";

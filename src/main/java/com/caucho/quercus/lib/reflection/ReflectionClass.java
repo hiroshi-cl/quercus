@@ -34,7 +34,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import com.caucho.quercus.UnimplementedException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
@@ -103,7 +103,7 @@ public class ReflectionClass
 
   public static String export(Env env,
                               Value cls,
-                              @Optional boolean isReturn)
+                              @OptionalParam boolean isReturn)
   {
     return null;
   }
@@ -375,12 +375,12 @@ public class ReflectionClass
     return obj.getQuercusClass().getName().equals(_name);
   }
 
-  public Value newInstance(Env env, @Optional Value []args)
+  public Value newInstance(Env env, @OptionalParam Value []args)
   {
     return _cls.callNew(env, args);
   }
 
-  public Value newInstanceArgs(Env env, @Optional ArrayValue args)
+  public Value newInstanceArgs(Env env, @OptionalParam ArrayValue args)
   {
     if (args == null) {
       return _cls.callNew(env, new Value []{});
@@ -444,7 +444,7 @@ public class ReflectionClass
 
   public Value getStaticPropertyValue(Env env,
                                       StringValue name,
-                                      @Optional Value defaultV)
+                                      @OptionalParam Value defaultV)
   {
     Value field = _cls.getStaticFieldInternal(env, name);
 

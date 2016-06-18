@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.mcrypt;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
@@ -92,7 +92,7 @@ public class McryptModule extends AbstractQuercusModule {
                                        byte []key,
                                        byte []data,
                                        int mode,
-                                       @Optional byte []iv)
+                                       @OptionalParam byte []iv)
   {
     try {
       Mcrypt mcrypt = new Mcrypt(env, cipher, "cbc");
@@ -120,7 +120,7 @@ public class McryptModule extends AbstractQuercusModule {
                                        byte []key,
                                        byte []data,
                                        int mode,
-                                       @Optional byte []iv)
+                                       @OptionalParam byte []iv)
   {
     try {
       Mcrypt mcrypt = new Mcrypt(env, cipher, "cfb");
@@ -145,7 +145,7 @@ public class McryptModule extends AbstractQuercusModule {
    */
   public static StringValue mcrypt_create_iv(Env env,
                                              int size,
-                                             @Optional int randomMode)
+                                             @OptionalParam int randomMode)
   {
     StringValue bb = env.createBinaryBuilder(size);
 
@@ -163,7 +163,7 @@ public class McryptModule extends AbstractQuercusModule {
                                            byte []key,
                                            byte []data,
                                            String mode,
-                                           @Optional byte []iv)
+                                           @OptionalParam byte []iv)
   {
     try {
       Mcrypt mcrypt = new Mcrypt(env, cipher, mode);
@@ -186,7 +186,7 @@ public class McryptModule extends AbstractQuercusModule {
                                        byte []key,
                                        byte []data,
                                        int mode,
-                                       @Optional byte []iv)
+                                       @OptionalParam byte []iv)
   {
     try {
       Mcrypt mcrypt = new Mcrypt(env, cipher, "ecb");
@@ -324,7 +324,7 @@ public class McryptModule extends AbstractQuercusModule {
                                            byte []key,
                                            byte []data,
                                            String mode,
-                                           @Optional byte []iv)
+                                           @OptionalParam byte []iv)
   {
     try {
       Mcrypt mcrypt = new Mcrypt(env, cipher, mode);
@@ -514,7 +514,7 @@ public class McryptModule extends AbstractQuercusModule {
    */
   public static int mcrypt_module_get_algo_block_size(Env env,
                                                       String cipher,
-                                                      @Optional String libDir)
+                                                      @OptionalParam String libDir)
   {
     try {
       Mcrypt mcrypt = new Mcrypt(env, cipher, "cbc");
@@ -532,7 +532,7 @@ public class McryptModule extends AbstractQuercusModule {
    */
   public static int mcrypt_module_get_algo_key_size(Env env,
                                                     String cipher,
-                                                    @Optional String libDir)
+                                                    @OptionalParam String libDir)
   {
     try {
       // use ofb because it exists for most ciphers
@@ -552,7 +552,7 @@ public class McryptModule extends AbstractQuercusModule {
   public static Value mcrypt_module_get_supported_key_sizes(
       Env env,
       String cipher,
-      @Optional String libDir) {
+      @OptionalParam String libDir) {
     try {
       // use ofb because it exists for most ciphers
       Mcrypt mcrypt = new Mcrypt(env, cipher, "ofb");
@@ -571,7 +571,7 @@ public class McryptModule extends AbstractQuercusModule {
   public static boolean mcrypt_module_is_block_algorithm(
       Env env,
       String cipher,
-      @Optional String libDir) {
+      @OptionalParam String libDir) {
     try {
       // use ofb because it exists for most ciphers
       Mcrypt mcrypt = new Mcrypt(env, cipher, "ofb");
@@ -590,7 +590,7 @@ public class McryptModule extends AbstractQuercusModule {
   public static boolean mcrypt_module_is_block_algorithm_mode(
       Env env,
       String mode,
-      @Optional String libDir) {
+      @OptionalParam String libDir) {
     try {
       Mcrypt mcrypt = new Mcrypt(env, "des", mode);
 
@@ -607,7 +607,7 @@ public class McryptModule extends AbstractQuercusModule {
    */
   public static boolean mcrypt_module_is_block_mode(Env env,
                                                     String mode,
-                                                    @Optional String libDir)
+                                                    @OptionalParam String libDir)
   {
     try {
       Mcrypt mcrypt = new Mcrypt(env, "des", mode);
@@ -664,7 +664,7 @@ public class McryptModule extends AbstractQuercusModule {
                                   byte []key,
                                   byte []data,
                                   int mode,
-                                  @Optional byte []iv)
+                                  @OptionalParam byte []iv)
   {
     try {
       Mcrypt mcrypt = new Mcrypt(env, cipher, "ofb");

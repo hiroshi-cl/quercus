@@ -29,7 +29,7 @@
 package com.caucho.quercus.lib.zip;
 
 import com.caucho.quercus.*;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Env;
@@ -122,7 +122,7 @@ public class QuercusZipEntry {
    */
   @ReturnNullAsFalse
     public StringValue zip_entry_read(Env env,
-                                      @Optional("1024") int length)
+                                      @OptionalParam("1024") int length)
   {
     if (_in == null)
       return null;

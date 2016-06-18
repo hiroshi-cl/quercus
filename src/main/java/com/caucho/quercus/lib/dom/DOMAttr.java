@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.dom;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.Env;
 
 import org.w3c.dom.Attr;
@@ -39,7 +39,7 @@ public class DOMAttr
   extends DOMNode<Attr>
 {
   public static DOMAttr __construct(
-      Env env, String name, @Optional String value)
+      Env env, String name, @OptionalParam String value)
   {
     DOMAttr attr = getImpl(env).createAttr(name);
 

@@ -31,7 +31,7 @@ package com.caucho.quercus.lib.zlib;
 
 import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.lib.file.FileValue;
@@ -120,7 +120,7 @@ public class Zlib {
    * @param length # of bytes to compress
    * @return # of uncompressed bytes
    */
-  public int gzwrite(Env env, InputStream is, @Optional("-1") int length)
+  public int gzwrite(Env env, InputStream is, @OptionalParam("-1") int length)
   {
     if (_fileValue == null) {
       env.warning(L.l("file could not be open for writing"));
@@ -200,7 +200,7 @@ public class Zlib {
    */
   public int gzputs(Env env,
                     @NotNull InputStream is,
-                    @Optional("-1") int length)
+                    @OptionalParam("-1") int length)
   {
     return gzwrite(env, is, length);
   }
@@ -340,7 +340,7 @@ public class Zlib {
   @ReturnNullAsFalse
   public StringValue gzgetss(Env env,
                              int length,
-                             @Optional StringValue allowedTags)
+                             @OptionalParam StringValue allowedTags)
   {
     try {
       if (_in == null) {

@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.spl;
 
 import com.caucho.quercus.UnimplementedException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Value;
@@ -72,7 +72,7 @@ public class SplFileInfo
     return _path.getLastAccessTime() / 1000;
   }
 
-  public String getBasename(Env env, @Optional String suffix)
+  public String getBasename(Env env, @OptionalParam String suffix)
   {
     String name = _path.getTail();
 
@@ -102,7 +102,7 @@ public class SplFileInfo
     }
   }
 
-  public SplFileInfo getFileInfo(Env env, @Optional String className)
+  public SplFileInfo getFileInfo(Env env, @OptionalParam String className)
   {
     throw new UnimplementedException("SplFileInfo::getFileInfo()");
   }
@@ -144,7 +144,7 @@ public class SplFileInfo
     return parent.getNativePath();
   }
 
-  public SplFileInfo getPathInfo(Env env, @Optional String className)
+  public SplFileInfo getPathInfo(Env env, @OptionalParam String className)
   {
     throw new UnimplementedException("SplFileInfo::getPathInfo()");
   }
@@ -217,19 +217,19 @@ public class SplFileInfo
   }
 
   public SplFileObject openFile(Env env,
-                                @Optional("r") String mode,
-                                @Optional boolean isUseIncludePath,
-                                @Optional Value context)
+                                @OptionalParam("r") String mode,
+                                @OptionalParam boolean isUseIncludePath,
+                                @OptionalParam Value context)
   {
     throw new UnimplementedException("SplFileInfo::openFile()");
   }
 
-  public void setFileClass(Env env, @Optional String className)
+  public void setFileClass(Env env, @OptionalParam String className)
   {
     _openFileClassName = className;
   }
 
-  public void setInfoClass(Env env, @Optional String className)
+  public void setInfoClass(Env env, @OptionalParam String className)
   {
     _infoFileClassName = className;
   }

@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib;
 
 import com.caucho.quercus.QuercusException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.env.BooleanValue;
 import com.caucho.quercus.env.Env;
@@ -57,9 +57,9 @@ public class ExifModule extends AbstractQuercusModule {
    *  Reads the EXIF headers from JPEG or TIFF
    */
   public static Value exif_read_data(Env env, Path file,
-                                     @Optional String sections,
-                                     @Optional boolean arrays,
-                                     @Optional boolean thumbs)
+                                     @OptionalParam String sections,
+                                     @OptionalParam boolean arrays,
+                                     @OptionalParam boolean thumbs)
   {
     return BooleanValue.FALSE;
   }
@@ -68,9 +68,9 @@ public class ExifModule extends AbstractQuercusModule {
    *  Alias of exif_read_data()
    */
   public static Value read_exif_data(Env env, Path file,
-                                     @Optional String sections,
-                                     @Optional boolean arrays,
-                                     @Optional boolean thumbs)
+                                     @OptionalParam String sections,
+                                     @OptionalParam boolean arrays,
+                                     @OptionalParam boolean thumbs)
   {
     return exif_read_data(env, file, sections, arrays, thumbs);
   }
@@ -84,9 +84,9 @@ public class ExifModule extends AbstractQuercusModule {
    *  @return either the thumbnail or FALSE
    */
   public static Value exif_thumbnail(Env env, Path file,
-                                     @Optional int width,
-                                     @Optional int height,
-                                     @Optional int imageType)
+                                     @OptionalParam int width,
+                                     @OptionalParam int height,
+                                     @OptionalParam int imageType)
   {
     return BooleanValue.FALSE;
   }

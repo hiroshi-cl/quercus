@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.db;
 
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.annotation.Name;
 import com.caucho.quercus.env.Env;
@@ -241,8 +241,8 @@ public class OracleOciLob {
    */
   @ReturnNullAsFalse
   public LongValue erase(Env env,
-                         @Optional("0") long offset,
-                         @Optional("-1") long length)
+                         @OptionalParam("0") long offset,
+                         @OptionalParam("-1") long length)
   {
     try {
 
@@ -325,8 +325,8 @@ public class OracleOciLob {
    */
   public boolean export(Env env,
                         Path file,
-                        @Optional("0") long start,
-                        @Optional("-1") long length)
+                        @OptionalParam("0") long start,
+                        @OptionalParam("-1") long length)
   {
     try {
 
@@ -362,7 +362,7 @@ public class OracleOciLob {
    * Flushes/writes buffer of the LOB to the server
    */
   public boolean flush(Env env,
-                       @Optional("-1") int flag)
+                       @OptionalParam("-1") int flag)
   {
     try {
 
@@ -543,7 +543,7 @@ public class OracleOciLob {
    */
   public boolean save(Env env,
                       @NotNull String data,
-                      @Optional("0") long offset)
+                      @OptionalParam("0") long offset)
   {
     try {
 
@@ -599,7 +599,7 @@ public class OracleOciLob {
    */
   public boolean seek(Env env,
                       long offset,
-                      @Optional("-1") int whence)
+                      @OptionalParam("-1") int whence)
   {
     try {
 
@@ -720,7 +720,7 @@ public class OracleOciLob {
    * Truncates large object
    */
   public boolean truncate(Env env,
-                          @Optional("0") long length)
+                          @OptionalParam("0") long length)
   {
     try {
 
@@ -754,7 +754,7 @@ public class OracleOciLob {
   @ReturnNullAsFalse
   public LongValue write(Env env,
                          String data,
-                         @Optional("-1") long length)
+                         @OptionalParam("-1") long length)
   {
     try {
 
@@ -802,7 +802,7 @@ public class OracleOciLob {
    */
   public boolean writeTemporary(Env env,
                                 String data,
-                                @Optional("-1") int lobType)
+                                @OptionalParam("-1") int lobType)
   {
     try {
 
@@ -836,8 +836,8 @@ public class OracleOciLob {
    */
   public boolean writeToFile(Env env,
                              Path file,
-                             @Optional("0") long start,
-                             @Optional("-1") long length)
+                             @OptionalParam("0") long start,
+                             @OptionalParam("-1") long length)
   {
     return export(env, file, start, length);
   }

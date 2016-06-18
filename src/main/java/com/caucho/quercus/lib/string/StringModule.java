@@ -33,7 +33,7 @@ import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.annotation.Expect;
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.annotation.UsesSymbolTable;
 import com.caucho.quercus.env.ArrayValue;
@@ -313,7 +313,7 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static StringValue chop(Env env,
                                  StringValue str,
-                                 @Optional String charset)
+                                 @OptionalParam String charset)
   {
     return rtrim(env, str, charset);
   }
@@ -345,8 +345,8 @@ public class StringModule extends AbstractQuercusModule {
    * @param end the optional end value, defaults to "\r\n"
    */
   public static String chunk_split(String body,
-                                   @Optional("76") int chunkLen,
-                                   @Optional("\"\\r\\n\"") String end)
+                                   @OptionalParam("76") int chunkLen,
+                                   @OptionalParam("\"\\r\\n\"") String end)
   {
     if (body == null)
       body = "";
@@ -486,7 +486,7 @@ public class StringModule extends AbstractQuercusModule {
    * Returns an array of information about the characters.
    */
   public static Value count_chars(StringValue data,
-                                  @Optional("0") int mode)
+                                  @OptionalParam("0") int mode)
   {
     int []count = new int[256];
 
@@ -573,7 +573,7 @@ public class StringModule extends AbstractQuercusModule {
     return str.getCrc32Value();
   }
 
-  public static String crypt(String string, @Optional String salt)
+  public static String crypt(String string, @OptionalParam String salt)
   {
     if (string == null)
       string = "";
@@ -599,7 +599,7 @@ public class StringModule extends AbstractQuercusModule {
   public static Value explode(Env env,
                               StringValue separator,
                               StringValue string,
-                              @Optional("0x7fffffff") long limit)
+                              @OptionalParam("0x7fffffff") long limit)
   {
     if (separator.length() == 0) {
       env.warning(L.l("Delimiter is empty"));
@@ -710,7 +710,7 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static Value implode(Env env,
                               Value glueV,
-                              @Optional Value piecesV)
+                              @OptionalParam Value piecesV)
   {
     StringValue glue;
     ArrayValue pieces;
@@ -821,7 +821,7 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static StringValue ltrim(Env env,
                                   StringValue string,
-                                  @Optional String characters)
+                                  @OptionalParam String characters)
   {
     if (characters == null)
       characters = "";
@@ -857,7 +857,7 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static Value md5(Env env,
                           InputStream is,
-                          @Optional boolean rawOutput)
+                          @OptionalParam boolean rawOutput)
   {
     TempBuffer tempBuffer = TempBuffer.allocate();
 
@@ -908,7 +908,7 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static Value md5_file(Env env,
                                Path source,
-                               @Optional boolean rawOutput)
+                               @OptionalParam boolean rawOutput)
   {
     TempBuffer tempBuffer = TempBuffer.allocate();
 
@@ -1365,9 +1365,9 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static String number_format(Env env,
                                      double value,
-                                     @Optional int decimals,
-                                     @Optional Value pointValue,
-                                     @Optional Value groupValue)
+                                     @OptionalParam int decimals,
+                                     @OptionalParam Value pointValue,
+                                     @OptionalParam Value groupValue)
   {
     boolean isGroupDefault = (groupValue instanceof DefaultValue);
     boolean isPointDefault = (pointValue instanceof DefaultValue);
@@ -1460,7 +1460,7 @@ public class StringModule extends AbstractQuercusModule {
    */
   @UsesSymbolTable
   public static Value parse_str(Env env, StringValue str,
-                                @Optional @Reference Value ref)
+                                @OptionalParam @Reference Value ref)
   {
     boolean isRef = ref instanceof Var;
 
@@ -1612,7 +1612,7 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static StringValue rtrim(Env env,
                                   StringValue string,
-                                  @Optional String characters)
+                                  @OptionalParam String characters)
   {
     if (characters == null)
       characters = "";
@@ -1808,7 +1808,7 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static Value sha1(Env env,
                            InputStream is,
-                           @Optional boolean rawOutput)
+                           @OptionalParam boolean rawOutput)
   {
     TempBuffer tempBuffer = TempBuffer.allocate();
 
@@ -1851,7 +1851,7 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static Value sha1_file(Env env,
                                 Path source,
-                                @Optional boolean rawOutput)
+                                @OptionalParam boolean rawOutput)
   {
     TempBuffer tempBuffer = TempBuffer.allocate();
 
@@ -2338,7 +2338,7 @@ public class StringModule extends AbstractQuercusModule {
   public static Value sscanf(Env env,
                              StringValue string,
                              StringValue format,
-                             @Optional @Reference Value []args)
+                             @OptionalParam @Reference Value []args)
   {
     ScanfSegment[] formatArray = sscanfParseFormat(env, format);
 
@@ -2609,7 +2609,7 @@ public class StringModule extends AbstractQuercusModule {
   public static Value sscanfOld(Env env,
                                 StringValue string,
                                 StringValue format,
-                                @Optional @Reference Value []args)
+                                @OptionalParam @Reference Value []args)
   {
     int fmtLen = format.length();
     int strlen = string.length();
@@ -3039,7 +3039,7 @@ public class StringModule extends AbstractQuercusModule {
                                   Value search,
                                   Value replace,
                                   Value subject,
-                                  @Reference @Optional Value count)
+                                  @Reference @OptionalParam Value count)
   {
     return strReplace(env, search, replace, subject, count, true);
   }
@@ -3054,8 +3054,8 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static StringValue str_pad(StringValue string,
                                     int length,
-                                    @Optional("' '") String pad,
-                                    @Optional("STR_PAD_RIGHT") int type)
+                                    @OptionalParam("' '") String pad,
+                                    @OptionalParam("STR_PAD_RIGHT") int type)
   {
     int strLen = string.length();
     int padLen = length - strLen;
@@ -3126,7 +3126,7 @@ public class StringModule extends AbstractQuercusModule {
                                   Value search,
                                   Value replace,
                                   Value subject,
-                                  @Reference @Optional Value count)
+                                  @Reference @OptionalParam Value count)
   {
     return strReplace(env, search, replace, subject, count, false);
   }
@@ -3427,7 +3427,7 @@ public class StringModule extends AbstractQuercusModule {
    * @param chunk chunk size
    */
   public static Value str_split(StringValue string,
-                                @Optional("1") int chunk)
+                                @OptionalParam("1") int chunk)
   {
     ArrayValue array = new ArrayValueImpl();
 
@@ -3458,8 +3458,8 @@ public class StringModule extends AbstractQuercusModule {
   }
 
   public static Value str_word_count(StringValue string,
-                                     @Optional int format,
-                                     @Optional String additionalWordCharacters)
+                                     @OptionalParam int format,
+                                     @OptionalParam String additionalWordCharacters)
   {
     if (format < 0 || format > 2)
       return NullValue.NULL;
@@ -3652,8 +3652,8 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static Value strcspn(StringValue string,
                               StringValue characters,
-                              @Optional("0") int offset,
-                              @Optional("-2147483648") int length)
+                              @OptionalParam("0") int offset,
+                              @OptionalParam("-2147483648") int length)
   {
     if (characters.length() == 0) {
       characters = StringValue.create((char)0);
@@ -3670,7 +3670,7 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static StringValue strip_tags(Env env,
                                        StringValue string,
-                                       @Optional Value allowTags)
+                                       @OptionalParam Value allowTags)
   {
     StringValue result = string.createStringBuilder(string.length());
 
@@ -3896,7 +3896,7 @@ public class StringModule extends AbstractQuercusModule {
   public static Value stripos(Env env,
                               StringValue haystack,
                               Value needleV,
-                              @Optional int offset)
+                              @OptionalParam int offset)
   {
     StringValue needle;
     int len = haystack.length();
@@ -4209,7 +4209,7 @@ public class StringModule extends AbstractQuercusModule {
   public static Value strpos(Env env,
                              StringValue haystack,
                              Value needleV,
-                             @Optional int offset)
+                             @OptionalParam int offset)
   {
     StringValue needle;
 
@@ -4283,7 +4283,7 @@ public class StringModule extends AbstractQuercusModule {
   public static Value strripos(Env env,
                                String haystack,
                                Value needleV,
-                               @Optional Value offsetV)
+                               @OptionalParam Value offsetV)
   {
     if (haystack == null)
       haystack = "";
@@ -4329,7 +4329,7 @@ public class StringModule extends AbstractQuercusModule {
   public static Value strrpos(Env env,
                               StringValue haystack,
                               Value needleV,
-                              @Optional Value offsetV)
+                              @OptionalParam Value offsetV)
   {
     StringValue needle;
 
@@ -4368,8 +4368,8 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static Value strspn(StringValue string,
                              StringValue characters,
-                             @Optional int offset,
-                             @Optional("-2147483648") int length)
+                             @OptionalParam int offset,
+                             @OptionalParam("-2147483648") int length)
   {
     return strspnImpl(string, characters, offset, length, true);
   }
@@ -4508,7 +4508,7 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static Value strtok(Env env,
                              StringValue string1,
-                             @Optional Value string2)
+                             @OptionalParam Value string2)
   {
     StringValue string;
     StringValue characters;
@@ -4614,7 +4614,7 @@ public class StringModule extends AbstractQuercusModule {
   public static StringValue strtr(Env env,
                                   StringValue string,
                                   Value fromV,
-                                  @Optional StringValue to)
+                                  @OptionalParam StringValue to)
   {
     if (fromV.isArray()) {
       return strtrArray(env, string, fromV.toArrayValue(env));
@@ -4750,7 +4750,7 @@ public class StringModule extends AbstractQuercusModule {
   public static Value substr(Env env,
                              StringValue string,
                              int start,
-                             @Optional Value lenV)
+                             @OptionalParam Value lenV)
   {
     int len = lenV.toInt();
 
@@ -4786,8 +4786,8 @@ public class StringModule extends AbstractQuercusModule {
                                      StringValue mainStr,
                                      StringValue str,
                                      int offset,
-                                     @Optional Value lenV,
-                                     @Optional boolean isCaseInsensitive)
+                                     @OptionalParam Value lenV,
+                                     @OptionalParam boolean isCaseInsensitive)
   {
     int strLen = mainStr.length();
     int len = lenV.toInt();
@@ -4817,8 +4817,8 @@ public class StringModule extends AbstractQuercusModule {
   public static Value substr_count(Env env,
                                    StringValue haystackV,
                                    StringValue needleV,
-                                   @Optional int offset,
-                                   @Optional("-1") int length)
+                                   @OptionalParam int offset,
+                                   @OptionalParam("-1") int length)
   {
     String haystack = haystackV.toString();
 
@@ -4875,7 +4875,7 @@ public class StringModule extends AbstractQuercusModule {
                                      Value subjectV,
                                      StringValue replacement,
                                      Value startV,
-                                     @Optional Value lengthV)
+                                     @OptionalParam Value lengthV)
   {
     int start = 0;
     int length = Integer.MAX_VALUE / 2;
@@ -4968,7 +4968,7 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static Value trim(Env env,
                            StringValue string,
-                           @Optional String characters)
+                           @OptionalParam String characters)
   {
     boolean []trim;
 
@@ -5121,9 +5121,9 @@ public class StringModule extends AbstractQuercusModule {
    */
   public static Value wordwrap(Env env,
       @Expect(type = Expect.Type.STRING) Value value,
-      @Optional @Expect(type = Expect.Type.NUMERIC) Value widthV,
-      @Optional @Expect(type = Expect.Type.STRING) Value breakV,
-      @Optional @Expect(type = Expect.Type.BOOLEAN) Value cutV)
+      @OptionalParam @Expect(type = Expect.Type.NUMERIC) Value widthV,
+      @OptionalParam @Expect(type = Expect.Type.STRING) Value breakV,
+      @OptionalParam @Expect(type = Expect.Type.BOOLEAN) Value cutV)
   {
     if (value instanceof UnexpectedValue) {
       env.warning(L.l("word must be a string, but {0} given",

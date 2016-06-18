@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib;
 
 import com.caucho.quercus.annotation.Hide;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.BooleanValue;
@@ -382,7 +382,7 @@ public class OutputModule extends AbstractQuercusModule
   /**
    * Gets the status of the current output buffer(s)
    */
-  public static Value ob_get_status(Env env, @Optional boolean full_status)
+  public static Value ob_get_status(Env env, @OptionalParam boolean full_status)
   {
     if (full_status) {
       OutputBuffer ob = env.getOutputBuffer();
@@ -410,7 +410,7 @@ public class OutputModule extends AbstractQuercusModule
   /**
    * Makes the original "output buffer" flush on every write.
    */
-  public static Value ob_implicit_flush(Env env, @Optional("true") boolean flag)
+  public static Value ob_implicit_flush(Env env, @OptionalParam("true") boolean flag)
   {
     if (env.getOriginalOut() != null)
       env.getOriginalOut().setImplicitFlush(flag);
@@ -422,9 +422,9 @@ public class OutputModule extends AbstractQuercusModule
    * Pushes the output buffer
    */
   public static boolean ob_start(Env env,
-                                 @Optional Callable callback,
-                                 @Optional int chunkSize,
-                                 @Optional("true") boolean erase)
+                                 @OptionalParam Callable callback,
+                                 @OptionalParam int chunkSize,
+                                 @OptionalParam("true") boolean erase)
   {
     if (callback != null && ! callback.isValid(env)) {
       return false;

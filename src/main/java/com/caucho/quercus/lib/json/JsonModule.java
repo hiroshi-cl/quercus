@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.json;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.JsonEncodeContext;
@@ -74,7 +74,7 @@ public class JsonModule extends AbstractQuercusModule
    */
   public static StringValue json_encode(Env env,
                                         Value val,
-                                        @Optional int options)
+                                        @OptionalParam int options)
   {
     boolean isEscapeTag = (options & JSON_HEX_TAG) > 0;
     boolean isEscapeAmp = (options & JSON_HEX_AMP) > 0;
@@ -108,7 +108,7 @@ public class JsonModule extends AbstractQuercusModule
    */
   public static Value json_decode(Env env,
                                   StringValue s,
-                                  @Optional("false") boolean assoc)
+                                  @OptionalParam("false") boolean assoc)
   {
     if (s.length() == 0)
       return new ArrayValueImpl();

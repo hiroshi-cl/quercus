@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.spl;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.StringValue;
 import com.caucho.vfs.Path;
@@ -40,7 +40,7 @@ public class RecursiveDirectoryIterator
 {
   public RecursiveDirectoryIterator(Env env,
                                     StringValue fileName,
-                                    @Optional("-1") int flags)
+                                    @OptionalParam("-1") int flags)
   {
     super(env, fileName, flags);
   }

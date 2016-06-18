@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.dom;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.Env;
 
 import org.w3c.dom.Text;
@@ -37,7 +37,7 @@ import org.w3c.dom.Text;
 public class DOMText
   extends DOMCharacterData<Text>
 {
-  public static DOMText __construct(Env env, @Optional String value)
+  public static DOMText __construct(Env env, @OptionalParam String value)
   {
     DOMText text = getImpl(env).createText();
 

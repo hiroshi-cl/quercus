@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.pdf;
 
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.BooleanValue;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.Value;
@@ -88,8 +88,8 @@ public class PDF
     _env = env;
   }
 
-  public boolean begin_document(@Optional String fileName,
-                                @Optional String optList)
+  public boolean begin_document(@OptionalParam String fileName,
+                                @OptionalParam String optList)
     throws IOException
   {
     _tempStream = new TempStream();
@@ -232,7 +232,7 @@ public class PDF
   /**
    * Returns the value for a parameter.
    */
-  public String get_parameter(String name, @Optional double modifier)
+  public String get_parameter(String name, @OptionalParam double modifier)
   {
     if ("fontname".equals(name)) {
       PDFFont font = _stream.getFont();
@@ -249,7 +249,7 @@ public class PDF
   /**
    * Returns the value for a parameter.
    */
-  public double get_value(String name, @Optional double modifier)
+  public double get_value(String name, @OptionalParam double modifier)
   {
     if ("ascender".equals(name)) {
       PDFFont font = _stream.getFont();
@@ -360,7 +360,7 @@ public class PDF
   /**
    * Sets the dashing
    */
-  public boolean setdashpattern(Env env, @Optional String optlist)
+  public boolean setdashpattern(Env env, @OptionalParam String optlist)
   {
     env.stub("setdashpattern");
 
@@ -450,7 +450,7 @@ public class PDF
    */
   public boolean shading_pattern(Env env,
                                  int shading,
-                                 @Optional String optlist)
+                                 @OptionalParam String optlist)
   {
     env.stub("shading_pattern");
 
@@ -470,7 +470,7 @@ public class PDF
                      double c2,
                      double c3,
                      double c4,
-                     @Optional String optlist)
+                     @OptionalParam String optlist)
   {
     env.stub("shading");
 
@@ -875,9 +875,9 @@ public class PDF
    */
   public boolean setcolor(String fstype, String colorspace,
                           double c1,
-                          @Optional double c2,
-                          @Optional double c3,
-                          @Optional double c4)
+                          @OptionalParam double c2,
+                          @OptionalParam double c3,
+                          @OptionalParam double c4)
   {
     return _stream.setcolor(fstype, colorspace, c1, c2, c3, c4);
   }
@@ -903,8 +903,8 @@ public class PDF
    * open image
    */
   public PDFImage open_image_file(String type, Path file,
-                                  @Optional String stringParam,
-                                  @Optional int intParam)
+                                  @OptionalParam String stringParam,
+                                  @OptionalParam int intParam)
     throws IOException
   {
     PDFImage img = new PDFImage(file);
@@ -921,7 +921,7 @@ public class PDF
    */
   public PDFImage load_image(String type,
                              Path file,
-                             @Optional String optlist)
+                             @OptionalParam String optlist)
     throws IOException
   {
     PDFImage img = new PDFImage(file);
@@ -934,7 +934,7 @@ public class PDF
   }
 
   public boolean fit_image(PDFImage img, double x, double y,
-                           @Optional String opt)
+                           @OptionalParam String opt)
   {
     _page.addResource(img.getResourceName(), img.getResource());
 
@@ -1063,7 +1063,7 @@ public class PDF
    */
   public boolean show_boxed(String text, double x, double y,
                             double width, double height,
-                            String mode, @Optional String feature)
+                            String mode, @OptionalParam String feature)
   {
     set_text_pos(x, y);
     _stream.show(text);
@@ -1121,7 +1121,7 @@ public class PDF
     return end_page();
   }
 
-  public boolean end_document(@Optional String optList)
+  public boolean end_document(@OptionalParam String optList)
     throws IOException
   {
     if(null == _out)

@@ -31,7 +31,7 @@ package com.caucho.quercus.lib;
 
 import com.caucho.quercus.Location;
 import com.caucho.quercus.QuercusContext;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReadOnly;
 import com.caucho.quercus.annotation.UsesSymbolTable;
 import com.caucho.quercus.annotation.Name;
@@ -110,7 +110,7 @@ public class OptionsModule extends AbstractQuercusModule {
   @Name("assert")
   public static Value q_assert(Env env,
                                @ReadOnly Value value,
-                               @Optional Value message)
+                               @OptionalParam Value message)
   {
     if (! isAssertActive(env)) {
       return BooleanValue.TRUE;
@@ -210,7 +210,7 @@ public class OptionsModule extends AbstractQuercusModule {
    */
   public static Value assert_options(Env env,
                                      int code,
-                                     @Optional("null") Value value)
+                                     @OptionalParam("null") Value value)
   {
     Value result;
 
@@ -419,7 +419,7 @@ public class OptionsModule extends AbstractQuercusModule {
   /**
    * Stub value for getrusage.
    */
-  public static Value getrusage(Env env, @Optional int who)
+  public static Value getrusage(Env env, @OptionalParam int who)
   {
     ArrayValue value = new ArrayValueImpl();
 
@@ -483,7 +483,7 @@ public class OptionsModule extends AbstractQuercusModule {
    * @param extension assumes ini values are prefixed by extension names.
    */
   public static Value ini_get_all(Env env,
-                                  @Optional String extension)
+                                  @OptionalParam String extension)
   {
     if (extension == null) {
       extension = "";
@@ -572,7 +572,7 @@ public class OptionsModule extends AbstractQuercusModule {
   /**
    * Stub value for memory get usage.
    */
-  public static Value memory_get_peak_usage(Env env, @Optional boolean real)
+  public static Value memory_get_peak_usage(Env env, @OptionalParam boolean real)
   {
     return LongValue.create(Runtime.getRuntime().maxMemory());
   }
@@ -580,7 +580,7 @@ public class OptionsModule extends AbstractQuercusModule {
   /**
    * Stub value for memory get usage.
    */
-  public static Value memory_get_usage(Env env, @Optional boolean real)
+  public static Value memory_get_usage(Env env, @OptionalParam boolean real)
   {
     return LongValue.create(Runtime.getRuntime().maxMemory());
   }
@@ -625,7 +625,7 @@ public class OptionsModule extends AbstractQuercusModule {
   /**
    * Returns system information
    */
-  public static String php_uname(@Optional("'a'") String mode)
+  public static String php_uname(@OptionalParam("'a'") String mode)
   {
     // XXX: stubbed
 
@@ -666,7 +666,7 @@ public class OptionsModule extends AbstractQuercusModule {
     }
   }
 
-  public static void phpinfo(Env env, @Optional("INFO_ALL") int what)
+  public static void phpinfo(Env env, @OptionalParam("INFO_ALL") int what)
   {
     if (hasRequest(env)) {
       String quercusName = env.getQuercus().getName();
@@ -848,7 +848,7 @@ public class OptionsModule extends AbstractQuercusModule {
   /**
    * Returns the quercus version.
    */
-  public static String phpversion(Env env, @Optional StringValue module)
+  public static String phpversion(Env env, @OptionalParam StringValue module)
   {
     return env.getQuercus().getPhpVersion();
   }
@@ -925,7 +925,7 @@ public class OptionsModule extends AbstractQuercusModule {
   public static Value version_compare(Env env,
                                       StringValue version1,
                                       StringValue version2,
-                                      @Optional("cmp") String op)
+                                      @OptionalParam("cmp") String op)
   {
     ArrayList<Value> expanded1 = expandVersion(env, version1);
     ArrayList<Value> expanded2 = expandVersion(env, version2);

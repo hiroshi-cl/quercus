@@ -28,7 +28,7 @@
 
 package com.caucho.quercus.lib.xml;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.BooleanValue;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.LongValue;
@@ -95,7 +95,7 @@ public class XmlReader
    *
    * @param string not used
    */
-  public XmlReader(@Optional String[] string) {
+  public XmlReader(@OptionalParam String[] string) {
     _depth = 0;
     _lastNodeType = -1;
     _currentNodeType = XMLStreamConstants.START_DOCUMENT;
@@ -528,7 +528,7 @@ public class XmlReader
    * @param localname
    * @return
    */
-  public BooleanValue next(@Optional String localname) {
+  public BooleanValue next(@OptionalParam String localname) {
     throw new UnsupportedOperationException(getClass().getName());
   }
 

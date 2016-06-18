@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.spl;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.This;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
@@ -65,8 +65,8 @@ public class ArrayIterator
 
   public ArrayIterator(Env env,
                        @This Value qThis,
-                       @Optional Value value,
-                       @Optional int flags)
+                       @OptionalParam Value value,
+                       @OptionalParam int flags)
   {
     _env = env;
     _qThis = qThis;
@@ -84,7 +84,7 @@ public class ArrayIterator
     _value.put(value);
   }
 
-  public void asort(ArrayValue array, @Optional long sortFlag)
+  public void asort(ArrayValue array, @OptionalParam long sortFlag)
   {
     sortFlag = 0; // qa/4a46
 
@@ -124,7 +124,7 @@ public class ArrayIterator
     return _current == null ? UnsetValue.UNSET : _current.getKey();
   }
 
-  public void ksort(@Optional long sortFlag)
+  public void ksort(@OptionalParam long sortFlag)
   {
     if (_value instanceof ArrayValue)
       ArrayModule.ksort(_env, (ArrayValue) _value, sortFlag);
@@ -218,13 +218,13 @@ public class ArrayIterator
     }
   }
 
-  public void uasort(Callback func, @Optional long sortFlag)
+  public void uasort(Callback func, @OptionalParam long sortFlag)
   {
     if (_value instanceof ArrayValue)
       ArrayModule.uasort(_env, (ArrayValue) _value, func, sortFlag);
   }
 
-  public void uksort(Callback func, @Optional long sortFlag)
+  public void uksort(Callback func, @OptionalParam long sortFlag)
   {
     if (_value instanceof ArrayValue)
       ArrayModule.uksort(_env, (ArrayValue) _value, func, sortFlag);

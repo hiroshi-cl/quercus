@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib.spl;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.NullValue;
 import com.caucho.quercus.env.Value;
@@ -54,8 +54,8 @@ public class RecursiveIteratorIterator
 
   public RecursiveIteratorIterator(Env env,
                                    Iterator iterator,
-                                   @Optional int mode,  //LEAVES_ONLY
-                                   @Optional int flags)
+                                   @OptionalParam int mode,  //LEAVES_ONLY
+                                   @OptionalParam int flags)
   {
     _iterator = iterator;
     _iteratorStack = new ArrayList<Iterator>();

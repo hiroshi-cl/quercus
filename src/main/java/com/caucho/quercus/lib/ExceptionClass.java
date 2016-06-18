@@ -31,7 +31,7 @@ package com.caucho.quercus.lib;
 
 import com.caucho.quercus.Location;
 import com.caucho.quercus.annotation.ClassImplementation;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.This;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.QuercusException;
@@ -50,9 +50,9 @@ public class ExceptionClass
    */
   public static Value __construct(Env env,
                                   @This ObjectValue value,
-                                  @Optional StringValue message,
-                                  @Optional("0") int code,
-                                  @Optional Value previous)
+                                  @OptionalParam StringValue message,
+                                  @OptionalParam("0") int code,
+                                  @OptionalParam Value previous)
   {
     value.putField(env, "message", message);
 

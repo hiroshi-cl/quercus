@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.dom;
 
 import com.caucho.quercus.UnimplementedException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.*;
 import com.caucho.util.L10N;
@@ -77,8 +77,8 @@ public class DOMDocument
   }
 
   public static DOMDocument __construct(Env env,
-                                        @Optional("'1.0'") String version,
-                                        @Optional String encoding)
+                                        @OptionalParam("'1.0'") String version,
+                                        @OptionalParam String encoding)
   {
     DOMDocument document = getImpl(env).createDocument();
 
@@ -364,7 +364,7 @@ public class DOMDocument
   }
 
   // XXX: also can be called statically, returns a DOMDocument in that case
-  public boolean load(Env env, Path path, @Optional Value options)
+  public boolean load(Env env, Path path, @OptionalParam Value options)
   {
     if (options != null)
       env.stub(L.l("`{0}' is ignored", "options"));
@@ -474,7 +474,7 @@ public class DOMDocument
   }
 
   // XXX: also can be called statically, returns a DOMDocument in that case
-  public boolean loadXML(Env env, StringValue source, @Optional Value options)
+  public boolean loadXML(Env env, StringValue source, @OptionalParam Value options)
   {
     if (options != null)
       env.stub(L.l("loadXML 'options' is ignored"));
@@ -539,7 +539,7 @@ public class DOMDocument
   /**
    * @return the number of bytes written, or FALSE for an error
    */
-  public Value save(Env env, Path path, @Optional Value options)
+  public Value save(Env env, Path path, @OptionalParam Value options)
   {
     if (options != null)
       env.stub(L.l("`{0}' is ignored", "options"));
@@ -648,8 +648,8 @@ public class DOMDocument
 
   @ReturnNullAsFalse
   public StringValue saveXML(Env env,
-                             @Optional DOMNode node,
-                             @Optional Value options)
+                             @OptionalParam DOMNode node,
+                             @OptionalParam Value options)
     throws DOMException
   {
     if (options != null)
@@ -774,7 +774,7 @@ public class DOMDocument
     throw new UnimplementedException();
   }
 
-  public int xinclude(Env env, @Optional Value options)
+  public int xinclude(Env env, @OptionalParam Value options)
   {
     if (options != null) {
       env.stub(L.l("`{0}' is ignored", "options"));

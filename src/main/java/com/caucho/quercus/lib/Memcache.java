@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.BooleanValue;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.Value;
@@ -52,11 +52,11 @@ public class Memcache {
    */
   public boolean addServer(Env env,
                            String host,
-                           @Optional int port,
-                           @Optional boolean persistent,
-                           @Optional int weight,
-                           @Optional int timeout,
-                           @Optional int retryInterval)
+                           @OptionalParam int port,
+                           @OptionalParam boolean persistent,
+                           @OptionalParam int weight,
+                           @OptionalParam int timeout,
+                           @OptionalParam int retryInterval)
   {
     if (_cache == null)
       connect(env, host, port, timeout);
@@ -69,8 +69,8 @@ public class Memcache {
    */
   public boolean connect(Env env,
                          String host,
-                         @Optional int port,
-                         @Optional("1") int timeout)
+                         @OptionalParam int port,
+                         @OptionalParam("1") int timeout)
   {
     // Always true since this is a local copy
 
@@ -110,7 +110,7 @@ public class Memcache {
    */
   public boolean delete(Env env,
                         String key,
-                        @Optional int timeout)
+                        @OptionalParam int timeout)
   {
     _cache.remove(key);
     
@@ -140,8 +140,8 @@ public class Memcache {
    */
   public boolean pconnect(Env env,
                           String host,
-                          @Optional int port,
-                          @Optional("1") int timeout)
+                          @OptionalParam int port,
+                          @OptionalParam("1") int timeout)
   {
     return connect(env, host, port, timeout);
   }
@@ -152,8 +152,8 @@ public class Memcache {
   public boolean set(Env env,
                      String key,
                      Value value,
-                     @Optional int flag,
-                     @Optional int expire)
+                     @OptionalParam int flag,
+                     @OptionalParam int expire)
   {
     _cache.set(key, value.copy(env));
 
@@ -164,7 +164,7 @@ public class Memcache {
    * Sets the compression threshold
    */
   public boolean setCompressThreshold(int threshold,
-                                      @Optional double minSavings)
+                                      @OptionalParam double minSavings)
   {
     return true;
   }

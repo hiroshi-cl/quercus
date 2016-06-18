@@ -313,9 +313,9 @@ public class XMLWriterModule extends AbstractQuercusModule {
   public static boolean xmlwriter_start_document(
       Env env,
       @NotNull XMLWriter w,
-      @Optional StringValue version,
-      @Optional StringValue encoding,
-      @Optional StringValue standalone) {
+      @OptionalParam StringValue version,
+      @OptionalParam StringValue encoding,
+      @OptionalParam StringValue standalone) {
     if (w == null)
       return false;
 
@@ -363,8 +363,8 @@ public class XMLWriterModule extends AbstractQuercusModule {
    */
   public static boolean xmlwriter_start_dtd(@NotNull XMLWriter w,
                                             StringValue name,
-                                            @Optional StringValue publicId,
-                                            @Optional StringValue systemId)
+                                            @OptionalParam StringValue publicId,
+                                            @OptionalParam StringValue systemId)
   {
     if (w == null)
       return false;
@@ -530,9 +530,9 @@ public class XMLWriterModule extends AbstractQuercusModule {
   public static boolean xmlwriter_write_dtd(Env env,
                                             @NotNull XMLWriter w,
                                             StringValue name,
-                                            @Optional StringValue publicId,
-                                            @Optional StringValue systemId,
-                                            @Optional StringValue subset)
+                                            @OptionalParam StringValue publicId,
+                                            @OptionalParam StringValue systemId,
+                                            @OptionalParam StringValue subset)
   {
     if (w == null)
       return false;
@@ -546,7 +546,7 @@ public class XMLWriterModule extends AbstractQuercusModule {
   public static boolean xmlwriter_write_element(Env env,
                                                 @NotNull XMLWriter w,
                                                 StringValue name,
-                                                @Optional StringValue content)
+                                                @OptionalParam StringValue content)
   {
     if (w == null)
       return false;
@@ -563,7 +563,7 @@ public class XMLWriterModule extends AbstractQuercusModule {
       StringValue prefix,
       StringValue name,
       StringValue uri,
-      @Optional StringValue content) {
+      @OptionalParam StringValue content) {
     if (w == null)
       return false;
 

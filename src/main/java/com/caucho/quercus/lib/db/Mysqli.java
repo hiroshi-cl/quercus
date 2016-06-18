@@ -31,7 +31,7 @@ package com.caucho.quercus.lib.db;
 
 import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.QuercusException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.BooleanValue;
@@ -107,12 +107,12 @@ public class Mysqli extends JdbcConnectionResource
     */
 
   public Mysqli(Env env,
-                @Optional("localhost") StringValue host,
-                @Optional StringValue user,
-                @Optional StringValue password,
-                @Optional String db,
-                @Optional("-1") int port,
-                @Optional StringValue socket)
+                @OptionalParam("localhost") StringValue host,
+                @OptionalParam StringValue user,
+                @OptionalParam StringValue password,
+                @OptionalParam String db,
+                @OptionalParam("-1") int port,
+                @OptionalParam StringValue socket)
   {
     super(env);
 
@@ -853,7 +853,7 @@ public class Mysqli extends JdbcConnectionResource
    */
   public Value query(Env env,
                      StringValue sqlV,
-                     @Optional("MYSQLI_STORE_RESULT") int resultMode)
+                     @OptionalParam("MYSQLI_STORE_RESULT") int resultMode)
   {
     String sql = toBinarySafeString(sqlV);
 
@@ -1132,13 +1132,13 @@ public class Mysqli extends JdbcConnectionResource
    * Connects to the underlying database.
    */
   public boolean real_connect(Env env,
-                              @Optional("localhost") StringValue host,
-                              @Optional StringValue userName,
-                              @Optional StringValue password,
-                              @Optional StringValue dbname,
-                              @Optional("3306") int port,
-                              @Optional StringValue socket,
-                              @Optional int flags)
+                              @OptionalParam("localhost") StringValue host,
+                              @OptionalParam StringValue userName,
+                              @OptionalParam StringValue password,
+                              @OptionalParam StringValue dbname,
+                              @OptionalParam("3306") int port,
+                              @OptionalParam StringValue socket,
+                              @OptionalParam int flags)
   {
     return connectInternal(env,
                            host.toString(),

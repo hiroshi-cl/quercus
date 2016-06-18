@@ -230,13 +230,13 @@ abstract public class JavaInvoker
           Class<?> argType = _param[i + envOffset];
 
           for (Annotation ann : paramAnn[i + envOffset]) {
-            if (Optional.class.isAssignableFrom(ann.annotationType())) {
+            if (OptionalParam.class.isAssignableFrom(ann.annotationType())) {
               _minArgumentLength--;
               isOptional = true;
 
-              Optional opt = (Optional) ann;
+              OptionalParam opt = (OptionalParam) ann;
 
-              if (opt.value().equals(Optional.NOT_SET))
+              if (opt.value().equals(OptionalParam.NOT_SET))
                 _defaultExprs[i] = exprFactory.createDefault();
               else if (opt.value().equals("")) {
                 _defaultExprs[i] = exprFactory.createLiteral(StringValue.EMPTY);

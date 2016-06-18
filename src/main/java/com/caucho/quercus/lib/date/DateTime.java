@@ -30,7 +30,7 @@
 package com.caucho.quercus.lib.date;
 
 import com.caucho.quercus.UnimplementedException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.LongValue;
 import com.caucho.quercus.env.StringValue;
@@ -97,8 +97,8 @@ public class DateTime implements Cloneable
   }
 
   public static DateTime __construct(Env env,
-                                     @Optional Value time,
-                                     @Optional DateTimeZone timeZone)
+                                     @OptionalParam Value time,
+                                     @OptionalParam DateTimeZone timeZone)
   {
     StringValue timeStr = null;
 
@@ -120,7 +120,7 @@ public class DateTime implements Cloneable
   public static DateTime createFromFormat(Env env,
                                           String format,
                                           String timeStr,
-                                          @Optional DateTimeZone timeZone)
+                                          @OptionalParam DateTimeZone timeZone)
   {
 
   }
@@ -189,7 +189,7 @@ public class DateTime implements Cloneable
 
   public void setTime(int hour,
                       int minute,
-                      @Optional int second)
+                      @OptionalParam int second)
   {
     _qDate.setTime(hour, minute, second, 0);
   }
@@ -203,13 +203,13 @@ public class DateTime implements Cloneable
 
   public void setISODate(int year,
                          int week, //yes, week, not month
-                         @Optional int day)
+                         @OptionalParam int day)
   {
     throw new UnimplementedException("DateTime::setISODate()");
   }
 
   public DateInterval diff(Env env, DateTime dateTime,
-                           @Optional boolean isAbsolute)
+                           @OptionalParam boolean isAbsolute)
   {
     DateInterval dateInterval = new DateInterval();
 

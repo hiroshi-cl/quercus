@@ -32,7 +32,7 @@ package com.caucho.quercus.lib.file;
 import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.annotation.Hide;
 import com.caucho.quercus.annotation.NotNull;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.lib.MiscModule;
@@ -143,7 +143,7 @@ public class FileModule extends AbstractQuercusModule {
    * Returns the base name of a string.
    */
   public static Value basename(StringValue path,
-                               @Optional StringValue suffix)
+                               @OptionalParam StringValue suffix)
   {
     int len = path.length();
 
@@ -303,8 +303,8 @@ public class FileModule extends AbstractQuercusModule {
    * @param env the PHP executing environment
    */
   public static void clearstatcache(Env env,
-                                    @Optional boolean clearRealPathCache,
-                                    @Optional String fileName)
+                                    @OptionalParam boolean clearRealPathCache,
+                                    @OptionalParam String fileName)
   {
     // stubbed
   }
@@ -619,9 +619,9 @@ public class FileModule extends AbstractQuercusModule {
    */
   public Value fgetcsv(Env env,
                        @NotNull BinaryInput is,
-                       @Optional int length,
-                       @Optional String delimiter,
-                       @Optional String enclosure)
+                       @OptionalParam int length,
+                       @OptionalParam String delimiter,
+                       @OptionalParam String enclosure)
   {
     // php/1619
 
@@ -729,7 +729,7 @@ public class FileModule extends AbstractQuercusModule {
    */
   public static Value fgets(Env env,
                             @NotNull BinaryInput is,
-                            @Optional("0x7fffffff") int length)
+                            @OptionalParam("0x7fffffff") int length)
   {
     // php/1615
 
@@ -753,8 +753,8 @@ public class FileModule extends AbstractQuercusModule {
    */
   public static Value fgetss(Env env,
                              BinaryInput is,
-                             @Optional("0x7fffffff") int length,
-                             @Optional Value allowedTags)
+                             @OptionalParam("0x7fffffff") int length,
+                             @OptionalParam Value allowedTags)
   {
     // php/161a
 
@@ -784,8 +784,8 @@ public class FileModule extends AbstractQuercusModule {
    */
   public static Value file(Env env,
                            StringValue filename,
-                           @Optional int flags,
-                           @Optional Value context)
+                           @OptionalParam int flags,
+                           @OptionalParam Value context)
   {
     if (filename.length() == 0)
       return BooleanValue.FALSE;
@@ -1167,10 +1167,10 @@ public class FileModule extends AbstractQuercusModule {
   @ReturnNullAsFalse
   public static StringValue file_get_contents(Env env,
                                               StringValue filename,
-                                              @Optional boolean useIncludePath,
-                                              @Optional Value context,
-                                              @Optional long offset,
-                                              @Optional("4294967296") long maxLen)
+                                              @OptionalParam boolean useIncludePath,
+                                              @OptionalParam Value context,
+                                              @OptionalParam long offset,
+                                              @OptionalParam("4294967296") long maxLen)
   {
     if (filename.length() == 0) {
       env.warning(L.l("file name must not be null"));
@@ -1197,8 +1197,8 @@ public class FileModule extends AbstractQuercusModule {
   public static Value file_put_contents(Env env,
                                         StringValue filename,
                                         Value data,
-                                        @Optional int flags,
-                                        @Optional Value context)
+                                        @OptionalParam int flags,
+                                        @OptionalParam Value context)
   {
     if (filename.length() == 0) {
       env.warning(L.l("file name must not be null"));
@@ -1283,7 +1283,7 @@ public class FileModule extends AbstractQuercusModule {
   public static boolean flock(Env env,
                               LockableStream fileV,
                               int operation,
-                              @Optional Value wouldBlock)
+                              @OptionalParam Value wouldBlock)
   {
     // XXX: also wouldblock is a ref
 
@@ -1507,7 +1507,7 @@ public class FileModule extends AbstractQuercusModule {
    * Returns true if the given string matches the given glob pattern.
    */
   public static boolean fnmatch(Env env, String pattern, String string,
-                                @Optional int flags)
+                                @OptionalParam int flags)
   {
     if (pattern == null || string == null)
       return false;
@@ -1572,8 +1572,8 @@ public class FileModule extends AbstractQuercusModule {
   public static BinaryStream fopen(Env env,
                                    StringValue filename,
                                    String mode,
-                                   @Optional boolean useIncludePath,
-                                   @Optional Value contextV)
+                                   @OptionalParam boolean useIncludePath,
+                                   @OptionalParam Value contextV)
   {
     if (filename.length() == 0) {
       env.warning(L.l("file name must not be null"));
@@ -1799,8 +1799,8 @@ public class FileModule extends AbstractQuercusModule {
   public Value fputcsv(Env env,
                        @NotNull BinaryOutput os,
                        @NotNull ArrayValue value,
-                       @Optional StringValue delimiter,
-                       @Optional StringValue enclosure)
+                       @OptionalParam StringValue delimiter,
+                       @OptionalParam StringValue enclosure)
   {
     // php/1636
 
@@ -1869,7 +1869,7 @@ public class FileModule extends AbstractQuercusModule {
   public static Value fputs(Env env,
                             BinaryOutput os,
                             InputStream value,
-                            @Optional("0x7fffffff") int length)
+                            @OptionalParam("0x7fffffff") int length)
   {
     return fwrite(env, os, value, length);
   }
@@ -1904,7 +1904,7 @@ public class FileModule extends AbstractQuercusModule {
   public static Value fscanf(Env env,
                              @NotNull BinaryInput is,
                              StringValue format,
-                             @Optional Value []args)
+                             @OptionalParam Value []args)
   {
     try {
       if (is == null)
@@ -1930,7 +1930,7 @@ public class FileModule extends AbstractQuercusModule {
   public static Value fseek(Env env,
                             @NotNull BinaryStream binaryStream,
                             long offset,
-                            @Optional("SEEK_SET") int whence)
+                            @OptionalParam("SEEK_SET") int whence)
   {
     if (binaryStream == null)
       return LongValue.MINUS_ONE;
@@ -2002,7 +2002,7 @@ public class FileModule extends AbstractQuercusModule {
   public static Value fwrite(Env env,
                              @NotNull BinaryOutput os,
                              InputStream value,
-                             @Optional("0x7fffffff") int length)
+                             @OptionalParam("0x7fffffff") int length)
   {
     try {
       if (os == null) {
@@ -2122,7 +2122,7 @@ public class FileModule extends AbstractQuercusModule {
   /**
    * Matches all files with the given pattern.
    */
-  public static Value glob(Env env, String pattern, @Optional int flags)
+  public static Value glob(Env env, String pattern, @OptionalParam int flags)
   {
     Path path = env.getPwd();
 
@@ -2531,9 +2531,9 @@ public class FileModule extends AbstractQuercusModule {
    */
   public static boolean mkdir(Env env,
                               StringValue dirname,
-                              @Optional("") int mode,
-                              @Optional boolean recursive,
-                              @Optional Value context)
+                              @OptionalParam("") int mode,
+                              @OptionalParam boolean recursive,
+                              @OptionalParam Value context)
   {
     ProtocolWrapper wrapper = getProtocolWrapper(env, dirname);
 
@@ -2628,7 +2628,7 @@ public class FileModule extends AbstractQuercusModule {
    * @param pathName the directory to open
    */
   public static Value opendir(Env env, StringValue pathName,
-                              @Optional Value context)
+                              @OptionalParam Value context)
   {
     ProtocolWrapper wrapper = getProtocolWrapper(env, pathName);
 
@@ -2659,7 +2659,7 @@ public class FileModule extends AbstractQuercusModule {
    */
   public static Value parse_ini_file(Env env,
                                      Path path,
-                                     @Optional boolean processSections)
+                                     @OptionalParam boolean processSections)
   {
     ReadStream is = null;
 
@@ -2694,7 +2694,7 @@ public class FileModule extends AbstractQuercusModule {
   /**
    * Parses the path, splitting it into parts.
    */
-  public static Value pathinfo(Env env, String path, @Optional Value optionsV)
+  public static Value pathinfo(Env env, String path, @OptionalParam Value optionsV)
   {
     if (optionsV == null)
       return env.getEmptyString();
@@ -2842,8 +2842,8 @@ public class FileModule extends AbstractQuercusModule {
    */
   public Value readfile(Env env,
                         StringValue filename,
-                        @Optional boolean useIncludePath,
-                        @Optional Value context)
+                        @OptionalParam boolean useIncludePath,
+                        @OptionalParam Value context)
   {
     if (filename.length() == 0)
       return BooleanValue.FALSE;
@@ -2961,7 +2961,7 @@ public class FileModule extends AbstractQuercusModule {
    */
   public static boolean rmdir(Env env,
                               StringValue filename,
-                              @Optional Value context)
+                              @OptionalParam Value context)
   {
     ProtocolWrapper wrapper = getProtocolWrapper(env, filename);
 
@@ -3009,8 +3009,8 @@ public class FileModule extends AbstractQuercusModule {
    */
   public static Value scandir(Env env,
                               StringValue fileName,
-                              @Optional("1") int order,
-                              @Optional Value context)
+                              @OptionalParam("1") int order,
+                              @OptionalParam Value context)
   {
     if (fileName.length() == 0) {
       env.warning(L.l("file name must not be NULL"));
@@ -3195,8 +3195,8 @@ public class FileModule extends AbstractQuercusModule {
    */
   public static boolean touch(Env env,
                               StringValue filename,
-                              @Optional int time,
-                              @Optional int atime)
+                              @OptionalParam int time,
+                              @OptionalParam int atime)
   {
     // XXX: atime not implemented (it might be > time)
 
@@ -3241,7 +3241,7 @@ public class FileModule extends AbstractQuercusModule {
   /**
    * umask call
    */
-  public static int umask(Env env, @Optional("0") int maskV)
+  public static int umask(Env env, @OptionalParam("0") int maskV)
   {
     return 0002;
   }
@@ -3251,7 +3251,7 @@ public class FileModule extends AbstractQuercusModule {
    */
   public static boolean unlink(Env env,
                                StringValue filename,
-                               @Optional Value context)
+                               @OptionalParam Value context)
   {
     // quercus/160p
     // XXX: safe_mode

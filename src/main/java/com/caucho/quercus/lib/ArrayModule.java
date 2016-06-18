@@ -38,7 +38,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.quercus.QuercusModuleException;
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.ReadOnly;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.annotation.UsesSymbolTable;
@@ -158,7 +158,7 @@ public class ArrayModule
    */
   public static Value array_change_key_case(Env env,
                                             ArrayValue array,
-                                            @Optional("CASE_LOWER") int toCase)
+                                            @OptionalParam("CASE_LOWER") int toCase)
   {
     if (array == null)
       return BooleanValue.FALSE;
@@ -191,7 +191,7 @@ public class ArrayModule
   public static Value array_chunk(Env env,
                                   ArrayValue array,
                                   int size,
-                                  @Optional boolean preserveKeys)
+                                  @OptionalParam boolean preserveKeys)
   {
     if (array == null)
       return NullValue.NULL;
@@ -642,7 +642,7 @@ public class ArrayModule
    */
   public static Value array_filter(Env env,
                                    ArrayValue array,
-                                   @Optional Value callbackName)
+                                   @OptionalParam Value callbackName)
   {
     if (array == null)
       return NullValue.NULL;
@@ -1067,8 +1067,8 @@ public class ArrayModule
    */
   public static Value array_keys(Env env,
                                  @ReadOnly ArrayValue array,
-                                 @Optional @ReadOnly Value searchValue,
-                                 @Optional boolean isStrict)
+                                 @OptionalParam @ReadOnly Value searchValue,
+                                 @OptionalParam boolean isStrict)
   {
     if (array == null)
       return NullValue.NULL;
@@ -1504,7 +1504,7 @@ public class ArrayModule
    */
   public static Value array_rand(Env env,
                           ArrayValue array,
-                          @Optional("1") long num)
+                          @OptionalParam("1") long num)
   {
     if (array == null)
       return NullValue.NULL;
@@ -1566,7 +1566,7 @@ public class ArrayModule
   public static Value array_reduce(Env env,
                                    ArrayValue array,
                                    Callable callable,
-                                   @Optional("NULL") Value initialValue)
+                                   @OptionalParam("NULL") Value initialValue)
   {
     if (array == null)
       return NullValue.NULL;
@@ -1661,7 +1661,7 @@ public class ArrayModule
    */
   public static Value array_reverse(Env env,
                                     @ReadOnly ArrayValue inputArray,
-                                    @Optional("false") boolean keyed)
+                                    @OptionalParam("false") boolean keyed)
   {
     if (inputArray == null) {
       return NullValue.NULL;
@@ -1707,7 +1707,7 @@ public class ArrayModule
   public static Value array_search(Env env,
                                    @ReadOnly Value needle,
                                    @ReadOnly ArrayValue array,
-                                   @Optional("false") boolean strict)
+                                   @OptionalParam("false") boolean strict)
   {
     // php/171i
     // php/172y
@@ -1781,8 +1781,8 @@ public class ArrayModule
   public static Value array_slice(Env env,
                                   @ReadOnly ArrayValue array,
                                   int offset,
-                                  @Optional Value length,
-                                  @Optional boolean isPreserveKeys)
+                                  @OptionalParam Value length,
+                                  @OptionalParam boolean isPreserveKeys)
   {
     if (array == null)
       return NullValue.NULL;
@@ -1825,8 +1825,8 @@ public class ArrayModule
   public static Value array_splice(Env env,
                                    @Reference Value arrayVar,
                                    int offset,
-                                   @Optional("NULL") Value length,
-                                   @Optional Value replace)
+                                   @OptionalParam("NULL") Value length,
+                                   @OptionalParam Value replace)
   {
     if (! arrayVar.isset())
       return NullValue.NULL;
@@ -2520,7 +2520,7 @@ public class ArrayModule
   public static boolean array_walk_recursive(Env env,
                                              @Reference Value arrayVar,
                                              Callable callback,
-                                             @Optional("NULL") Value extra)
+                                             @OptionalParam("NULL") Value extra)
   {
     if (callback == null || ! callback.isValid(env)) {
       env.error(
@@ -2583,7 +2583,7 @@ public class ArrayModule
   public static boolean array_walk(Env env,
                                    @Reference Value arrayVar,
                                    Callable callback,
-                                   @Optional("NULL") Value userData)
+                                   @OptionalParam("NULL") Value userData)
   {
     if (callback == null || ! callback.isValid(env)) {
       env.error(L.l("'{0}' is an unknown function.",
@@ -2636,7 +2636,7 @@ public class ArrayModule
    */
   public static boolean arsort(Env env,
                                @Reference Value arrayVar,
-                               @Optional long sortFlag)
+                               @OptionalParam long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
 
@@ -2674,7 +2674,7 @@ public class ArrayModule
    */
   public static boolean asort(Env env,
                               @Reference Value arrayVar,
-                              @Optional long sortFlag)
+                              @OptionalParam long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
 
@@ -2739,7 +2739,7 @@ public class ArrayModule
    */
   public static long count(Env env,
                            @ReadOnly Value value,
-                           @Optional int countMethod)
+                           @OptionalParam int countMethod)
   {
     boolean isRecursive = countMethod == COUNT_RECURSIVE;
 
@@ -2837,7 +2837,7 @@ public class ArrayModule
   public static Value extract(Env env,
                               ArrayValue array,
                               long rawType,
-                              @Optional("NULL") Value valuePrefix)
+                              @OptionalParam("NULL") Value valuePrefix)
   {
     if (array == null)
       return NullValue.NULL;
@@ -2962,7 +2962,7 @@ public class ArrayModule
    */
   public static boolean in_array(@ReadOnly Value needle,
                                  @ReadOnly ArrayValue stack,
-                                 @Optional("false") boolean strict)
+                                 @OptionalParam("false") boolean strict)
   {
     if (stack == null)
       return false;
@@ -3005,7 +3005,7 @@ public class ArrayModule
    */
   public static boolean krsort(Env env,
                                @Reference Value arrayVar,
-                               @Optional long sortFlag)
+                               @OptionalParam long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
 
@@ -3043,7 +3043,7 @@ public class ArrayModule
    */
   public static boolean ksort(Env env,
                               @Reference Value arrayVar,
-                              @Optional long sortFlag)
+                              @OptionalParam long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
 
@@ -3173,7 +3173,7 @@ public class ArrayModule
   public static Value range(Env env,
                             @ReadOnly Value startV,
                             @ReadOnly Value endV,
-                            @Optional("1") long step)
+                            @OptionalParam("1") long step)
   {
     if (step < 1) {
       step *= -1;
@@ -3244,7 +3244,7 @@ public class ArrayModule
    */
   public static boolean rsort(Env env,
                               @Reference Value arrayVar,
-                              @Optional long sortFlag)
+                              @OptionalParam long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
 
@@ -3286,7 +3286,7 @@ public class ArrayModule
    */
   public static long sizeof(Env env,
                             @ReadOnly Value value,
-                            @Optional int countMethod)
+                            @OptionalParam int countMethod)
   {
     return count(env, value, countMethod);
   }
@@ -3301,7 +3301,7 @@ public class ArrayModule
    */
   public static boolean sort(Env env,
                              @Reference Value arrayVar,
-                             @Optional long sortFlag)
+                             @OptionalParam long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
 
@@ -3342,7 +3342,7 @@ public class ArrayModule
   public static boolean uasort(Env env,
                                @Reference Value arrayVar,
                                Callable func,
-                               @Optional long sortFlag)
+                               @OptionalParam long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
 
@@ -3376,7 +3376,7 @@ public class ArrayModule
   public static boolean uksort(Env env,
                                @Reference Value arrayVar,
                                Callable func,
-                               @Optional long sortFlag)
+                               @OptionalParam long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
 
@@ -3410,7 +3410,7 @@ public class ArrayModule
   public static boolean usort(Env env,
                               @Reference Value arrayVar,
                               Callable func,
-                              @Optional long sortFlag)
+                              @OptionalParam long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
 

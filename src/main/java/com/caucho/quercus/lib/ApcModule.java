@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib;
 
-import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.annotation.OptionalParam;
 import com.caucho.quercus.annotation.Reference;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.module.AbstractQuercusModule;
@@ -81,8 +81,8 @@ public class ApcModule extends AbstractQuercusModule
    * Returns cache information.
    */
   public Value apc_cache_info(Env env,
-                              @Optional String type,
-                              @Optional boolean limited)
+                              @OptionalParam String type,
+                              @OptionalParam boolean limited)
   {
     ArrayValue value = new ArrayValueImpl();
 
@@ -143,7 +143,7 @@ public class ApcModule extends AbstractQuercusModule
   /**
    * Clears the cache
    */
-  public boolean apc_clear_cache(Env env, @Optional String type)
+  public boolean apc_clear_cache(Env env, @OptionalParam String type)
   {
     if (_cache != null)
       _cache.clear();
@@ -177,7 +177,7 @@ public class ApcModule extends AbstractQuercusModule
   public boolean apc_define_constants(Env env,
                                       String key,
                                       ArrayValue values,
-                                      @Optional("true") boolean caseSensitive)
+                                      @OptionalParam("true") boolean caseSensitive)
   {
     _constMap.put(key, values.copy(env));
 
@@ -200,7 +200,7 @@ public class ApcModule extends AbstractQuercusModule
    */
   public Value apc_fetch(Env env,
                          String key,
-                         @Optional @Reference Value isSuccessful)
+                         @OptionalParam @Reference Value isSuccessful)
   {
     isSuccessful.set(BooleanValue.FALSE);
 
@@ -272,7 +272,7 @@ public class ApcModule extends AbstractQuercusModule
    */
   public boolean apc_load_constants(Env env,
                                     String key,
-                                    @Optional("true") boolean caseSensitive)
+                                    @OptionalParam("true") boolean caseSensitive)
   {
     ArrayValue array = (ArrayValue) _constMap.get(key);
 
@@ -291,7 +291,7 @@ public class ApcModule extends AbstractQuercusModule
   /**
    * Returns cache information.
    */
-  public Value apc_sma_info(Env env, @Optional String type)
+  public Value apc_sma_info(Env env, @OptionalParam String type)
   {
     ArrayValue value = new ArrayValueImpl();
 
@@ -306,7 +306,7 @@ public class ApcModule extends AbstractQuercusModule
   public Value apc_add(Env env,
                        String key,
                        Value value,
-                       @Optional("0") int ttl) {
+                       @OptionalParam("0") int ttl) {
     LruCache<String,Entry> cache = getCache(env);
 
     if (cache.get(key) == null) {
@@ -323,7 +323,7 @@ public class ApcModule extends AbstractQuercusModule
    * Returns a value.
    */
   public Value apc_store(Env env, String key, Value value,
-                         @Optional("0") int ttl)
+                         @OptionalParam("0") int ttl)
   {
     LruCache<String,Entry> cache = getCache(env);
 
