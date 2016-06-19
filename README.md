@@ -9,6 +9,8 @@ Quercus
   - `Base64` の名前被り解消
   - リフレクション周りで抽象メソッドが増えたのをダミーを返すメソッド実装で対応
 - 本家は 4.0.39 で更新が止まり、公式サイトも半壊している状態のようです
+  - と思ったんだけど maven central repository に 4.0.45 が存在: https://search.maven.org/#artifactdetails%7Ccom.caucho%7Cquercus%7C4.0.45%7Cjar
+  - また、Resin は 4.0.48 が最新なのでそちらにもっと新しいバージョンが含まれるかもしれない
 - 以下丸コピ
 
 # Quercusとは
